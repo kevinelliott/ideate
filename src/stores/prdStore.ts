@@ -11,13 +11,22 @@ export interface Story {
   notes: string
 }
 
+export interface PrdMetadata {
+  project?: string
+  description?: string
+  branchName?: string
+}
+
 export type PrdStatus = 'idle' | 'generating' | 'ready' | 'error'
 
 interface PrdState {
   stories: Story[]
+  metadata: PrdMetadata
   status: PrdStatus
   selectedStoryId: string | null
   setStories: (stories: Story[]) => void
+  setMetadata: (metadata: PrdMetadata) => void
+  setPrd: (stories: Story[], metadata: PrdMetadata) => void
   updateStory: (id: string, updates: Partial<Story>) => void
   addStory: (story: Omit<Story, 'id'>) => Story
   removeStory: (id: string) => void
@@ -28,11 +37,20 @@ interface PrdState {
 
 export const usePrdStore = create<PrdState>((set, get) => ({
   stories: [],
+  metadata: {},
   status: 'idle',
   selectedStoryId: null,
 
   setStories: (stories) => {
     set({ stories })
+  },
+
+  setMetadata: (metadata) => {
+    set({ metadata })
+  },
+
+  setPrd: (stories, metadata) => {
+    set({ stories, metadata })
   },
 
   updateStory: (id, updates) => {
@@ -70,9 +88,15 @@ export const usePrdStore = create<PrdState>((set, get) => ({
   },
 
   savePrd: async (projectPath: string) => {
-    const { stories } = get()
+    const { stories, metadata } = get()
     try {
-      await invoke('save_prd', { projectPath, stories })
+      const prd = {
+        project: metadata.project,
+        description: metadata.description,
+        branchName: metadata.branchName,
+        userStories: stories,
+      }
+      await invoke('save_prd', { projectPath, prd })
       console.log('PRD saved successfully')
     } catch (error) {
       console.error('Failed to save PRD:', error)

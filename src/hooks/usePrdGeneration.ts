@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { usePrdStore } from '../stores/prdStore'
+import { usePrdStore, type PrdMetadata } from '../stores/prdStore'
 import { useBuildStore } from '../stores/buildStore'
 import { defaultPlugins, type AgentPlugin } from '../types'
 
@@ -75,7 +75,7 @@ IMPORTANT: Only create the prd.json file. Do not implement any features.`
 
 export function usePrdGeneration() {
   const setStatus = usePrdStore((state) => state.setStatus)
-  const setStories = usePrdStore((state) => state.setStories)
+  const setPrd = usePrdStore((state) => state.setPrd)
   const appendLog = useBuildStore((state) => state.appendLog)
   const clearLogs = useBuildStore((state) => state.clearLogs)
   const setCurrentProcessId = useBuildStore((state) => state.setCurrentProcessId)
@@ -148,7 +148,12 @@ export function usePrdGeneration() {
           passes: story.passes,
           notes: story.notes
         }))
-        setStories(stories)
+        const metadata: PrdMetadata = {
+          project: prd.project,
+          description: prd.description,
+          branchName: prd.branchName,
+        }
+        setPrd(stories, metadata)
         setStatus('ready')
         appendLog('system', `PRD loaded with ${stories.length} user stories`)
         return true
@@ -163,7 +168,7 @@ export function usePrdGeneration() {
       setStatus('error')
       return false
     }
-  }, [setStatus, setStories, appendLog, clearLogs, setCurrentProcessId])
+  }, [setStatus, setPrd, appendLog, clearLogs, setCurrentProcessId])
 
   return { generatePrd }
 }

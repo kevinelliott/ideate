@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "../stores/projectStore";
-import { usePrdStore, type Story } from "../stores/prdStore";
+import { usePrdStore, type Story, type PrdMetadata } from "../stores/prdStore";
 import { ProjectView } from "./ProjectView";
 
 interface Prd {
@@ -25,6 +25,7 @@ export function MainContent() {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const activeProject = projects.find((p) => p.id === activeProjectId);
 
+  const setPrd = usePrdStore((state) => state.setPrd);
   const setStories = usePrdStore((state) => state.setStories);
   const setStatus = usePrdStore((state) => state.setStatus);
 
@@ -51,7 +52,12 @@ export function MainContent() {
             passes: story.passes,
             notes: story.notes
           }));
-          setStories(stories);
+          const metadata: PrdMetadata = {
+            project: prd.project,
+            description: prd.description,
+            branchName: prd.branchName,
+          };
+          setPrd(stories, metadata);
           setStatus("ready");
         } else {
           setStories([]);
@@ -65,7 +71,7 @@ export function MainContent() {
     }
 
     loadPrd();
-  }, [activeProject?.path, setStories, setStatus]);
+  }, [activeProject?.path, setPrd, setStories, setStatus]);
 
   if (activeProject) {
     return <ProjectView project={activeProject} />;
