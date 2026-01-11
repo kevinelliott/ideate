@@ -133,15 +133,53 @@ pub struct ProjectState {
     pub build_phase: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentCliPath {
+    #[serde(rename = "agentId")]
+    pub agent_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Preferences {
+    #[serde(rename = "defaultAgent", default)]
+    pub default_agent: Option<String>,
+    #[serde(rename = "defaultAutonomy", default = "default_autonomy")]
+    pub default_autonomy: String,
+    #[serde(rename = "logBufferSize", default = "default_log_buffer_size")]
+    pub log_buffer_size: i32,
+    #[serde(rename = "agentPaths", default)]
+    pub agent_paths: Vec<AgentCliPath>,
+}
+
+fn default_autonomy() -> String {
+    "pause-between".to_string()
+}
+
+fn default_log_buffer_size() -> i32 {
+    1000
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Preferences {
+            default_agent: None,
+            default_autonomy: default_autonomy(),
+            log_buffer_size: default_log_buffer_size(),
+            agent_paths: Vec::new(),
+        }
+    }
+}
+
 fn get_projects_file_path(app: &AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-    
+
     fs::create_dir_all(&app_data_dir)
         .map_err(|e| format!("Failed to create app data directory: {}", e))?;
-    
+
     Ok(app_data_dir.join("projects.json"))
 }
 
@@ -150,11 +188,23 @@ fn get_agents_file_path(app: &AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-    
+
     fs::create_dir_all(&app_data_dir)
         .map_err(|e| format!("Failed to create app data directory: {}", e))?;
-    
+
     Ok(app_data_dir.join("agents.json"))
+}
+
+fn get_preferences_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+
+    Ok(app_data_dir.join("preferences.json"))
 }
 
 fn get_default_agents() -> Vec<AgentPlugin> {
@@ -380,6 +430,39 @@ fn save_project_state(project_path: String, state: ProjectState) -> Result<(), S
 }
 
 #[tauri::command]
+fn load_preferences(app: AppHandle) -> Result<Preferences, String> {
+    let prefs_path = get_preferences_file_path(&app)?;
+
+    if !prefs_path.exists() {
+        return Ok(Preferences::default());
+    }
+
+    let content = fs::read_to_string(&prefs_path)
+        .map_err(|e| format!("Failed to read preferences.json: {}", e))?;
+
+    match serde_json::from_str::<Preferences>(&content) {
+        Ok(prefs) => Ok(prefs),
+        Err(e) => {
+            eprintln!("Warning: Failed to parse preferences.json: {}. Using defaults.", e);
+            Ok(Preferences::default())
+        }
+    }
+}
+
+#[tauri::command]
+fn save_preferences(app: AppHandle, preferences: Preferences) -> Result<(), String> {
+    let prefs_path = get_preferences_file_path(&app)?;
+
+    let prefs_json = serde_json::to_string_pretty(&preferences)
+        .map_err(|e| format!("Failed to serialize preferences: {}", e))?;
+
+    fs::write(&prefs_path, prefs_json)
+        .map_err(|e| format!("Failed to write preferences.json: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn list_agents(app: AppHandle) -> Result<Vec<AgentPlugin>, String> {
     let agents_path = get_agents_file_path(&app)?;
 
@@ -462,7 +545,7 @@ fn spawn_agent(
 async fn wait_agent(app: AppHandle, process_id: String) -> Result<WaitAgentResult, String> {
     let result = tokio::task::spawn_blocking(move || {
         let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
-        
+
         let child = match processes.get_mut(&process_id) {
             Some(child) => child,
             None => {
@@ -508,7 +591,7 @@ async fn wait_agent(app: AppHandle, process_id: String) -> Result<WaitAgentResul
 #[tauri::command]
 fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
     let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
-    
+
     let child = match processes.get_mut(&process_id) {
         Some(child) => child,
         None => {
@@ -521,16 +604,16 @@ fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
 
     #[cfg(unix)]
     {
-        
+
         let pid = child.id();
-        
+
         unsafe {
             libc::kill(pid as i32, libc::SIGTERM);
         }
-        
+
         let start = std::time::Instant::now();
         let timeout = Duration::from_secs(5);
-        
+
         loop {
             match child.try_wait() {
                 Ok(Some(_status)) => {
@@ -603,6 +686,8 @@ pub fn run() {
             save_project_settings,
             load_project_state,
             save_project_state,
+            load_preferences,
+            save_preferences,
             list_agents,
             spawn_agent,
             wait_agent,

@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/Sidebar";
 import { MainContent } from "./components/MainContent";
 import { NewProjectModal } from "./components/NewProjectModal";
+import { PreferencesWindow } from "./components/PreferencesWindow";
 import { useProjectStore } from "./stores/projectStore";
 import { useBuildStore } from "./stores/buildStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
@@ -27,16 +28,23 @@ interface AgentExitPayload {
 
 function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showPreferencesWindow, setShowPreferencesWindow] = useState(false);
   const addProject = useProjectStore((state) => state.addProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const isLoaded = useProjectStore((state) => state.isLoaded);
   const appendLog = useBuildStore((state) => state.appendLog);
   const handleProcessExit = useBuildStore((state) => state.handleProcessExit);
 
+  const isAnyModalOpen = showNewProjectModal || showPreferencesWindow;
+
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
-    isModalOpen: showNewProjectModal,
-    onCloseModal: () => setShowNewProjectModal(false),
+    onOpenPreferences: () => setShowPreferencesWindow(true),
+    isModalOpen: isAnyModalOpen,
+    onCloseModal: () => {
+      setShowNewProjectModal(false);
+      setShowPreferencesWindow(false);
+    },
   });
 
   useEffect(() => {
@@ -68,8 +76,12 @@ function App() {
     setShowNewProjectModal(true);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseNewProjectModal = () => {
     setShowNewProjectModal(false);
+  };
+
+  const handleClosePreferencesWindow = () => {
+    setShowPreferencesWindow(false);
   };
 
   const handleCreateProject = async (name: string, description: string, directory: string | null) => {
@@ -112,8 +124,12 @@ function App() {
       <MainContent />
       <NewProjectModal
         isOpen={showNewProjectModal}
-        onClose={handleCloseModal}
+        onClose={handleCloseNewProjectModal}
         onCreate={handleCreateProject}
+      />
+      <PreferencesWindow
+        isOpen={showPreferencesWindow}
+        onClose={handleClosePreferencesWindow}
       />
     </div>
   );

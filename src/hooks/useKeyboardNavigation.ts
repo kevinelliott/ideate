@@ -3,12 +3,14 @@ import { useProjectStore } from "../stores/projectStore";
 
 interface UseKeyboardNavigationProps {
   onNewProject: () => void;
+  onOpenPreferences: () => void;
   isModalOpen: boolean;
   onCloseModal: () => void;
 }
 
 export function useKeyboardNavigation({
   onNewProject,
+  onOpenPreferences,
   isModalOpen,
   onCloseModal,
 }: UseKeyboardNavigationProps) {
@@ -29,6 +31,13 @@ export function useKeyboardNavigation({
       if ((e.metaKey || e.ctrlKey) && e.key === "n" && !isModalOpen) {
         e.preventDefault();
         onNewProject();
+        return;
+      }
+
+      // Cmd+, opens preferences (not when modal is open)
+      if ((e.metaKey || e.ctrlKey) && e.key === "," && !isModalOpen) {
+        e.preventDefault();
+        onOpenPreferences();
         return;
       }
 
@@ -75,7 +84,7 @@ export function useKeyboardNavigation({
         return;
       }
     },
-    [projects, activeProjectId, setActiveProject, isModalOpen, onNewProject, onCloseModal]
+    [projects, activeProjectId, setActiveProject, isModalOpen, onNewProject, onOpenPreferences, onCloseModal]
   );
 
   useEffect(() => {
