@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Story } from "../stores/prdStore";
 
 type StoryStatus = "pending" | "in-progress" | "complete" | "failed";
@@ -29,13 +30,26 @@ const statusLabels: Record<StoryStatus, string> = {
 };
 
 export function StoryCard({ story, onClick }: StoryCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const status = getStoryStatus(story);
   const criteriaCount = story.acceptanceCriteria.length;
 
+  const handleClick = () => {
+    setIsExpanded(!isExpanded);
+    onClick(story.id);
+  };
+
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsExpanded(false);
+  };
+
   return (
     <div
-      className="border border-border rounded-xl bg-card p-4 cursor-pointer hover:border-accent/50 transition-colors"
-      onClick={() => onClick(story.id)}
+      className={`border rounded-xl bg-card p-4 cursor-pointer transition-colors ${
+        isExpanded ? "border-accent" : "border-border hover:border-accent/50"
+      }`}
+      onClick={handleClick}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
@@ -44,20 +58,91 @@ export function StoryCard({ story, onClick }: StoryCardProps) {
           </span>
           <h3 className="font-medium text-foreground">{story.title}</h3>
         </div>
-        <span
-          className={`px-2 py-0.5 text-xs font-medium rounded shrink-0 ${statusColors[status]}`}
-        >
-          {statusLabels[status]}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            className={`px-2 py-0.5 text-xs font-medium rounded ${statusColors[status]}`}
+          >
+            {statusLabels[status]}
+          </span>
+          {isExpanded && (
+            <button
+              onClick={handleClose}
+              className="p-1 rounded hover:bg-secondary/10 text-secondary hover:text-foreground transition-colors"
+              aria-label="Close"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
-      <p className="text-sm text-secondary line-clamp-2 mb-3">
-        {story.description}
-      </p>
+      {isExpanded ? (
+        <div className="space-y-4">
+          <p className="text-sm text-secondary">{story.description}</p>
 
-      <div className="text-xs text-secondary">
-        {criteriaCount} {criteriaCount === 1 ? "criterion" : "criteria"}
-      </div>
+          <div>
+            <h4 className="text-xs font-medium text-foreground uppercase tracking-wide mb-2">
+              Acceptance Criteria
+            </h4>
+            <ul className="space-y-2">
+              {story.acceptanceCriteria.map((criterion, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm">
+                  <div className="mt-0.5 w-4 h-4 rounded border border-border flex items-center justify-center shrink-0">
+                    {story.passes && (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-green-500"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="text-secondary">{criterion}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {story.notes && (
+            <div>
+              <h4 className="text-xs font-medium text-foreground uppercase tracking-wide mb-2">
+                Notes
+              </h4>
+              <p className="text-sm text-secondary">{story.notes}</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-secondary line-clamp-2 mb-3">
+            {story.description}
+          </p>
+          <div className="text-xs text-secondary">
+            {criteriaCount} {criteriaCount === 1 ? "criterion" : "criteria"}
+          </div>
+        </>
+      )}
     </div>
   );
 }
