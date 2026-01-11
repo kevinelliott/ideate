@@ -15,7 +15,7 @@
         "cargo check passes in src-tauri directory"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Foundation story - everything depends on this"
     },
     {

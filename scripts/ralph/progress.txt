@@ -1,3 +1,25 @@
 # Ralph Progress Log
 Started: Sat Jan 10 21:10:53 PST 2026
 ---
+
+## Codebase Patterns
+- Use `pnpm run build` to check both TypeScript and Vite build
+- Use `cargo check` in src-tauri directory to verify Rust code
+- Tauri v4.x uses `@tailwindcss/postcss` instead of `tailwindcss` directly as PostCSS plugin
+- Icons must be RGBA format PNGs for Tauri
+
+---
+
+## Sat Jan 10 2026 - US-001
+Thread: https://ampcode.com/threads/T-019bab77-96c7-717c-a9c6-1b540dd49021
+- Initialized Tauri v2 project with React 19 + TypeScript
+- Configured Tailwind CSS v4 with @tailwindcss/postcss
+- Created base design tokens with light/dark mode CSS variables
+- Created placeholder icons (RGBA PNGs)
+- Files created: package.json, tsconfig.json, vite.config.ts, postcss.config.js, src-tauri/*, src/*
+- **Learnings for future iterations:**
+  - Tailwind v4 requires `@tailwindcss/postcss` package, not direct `tailwindcss` in postcss.config.js
+  - Tauri icons must be RGBA format (color type 6), not RGB
+  - Use `@import "tailwindcss"` in CSS for Tailwind v4
+  - pnpm may warn about esbuild build scripts - can proceed despite warning
+---
