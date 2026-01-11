@@ -1,6 +1,7 @@
 import type { Project } from "../stores/projectStore";
 import { usePrdStore } from "../stores/prdStore";
 import { StoryList } from "./StoryList";
+import { AgentSettings } from "./AgentSettings";
 
 interface ProjectViewProps {
   project: Project;
@@ -17,6 +18,8 @@ export function ProjectView({ project }: ProjectViewProps) {
           {project.name}
         </h1>
         <p className="text-secondary mb-8">{project.description}</p>
+
+        <AgentSettings projectPath={project.path} />
 
         {hasStories ? (
           <StoryList projectPath={project.path} />

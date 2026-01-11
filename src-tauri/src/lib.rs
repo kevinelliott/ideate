@@ -12,6 +12,12 @@ pub struct ProjectConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectSettings {
+    pub agent: Option<String>,
+    pub autonomy: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateProjectResult {
     pub path: String,
     pub config_path: String,
@@ -119,13 +125,82 @@ fn save_prd(project_path: String, stories: Vec<Story>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn load_project_settings(project_path: String) -> Result<Option<ProjectSettings>, String> {
+    let config_path = PathBuf::from(&project_path).join(".ideate").join("config.json");
+
+    if !config_path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config.json: {}", e))?;
+
+    let config: ProjectConfig = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse config.json: {}", e))?;
+
+    Ok(Some(ProjectSettings {
+        agent: config.agent,
+        autonomy: config.autonomy,
+    }))
+}
+
+#[tauri::command]
+fn save_project_settings(
+    project_path: String,
+    agent: Option<String>,
+    autonomy: String,
+) -> Result<(), String> {
+    let ideate_path = PathBuf::from(&project_path).join(".ideate");
+    let config_path = ideate_path.join("config.json");
+
+    fs::create_dir_all(&ideate_path)
+        .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
+
+    let existing_config: Option<ProjectConfig> = if config_path.exists() {
+        let content = fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read config.json: {}", e))?;
+        serde_json::from_str(&content).ok()
+    } else {
+        None
+    };
+
+    let config = if let Some(mut existing) = existing_config {
+        existing.agent = agent;
+        existing.autonomy = autonomy;
+        existing
+    } else {
+        ProjectConfig {
+            name: "Unknown".to_string(),
+            description: "".to_string(),
+            agent,
+            autonomy,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        }
+    };
+
+    let config_json = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    fs::write(&config_path, config_json)
+        .map_err(|e| format!("Failed to write config.json: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![create_project, load_prd, save_prd])
+        .invoke_handler(tauri::generate_handler![
+            create_project,
+            load_prd,
+            save_prd,
+            load_project_settings,
+            save_project_settings
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
