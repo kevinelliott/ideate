@@ -296,3 +296,20 @@ Thread: https://ampcode.com/threads/T-019babd5-27aa-719a-b091-8e0de07bdc7d
   - Spawn threads with `thread::spawn` for async stdout/stderr reading with BufReader
   - Return cleanup function from useEffect: `unlistenPromise.then((unlisten) => unlisten())`
 ---
+
+## 2026-01-10 - US-022
+Thread: https://ampcode.com/threads/T-019babd7-7883-7365-9312-ff9e374d0403
+- Created LogPanel component with dark terminal-style background (#1e1e1e)
+- Monospace font for log content via font-mono class
+- Auto-scroll to bottom on new content using useEffect with scrollTop
+- Manual scroll detection disables auto-scroll until user scrolls to bottom
+- Shows "Waiting for build to start..." when empty and idle
+- "Scroll to bottom" button appears when auto-scroll is disabled
+- Integrated LogPanel into ProjectView between BuildControls and StoryList
+- Files changed: src/components/LogPanel.tsx (new), src/components/ProjectView.tsx
+- **Learnings for future iterations:**
+  - Use useRef for scroll container and useEffect with logs dependency for auto-scroll
+  - Track autoScroll state with useState, set false when user scrolls away from bottom
+  - LogEntry type from buildStore determines log color: stdout=gray, stderr=red, system=blue
+  - Fixed height (h-64) on container with overflow-auto for scrollable terminal
+---
