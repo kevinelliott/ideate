@@ -3,6 +3,8 @@
 - Tailwind CSS v4 with custom Apple-inspired design tokens in index.css
 - Semantic colors via CSS variables: --background, --foreground, --secondary, --accent, --border, --card
 - Tauri plugins already installed: dialog, fs, shell
+- Additional semantic colors available: --destructive, --success, --warning
+- Base component classes: .btn (primary, secondary, destructive, ghost, sm, lg), .input, .textarea, .select, .card, .card-interactive, .label, .badge
 - Use `pnpm run build` (runs tsc && vite build) for frontend typecheck/build
 - Use `cargo build` in src-tauri for Rust backend builds
 - SF Pro font family set in body CSS
@@ -410,4 +412,21 @@ Thread: https://ampcode.com/threads/T-019babeb-a538-76fb-ae4d-3a74023bd950
   - Create reusable hooks for keyboard handling: useKeyboardNavigation for global, useModalKeyboard for modals
   - Use e.stopPropagation() in modal escape handler to prevent event bubbling
   - Arrow keys wrap around list with modulo-style logic
+---
+
+## 2026-01-11 - US-002
+Thread: https://ampcode.com/threads/T-019bac19-c4ee-7602-9f59-0dcc0c616824
+- Extended design tokens in index.css with additional semantic colors (destructive, success, warning)
+- Added 4px/8px spacing scale via @theme (--spacing-0 through --spacing-16)
+- Added border radius scale (--radius-sm through --radius-full)
+- Created base component styles: .btn (with variants: primary, secondary, destructive, ghost, sm, lg)
+- Created base input styles: .input, .textarea, .select
+- Created base card styles: .card, .card-interactive
+- Created base utility styles: .label, .badge (with variants)
+- Files changed: src/index.css
+- **Learnings for future iterations:**
+  - Use .btn .btn-primary for primary buttons, .btn .btn-secondary for secondary, etc.
+  - Use .input class for text inputs and .input .textarea for textareas
+  - Use .card for containers, .card-interactive for clickable cards
+  - Use .badge with variant classes for status indicators
 ---
