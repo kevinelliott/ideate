@@ -367,3 +367,22 @@ Thread: https://ampcode.com/threads/T-019bac67-7fbf-763f-9906-cc4ac1530c3c
   - Delete flow: StoryCard onDelete → setDeletingStory → modal → handleConfirmDelete → removeStory → savePrd
   - Zustand removeStory also clears selectedStoryId if the deleted story was selected
 ---
+
+## 2026-01-11 - US-022
+Thread: https://ampcode.com/threads/T-019bac6c-3d11-73db-b241-e896124deeac
+- Verified autonomy settings UI already implemented in AgentSettings.tsx
+- Updated default autonomy level from "autonomous" to "pause-between" per acceptance criteria
+- All acceptance criteria verified:
+  - Autonomy selector in project settings area (AgentSettings component) ✓
+  - Options: Fully Autonomous, Pause Between Stories, Manual Per Story ✓
+  - Setting saved to .ideate/config.json via save_project_settings ✓
+  - Default is Pause Between Stories (updated frontend and backend defaults) ✓
+  - pnpm run build passes ✓
+  - Browser verification via dev-browser: UI loads correctly ✓
+- Files changed: src/components/AgentSettings.tsx, src-tauri/src/lib.rs
+- **Learnings for future iterations:**
+  - AgentSettings component includes both AI Agent selector and Autonomy Level selector
+  - Autonomy values: "autonomous", "pause-between", "manual"
+  - Settings are persisted per-project in .ideate/config.json via ProjectConfig struct
+  - Settings are loaded on component mount and saved on change via save_project_settings
+---

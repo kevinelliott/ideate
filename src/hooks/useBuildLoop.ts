@@ -39,7 +39,7 @@ export function useBuildLoop(projectPath: string | undefined) {
   const savePrd = usePrdStore((state) => state.savePrd)
 
   const isRunningRef = useRef(false)
-  const autonomyRef = useRef<AutonomyLevel>('autonomous')
+  const storyIndexRef = useRef(0)
 
   const generatePrompt = useCallback((story: typeof stories[0]): string => {
     const criteria = story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
@@ -67,7 +67,6 @@ Please implement this user story following the acceptance criteria. When done, e
     try {
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
       const agentId = settings?.agent || 'amp'
-      autonomyRef.current = settings?.autonomy || 'autonomous'
 
       const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
       const prompt = generatePrompt(story)
@@ -111,10 +110,31 @@ Please implement this user story following the acceptance criteria. When done, e
     }
   }, [projectPath, generatePrompt, setCurrentStoryId, setCurrentProcessId, setStoryStatus, appendLog, updateStory, savePrd])
 
+  const waitWhilePaused = useCallback(async (): Promise<boolean> => {
+    while (useBuildStore.getState().status === 'paused') {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      if (useBuildStore.getState().status === 'idle') {
+        return false
+      }
+    }
+    return true
+  }, [])
+
+  const shouldPauseForAutonomy = useCallback((autonomy: AutonomyLevel, context: 'before' | 'after', hasMoreStories: boolean): boolean => {
+    if (autonomy === 'manual') {
+      return true
+    }
+    if (autonomy === 'pause-between' && context === 'after' && hasMoreStories) {
+      return true
+    }
+    return false
+  }, [])
+
   const runBuildLoop = useCallback(async () => {
     if (!projectPath || isRunningRef.current) return
 
     isRunningRef.current = true
+    storyIndexRef.current = 0
     clearLogs()
     resetStoryStatuses()
     startBuild()
@@ -124,21 +144,33 @@ Please implement this user story following the acceptance criteria. When done, e
       .filter((s) => !s.passes)
       .sort((a, b) => a.priority - b.priority)
 
-    for (const story of incompleteStories) {
+    for (let i = 0; i < incompleteStories.length; i++) {
+      const story = incompleteStories[i]
+      storyIndexRef.current = i
+
       const buildStatus = useBuildStore.getState().status
-      
       if (buildStatus === 'idle') {
         appendLog('system', 'Build cancelled')
         break
       }
 
-      while (useBuildStore.getState().status === 'paused') {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        if (useBuildStore.getState().status === 'idle') {
-          appendLog('system', 'Build cancelled while paused')
-          isRunningRef.current = false
-          return
-        }
+      const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
+      const autonomy = settings?.autonomy || 'autonomous'
+
+      if (i > 0 && shouldPauseForAutonomy(autonomy, 'before', true)) {
+        setCurrentStoryId(story.id)
+        setStoryStatus(story.id, 'pending')
+        appendLog('system', `Pausing before story ${story.id} (${autonomy} mode) - Resume to continue`)
+        pauseBuild()
+        isRunningRef.current = false
+        return
+      }
+
+      const shouldContinue = await waitWhilePaused()
+      if (!shouldContinue) {
+        appendLog('system', 'Build cancelled while paused')
+        isRunningRef.current = false
+        return
       }
 
       const success = await runStory(story)
@@ -150,12 +182,9 @@ Please implement this user story following the acceptance criteria. When done, e
         return
       }
 
-      const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
-      const autonomy = settings?.autonomy || 'autonomous'
-
-      if (autonomy === 'pause-between') {
-        const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
-        if (remainingStories.length > 0) {
+      const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+      if (shouldPauseForAutonomy(autonomy, 'after', remainingStories.length > 0)) {
+        if (autonomy === 'pause-between') {
           appendLog('system', 'Pausing for review (pause-between mode)')
           pauseBuild()
           isRunningRef.current = false
@@ -169,9 +198,10 @@ Please implement this user story following the acceptance criteria. When done, e
       appendLog('system', '🎉 All stories completed successfully!')
     }
 
+    setCurrentStoryId(null)
     cancelBuild()
     isRunningRef.current = false
-  }, [projectPath, stories, runStory, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog])
+  }, [projectPath, stories, runStory, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStoryId, setStoryStatus])
 
   const handleStart = useCallback(() => {
     runBuildLoop()
@@ -189,21 +219,21 @@ Please implement this user story following the acceptance criteria. When done, e
         .filter((s) => !s.passes)
         .sort((a, b) => a.priority - b.priority)
 
-      for (const story of incompleteStories) {
+      for (let i = 0; i < incompleteStories.length; i++) {
+        const story = incompleteStories[i]
+        storyIndexRef.current = i
+
         const buildStatus = useBuildStore.getState().status
-        
         if (buildStatus === 'idle') {
           appendLog('system', 'Build cancelled')
           break
         }
 
-        while (useBuildStore.getState().status === 'paused') {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-          if (useBuildStore.getState().status === 'idle') {
-            appendLog('system', 'Build cancelled while paused')
-            isRunningRef.current = false
-            return
-          }
+        const shouldContinue = await waitWhilePaused()
+        if (!shouldContinue) {
+          appendLog('system', 'Build cancelled while paused')
+          isRunningRef.current = false
+          return
         }
 
         const success = await runStory(story)
@@ -218,10 +248,13 @@ Please implement this user story following the acceptance criteria. When done, e
         const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
         const autonomy = settings?.autonomy || 'autonomous'
 
-        if (autonomy === 'pause-between') {
-          const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
-          if (remainingStories.length > 0) {
-            appendLog('system', 'Pausing for review (pause-between mode)')
+        const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+        if (remainingStories.length > 0) {
+          if (autonomy === 'manual' || autonomy === 'pause-between') {
+            const nextStory = remainingStories[0]
+            setCurrentStoryId(nextStory.id)
+            setStoryStatus(nextStory.id, 'pending')
+            appendLog('system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)
             pauseBuild()
             isRunningRef.current = false
             return
@@ -234,12 +267,13 @@ Please implement this user story following the acceptance criteria. When done, e
         appendLog('system', '🎉 All stories completed successfully!')
       }
 
+      setCurrentStoryId(null)
       cancelBuild()
       isRunningRef.current = false
     }
 
     runRemaining()
-  }, [projectPath, runStory, pauseBuild, cancelBuild, appendLog])
+  }, [projectPath, runStory, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStoryId, setStoryStatus])
 
   const handleCancel = useCallback(async () => {
     const processId = useBuildStore.getState().currentProcessId
@@ -251,10 +285,11 @@ Please implement this user story following the acceptance criteria. When done, e
         appendLog('system', `Failed to kill agent: ${error}`)
       }
     }
+    setCurrentStoryId(null)
     cancelBuild()
     isRunningRef.current = false
     appendLog('system', 'Build cancelled by user')
-  }, [cancelBuild, appendLog])
+  }, [cancelBuild, appendLog, setCurrentStoryId])
 
   useEffect(() => {
     return () => {
@@ -266,6 +301,7 @@ Please implement this user story following the acceptance criteria. When done, e
     status,
     currentStoryId,
     currentProcessId,
+    storyIndex: storyIndexRef.current,
     handleStart,
     handleResume,
     handleCancel,
