@@ -1,4 +1,15 @@
+import { useProjectStore } from "../stores/projectStore";
+import { ProjectView } from "./ProjectView";
+
 export function MainContent() {
+  const projects = useProjectStore((state) => state.projects);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
+  const activeProject = projects.find((p) => p.id === activeProjectId);
+
+  if (activeProject) {
+    return <ProjectView project={activeProject} />;
+  }
+
   return (
     <main className="flex-1 h-screen flex items-center justify-center bg-background">
       <div className="text-center">
