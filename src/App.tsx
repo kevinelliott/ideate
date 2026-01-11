@@ -19,12 +19,19 @@ interface AgentOutputPayload {
   content: string;
 }
 
+interface AgentExitPayload {
+  process_id: string;
+  exit_code: number | null;
+  success: boolean;
+}
+
 function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const addProject = useProjectStore((state) => state.addProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const isLoaded = useProjectStore((state) => state.isLoaded);
   const appendLog = useBuildStore((state) => state.appendLog);
+  const handleProcessExit = useBuildStore((state) => state.handleProcessExit);
 
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
@@ -37,15 +44,25 @@ function App() {
   }, [loadProjects]);
 
   useEffect(() => {
-    const unlistenPromise = listen<AgentOutputPayload>("agent-output", (event) => {
-      const { stream_type, content } = event.payload;
-      appendLog(stream_type, content);
+    const unlistenOutputPromise = listen<AgentOutputPayload>("agent-output", (event) => {
+      const { process_id, stream_type, content } = event.payload;
+      appendLog(stream_type, content, process_id);
+    });
+
+    const unlistenExitPromise = listen<AgentExitPayload>("agent-exit", (event) => {
+      const { process_id, exit_code, success } = event.payload;
+      handleProcessExit({
+        processId: process_id,
+        exitCode: exit_code,
+        success,
+      });
     });
 
     return () => {
-      unlistenPromise.then((unlisten) => unlisten());
+      unlistenOutputPromise.then((unlisten) => unlisten());
+      unlistenExitPromise.then((unlisten) => unlisten());
     };
-  }, [appendLog]);
+  }, [appendLog, handleProcessExit]);
 
   const handleNewProject = () => {
     setShowNewProjectModal(true);

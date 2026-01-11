@@ -9,6 +9,13 @@ export interface LogEntry {
   timestamp: Date
   type: 'stdout' | 'stderr' | 'system'
   content: string
+  processId?: string
+}
+
+export interface ProcessExitInfo {
+  processId: string
+  exitCode: number | null
+  success: boolean
 }
 
 interface BuildState {
@@ -17,6 +24,7 @@ interface BuildState {
   currentProcessId: string | null
   storyStatuses: Record<string, StoryBuildStatus>
   logs: LogEntry[]
+  lastExitInfo: ProcessExitInfo | null
   startBuild: () => void
   pauseBuild: () => void
   resumeBuild: () => void
@@ -25,16 +33,18 @@ interface BuildState {
   setCurrentProcessId: (processId: string | null) => void
   setStoryStatus: (storyId: string, status: StoryBuildStatus) => void
   resetStoryStatuses: () => void
-  appendLog: (type: LogEntry['type'], content: string) => void
+  appendLog: (type: LogEntry['type'], content: string, processId?: string) => void
   clearLogs: () => void
+  handleProcessExit: (exitInfo: ProcessExitInfo) => void
 }
 
-export const useBuildStore = create<BuildState>((set) => ({
+export const useBuildStore = create<BuildState>((set, get) => ({
   status: 'idle',
   currentStoryId: null,
   currentProcessId: null,
   storyStatuses: {},
   logs: [],
+  lastExitInfo: null,
 
   startBuild: () => {
     set({ status: 'running' })
@@ -70,12 +80,13 @@ export const useBuildStore = create<BuildState>((set) => ({
     set({ storyStatuses: {} })
   },
 
-  appendLog: (type, content) => {
+  appendLog: (type, content, processId) => {
     const entry: LogEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       type,
       content,
+      processId,
     }
     set((state) => ({
       logs: [...state.logs, entry],
@@ -84,5 +95,25 @@ export const useBuildStore = create<BuildState>((set) => ({
 
   clearLogs: () => {
     set({ logs: [] })
+  },
+
+  handleProcessExit: (exitInfo) => {
+    const { currentStoryId, currentProcessId } = get()
+    
+    set({ lastExitInfo: exitInfo })
+    
+    if (exitInfo.processId === currentProcessId) {
+      const exitMessage = exitInfo.success 
+        ? `Process completed successfully (exit code: ${exitInfo.exitCode ?? 0})`
+        : `Process failed (exit code: ${exitInfo.exitCode ?? 'unknown'})`
+      
+      get().appendLog('system', exitMessage, exitInfo.processId)
+      
+      if (currentStoryId) {
+        get().setStoryStatus(currentStoryId, exitInfo.success ? 'complete' : 'failed')
+      }
+      
+      set({ currentProcessId: null })
+    }
   },
 }))
