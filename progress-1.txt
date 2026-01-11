@@ -83,3 +83,20 @@ Thread: https://ampcode.com/threads/T-019bac22-c031-71b1-b7b4-ca9eff9609b0
   - Modal also has idea description textarea field beyond basic requirements
   - useModalKeyboard hook handles Escape key to close modals
 ---
+
+## 2026-01-11 - US-007
+Thread: https://ampcode.com/threads/T-019bac25-3a43-7228-9b0e-aceaaa706f1d
+- Verified project sidebar list already fully implemented
+- All acceptance criteria verified:
+  - Projects listed in sidebar with name and status icon ✓
+  - Click project to select it (highlight selected) ✓
+  - Selected project ID stored in Zustand (activeProjectId) ✓
+  - Empty state shown when no projects exist ("No projects yet") ✓
+  - pnpm run build passes ✓
+  - Browser verification complete ✓
+- Files involved: src/components/Sidebar.tsx, src/stores/projectStore.ts
+- **Learnings for future iterations:**
+  - Project selection uses setActiveProject(project.id) from Zustand store
+  - Status colors defined in statusColors object: idle=gray, generating=blue, ready=green, error=red
+  - Context menu, rename, and delete modals are already integrated into Sidebar
+---
