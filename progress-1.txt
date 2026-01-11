@@ -66,3 +66,20 @@ Thread: https://ampcode.com/threads/T-019bac20-d2fd-7363-9aef-bf09db9325d5
   - load_projects() loads from Application Support, not from base_path scan
   - All Rust command errors use .map_err() for proper error handling
 ---
+
+## 2026-01-11 - US-006
+Thread: https://ampcode.com/threads/T-019bac22-c031-71b1-b7b4-ca9eff9609b0
+- Verified new project modal UI already implemented with all required functionality
+- All acceptance criteria verified:
+  - New Project button in sidebar opens modal ✓
+  - Modal has: project name input, directory picker button, create/cancel buttons ✓
+  - Directory picker uses Tauri's native file dialog (@tauri-apps/plugin-dialog) ✓
+  - Create button calls Rust backend create_project command ✓
+  - Modal closes and project appears in sidebar on success ✓
+  - pnpm run build passes ✓
+- Files involved: src/components/NewProjectModal.tsx, src/App.tsx, src/hooks/useModalKeyboard.ts, src-tauri/src/lib.rs
+- **Learnings for future iterations:**
+  - NewProjectModal uses @tauri-apps/plugin-dialog open() for native directory picker
+  - Modal also has idea description textarea field beyond basic requirements
+  - useModalKeyboard hook handles Escape key to close modals
+---
