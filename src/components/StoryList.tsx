@@ -4,6 +4,7 @@ import type { Story } from "../stores/prdStore";
 import { StoryCard } from "./StoryCard";
 import { EditStoryModal } from "./EditStoryModal";
 import { CreateStoryModal } from "./CreateStoryModal";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 interface StoryListProps {
   projectPath: string;
@@ -13,10 +14,12 @@ export function StoryList({ projectPath }: StoryListProps) {
   const stories = usePrdStore((state) => state.stories);
   const updateStory = usePrdStore((state) => state.updateStory);
   const addStory = usePrdStore((state) => state.addStory);
+  const removeStory = usePrdStore((state) => state.removeStory);
   const savePrd = usePrdStore((state) => state.savePrd);
   
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingStory, setDeletingStory] = useState<Story | null>(null);
 
   const handleStoryClick = (storyId: string) => {
     console.log("Story clicked:", storyId);
@@ -50,6 +53,22 @@ export function StoryList({ projectPath }: StoryListProps) {
     await savePrd(projectPath);
   };
 
+  const handleDeleteStory = (story: Story) => {
+    setDeletingStory(story);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (deletingStory) {
+      removeStory(deletingStory.id);
+      await savePrd(projectPath);
+      setDeletingStory(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeletingStory(null);
+  };
+
   const getNextPriority = (): number => {
     if (stories.length === 0) return 1;
     const maxPriority = Math.max(...stories.map((s) => s.priority));
@@ -65,6 +84,7 @@ export function StoryList({ projectPath }: StoryListProps) {
             story={story}
             onClick={handleStoryClick}
             onEdit={handleEditStory}
+            onDelete={handleDeleteStory}
           />
         ))}
         <button
@@ -99,6 +119,12 @@ export function StoryList({ projectPath }: StoryListProps) {
         nextPriority={getNextPriority()}
         onClose={handleCloseCreate}
         onSave={handleCreateStory}
+      />
+      <ConfirmDeleteModal
+        isOpen={deletingStory !== null}
+        storyId={deletingStory?.id ?? ""}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
       />
     </>
   );

@@ -7,6 +7,7 @@ interface StoryCardProps {
   story: Story;
   onClick: (storyId: string) => void;
   onEdit: (story: Story) => void;
+  onDelete: (story: Story) => void;
 }
 
 function getStoryStatus(story: Story): StoryStatus {
@@ -30,7 +31,7 @@ const statusLabels: Record<StoryStatus, string> = {
   failed: "Failed",
 };
 
-export function StoryCard({ story, onClick, onEdit }: StoryCardProps) {
+export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const status = getStoryStatus(story);
   const criteriaCount = story.acceptanceCriteria.length;
@@ -48,6 +49,11 @@ export function StoryCard({ story, onClick, onEdit }: StoryCardProps) {
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     onEdit(story);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(story);
   };
 
   return (
@@ -90,6 +96,29 @@ export function StoryCard({ story, onClick, onEdit }: StoryCardProps) {
                 >
                   <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                   <path d="m15 5 4 4" />
+                </svg>
+              </button>
+              <button
+                onClick={handleDelete}
+                className="p-1 rounded hover:bg-red-500/10 text-secondary hover:text-red-500 transition-colors"
+                aria-label="Delete story"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
                 </svg>
               </button>
               <button
