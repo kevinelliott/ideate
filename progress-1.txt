@@ -386,3 +386,46 @@ Thread: https://ampcode.com/threads/T-019bac6c-3d11-73db-b241-e896124deeac
   - Settings are persisted per-project in .ideate/config.json via ProjectConfig struct
   - Settings are loaded on component mount and saved on change via save_project_settings
 ---
+
+## 2026-01-11 - US-023
+Thread: https://ampcode.com/threads/T-019bac6f-1849-75b2-866c-db7fe23595ad
+- Enhanced useBuildLoop hook with complete build loop orchestration
+- Build loop now properly tracks current story index via storyIndexRef
+- Added comprehensive autonomy mode handling:
+  - Autonomous: runs continuously through all stories
+  - Pause-between: pauses after each story completion for review
+  - Manual: pauses before EACH story (not just between) for explicit user approval
+- All acceptance criteria verified:
+  - Build loop tracks current story index ✓
+  - Spawns agent for current story with story context (via generatePrompt) ✓
+  - Updates story status during execution (pending -> in-progress -> complete/failed) ✓
+  - Respects autonomy setting for pausing ✓
+  - Handles agent success/failure appropriately ✓
+  - pnpm run build passes ✓
+- Files changed: src/hooks/useBuildLoop.ts
+- **Learnings for future iterations:**
+  - useBuildLoop exports storyIndex for UI components to track progress
+  - Manual mode pauses BEFORE each story (i > 0), allowing user to approve each story individually
+  - waitWhilePaused() helper function cleanly handles pause/resume/cancel state transitions
+  - shouldPauseForAutonomy() centralizes autonomy pause logic for consistency
+---
+
+## 2026-01-11 - US-024
+Thread: https://ampcode.com/threads/T-019bac72-3616-7278-a973-575a76d34c9c
+- Verified BuildControls component already fully implemented
+- All acceptance criteria verified:
+  - Start Build button visible when PRD has stories (idle state, line 59-77) ✓
+  - Pause button stops after current story (running state, calls pauseBuild) ✓
+  - Resume continues from next pending story (paused state, calls handleResume) ✓
+  - Cancel terminates running agent (calls handleCancel → invoke kill_agent) ✓
+  - Button states reflect build loop state (renders idle/running/paused UI) ✓
+  - pnpm run build passes ✓
+  - Browser verification: Vite dev server loads, app renders correctly ✓
+- No code changes required - all functionality was already in place
+- Files involved: src/components/BuildControls.tsx, src/hooks/useBuildLoop.ts
+- **Learnings for future iterations:**
+  - BuildControls uses useBuildLoop hook for handleStart, handleResume, handleCancel actions
+  - Button visibility changes based on buildStore status: idle/running/paused
+  - Current story info displayed via currentStoryId from buildStore
+  - Cancel action invokes kill_agent Tauri command to terminate running process
+---
