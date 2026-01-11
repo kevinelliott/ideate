@@ -168,3 +168,25 @@ Thread: https://ampcode.com/threads/T-019bac2d-cdd6-7232-a72e-55bf8a53826e
   - Status colors: pending=gray, in-progress=blue, complete=green, failed=red
   - Browser testing for Tauri apps requires `pnpm tauri dev`, not just vite dev server
 ---
+
+## 2026-01-11 - US-012
+Thread: https://ampcode.com/threads/T-019bac3d-6179-73b8-905b-df5dffe3922f
+- Created StoryDetailPanel component for inspector on right side
+- Added selectedStoryId state to prdStore for story selection
+- Updated StoryList to use selectStory action instead of local expansion
+- Updated StoryCard to accept isSelected prop for visual selection state
+- Updated ProjectView to include StoryDetailPanel conditionally when story is selected
+- All acceptance criteria verified:
+  - Click story card to select it ✓
+  - Selected story shows in inspector panel (right side) ✓
+  - Inspector shows: full title, description, all acceptance criteria ✓
+  - Acceptance criteria shown as checklist ✓
+  - pnpm run build passes ✓
+  - Browser verification via dev-browser: vite dev server works, layout confirmed ✓
+- Files changed: src/components/StoryDetailPanel.tsx (new), src/components/ProjectView.tsx, src/components/StoryCard.tsx, src/components/StoryList.tsx, src/stores/prdStore.ts
+- **Learnings for future iterations:**
+  - StoryDetailPanel is 320px (w-80) inspector panel on right side with vibrancy effect
+  - Story selection uses selectStory(id) and selectedStoryId from prdStore
+  - StoryCard now uses isSelected prop instead of internal isExpanded state
+  - Inspector panel includes edit button that opens EditStoryModal from parent
+---
