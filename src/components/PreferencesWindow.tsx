@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
+import { useThemeStore, type Theme } from "../stores/themeStore";
 
 export type AutonomyLevel = "autonomous" | "pause-between" | "manual";
 
@@ -15,6 +16,7 @@ interface Preferences {
   defaultAutonomy: AutonomyLevel;
   logBufferSize: number;
   agentPaths: AgentCliPath[];
+  theme: Theme;
 }
 
 interface PreferencesWindowProps {
@@ -28,17 +30,25 @@ const autonomyOptions: { value: AutonomyLevel; label: string }[] = [
   { value: "manual", label: "Manual Per Story" },
 ];
 
+const themeOptions: { value: Theme; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
 const defaultPreferences: Preferences = {
   defaultAgent: null,
   defaultAutonomy: "pause-between",
   logBufferSize: 1000,
   agentPaths: [],
+  theme: "system",
 };
 
 export function PreferencesWindow({ isOpen, onClose }: PreferencesWindowProps) {
   const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const setTheme = useThemeStore((state) => state.setTheme);
 
   useModalKeyboard(isOpen, onClose);
 
@@ -52,7 +62,7 @@ export function PreferencesWindow({ isOpen, onClose }: PreferencesWindowProps) {
     setIsLoading(true);
     try {
       const prefs = await invoke<Preferences>("load_preferences");
-      setPreferences(prefs);
+      setPreferences({ ...defaultPreferences, ...prefs });
     } catch (err) {
       console.error("Failed to load preferences:", err);
     } finally {
@@ -85,6 +95,12 @@ export function PreferencesWindow({ isOpen, onClose }: PreferencesWindowProps) {
   const handleLogBufferSizeChange = (size: number) => {
     const newPrefs = { ...preferences, logBufferSize: size };
     savePreferences(newPrefs);
+  };
+
+  const handleThemeChange = (theme: Theme) => {
+    const newPrefs = { ...preferences, theme };
+    savePreferences(newPrefs);
+    setTheme(theme);
   };
 
   const handleAgentPathChange = (agentId: string, path: string) => {
@@ -129,6 +145,36 @@ export function PreferencesWindow({ isOpen, onClose }: PreferencesWindowProps) {
           <div className="py-8 text-center text-secondary">Loading preferences...</div>
         ) : (
           <div className="space-y-6">
+            <section>
+              <h3 className="text-sm font-medium text-foreground mb-3">Appearance</h3>
+              <div className="space-y-4 bg-background rounded-lg p-4 border border-border">
+                <div>
+                  <label
+                    htmlFor="theme-select"
+                    className="block text-sm font-medium text-foreground mb-1.5"
+                  >
+                    Theme
+                  </label>
+                  <select
+                    id="theme-select"
+                    value={preferences.theme}
+                    onChange={(e) => handleThemeChange(e.target.value as Theme)}
+                    disabled={isSaving}
+                    className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm focus:ring-2 focus:ring-accent focus:border-transparent transition-all disabled:opacity-50"
+                  >
+                    {themeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-xs text-secondary">
+                    Choose between light, dark, or follow system preference
+                  </p>
+                </div>
+              </div>
+            </section>
+
             <section>
               <h3 className="text-sm font-medium text-foreground mb-3">Default Settings</h3>
               <div className="space-y-4 bg-background rounded-lg p-4 border border-border">

@@ -7,6 +7,7 @@ import { NewProjectModal } from "./components/NewProjectModal";
 import { PreferencesWindow } from "./components/PreferencesWindow";
 import { useProjectStore } from "./stores/projectStore";
 import { useBuildStore } from "./stores/buildStore";
+import { useThemeStore } from "./stores/themeStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 
 interface CreateProjectResult {
@@ -34,6 +35,8 @@ function App() {
   const isLoaded = useProjectStore((state) => state.isLoaded);
   const appendLog = useBuildStore((state) => state.appendLog);
   const handleProcessExit = useBuildStore((state) => state.handleProcessExit);
+  const loadTheme = useThemeStore((state) => state.loadTheme);
+  const isThemeLoaded = useThemeStore((state) => state.isLoaded);
 
   const isAnyModalOpen = showNewProjectModal || showPreferencesWindow;
 
@@ -49,7 +52,8 @@ function App() {
 
   useEffect(() => {
     loadProjects();
-  }, [loadProjects]);
+    loadTheme();
+  }, [loadProjects, loadTheme]);
 
   useEffect(() => {
     const unlistenOutputPromise = listen<AgentOutputPayload>("agent-output", (event) => {
@@ -110,7 +114,7 @@ function App() {
     }
   };
 
-  if (!isLoaded) {
+  if (!isLoaded || !isThemeLoaded) {
     return (
       <div className="flex h-screen bg-background text-foreground items-center justify-center">
         <div className="text-secondary">Loading...</div>

@@ -150,6 +150,8 @@ pub struct Preferences {
     pub log_buffer_size: i32,
     #[serde(rename = "agentPaths", default)]
     pub agent_paths: Vec<AgentCliPath>,
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_autonomy() -> String {
@@ -160,6 +162,10 @@ fn default_log_buffer_size() -> i32 {
     1000
 }
 
+fn default_theme() -> String {
+    "system".to_string()
+}
+
 impl Default for Preferences {
     fn default() -> Self {
         Preferences {
@@ -167,6 +173,7 @@ impl Default for Preferences {
             default_autonomy: default_autonomy(),
             log_buffer_size: default_log_buffer_size(),
             agent_paths: Vec::new(),
+            theme: default_theme(),
         }
     }
 }
@@ -258,31 +265,29 @@ fn save_projects(app: AppHandle, projects: Vec<StoredProject>) -> Result<(), Str
 
 #[tauri::command]
 fn create_project(
+    app: AppHandle,
     name: String,
     description: String,
     directory: String,
 ) -> Result<CreateProjectResult, String> {
     let project_path = PathBuf::from(&directory).join(&name);
-    let ideate_path = project_path.join(".ideate");
-    let config_path = ideate_path.join("config.json");
 
-    if project_path.exists() {
-        return Err(format!(
-            "Project folder already exists: {}",
-            project_path.display()
-        ));
-    }
+    fs::create_dir_all(&project_path)
+        .map_err(|e| format!("Failed to create project directory: {}", e))?;
 
-    fs::create_dir_all(&ideate_path).map_err(|e| format!("Failed to create project folder: {}", e))?;
+    let ideate_dir = project_path.join(".ideate");
+    fs::create_dir_all(&ideate_dir)
+        .map_err(|e| format!("Failed to create .ideate directory: {}", e))?;
 
     let config = ProjectConfig {
         name: name.clone(),
-        description: description.clone(),
+        description,
         agent: None,
         autonomy: "pause-between".to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
 
+    let config_path = ideate_dir.join("config.json");
     let config_json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
@@ -314,12 +319,11 @@ fn load_prd(project_path: String) -> Result<Option<Prd>, String> {
 
 #[tauri::command]
 fn save_prd(project_path: String, prd: Prd) -> Result<(), String> {
-    let ideate_path = PathBuf::from(&project_path).join(".ideate");
-    let prd_path = ideate_path.join("prd.json");
+    let ideate_dir = PathBuf::from(&project_path).join(".ideate");
+    fs::create_dir_all(&ideate_dir)
+        .map_err(|e| format!("Failed to create .ideate directory: {}", e))?;
 
-    fs::create_dir_all(&ideate_path)
-        .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
-
+    let prd_path = ideate_dir.join("prd.json");
     let prd_json = serde_json::to_string_pretty(&prd)
         .map_err(|e| format!("Failed to serialize PRD: {}", e))?;
 
@@ -331,7 +335,9 @@ fn save_prd(project_path: String, prd: Prd) -> Result<(), String> {
 
 #[tauri::command]
 fn load_project_settings(project_path: String) -> Result<Option<ProjectSettings>, String> {
-    let config_path = PathBuf::from(&project_path).join(".ideate").join("config.json");
+    let config_path = PathBuf::from(&project_path)
+        .join(".ideate")
+        .join("config.json");
 
     if !config_path.exists() {
         return Ok(None);
@@ -350,38 +356,27 @@ fn load_project_settings(project_path: String) -> Result<Option<ProjectSettings>
 }
 
 #[tauri::command]
-fn save_project_settings(
-    project_path: String,
-    agent: Option<String>,
-    autonomy: String,
-) -> Result<(), String> {
-    let ideate_path = PathBuf::from(&project_path).join(".ideate");
-    let config_path = ideate_path.join("config.json");
+fn save_project_settings(project_path: String, settings: ProjectSettings) -> Result<(), String> {
+    let config_path = PathBuf::from(&project_path)
+        .join(".ideate")
+        .join("config.json");
 
-    fs::create_dir_all(&ideate_path)
-        .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
-
-    let existing_config: Option<ProjectConfig> = if config_path.exists() {
+    let mut config: ProjectConfig = if config_path.exists() {
         let content = fs::read_to_string(&config_path)
             .map_err(|e| format!("Failed to read config.json: {}", e))?;
-        serde_json::from_str(&content).ok()
-    } else {
-        None
-    };
-
-    let config = if let Some(mut existing) = existing_config {
-        existing.agent = agent;
-        existing.autonomy = autonomy;
-        existing
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config.json: {}", e))?
     } else {
         ProjectConfig {
             name: "Unknown".to_string(),
             description: "".to_string(),
-            agent,
-            autonomy,
+            agent: None,
+            autonomy: "pause-between".to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
         }
     };
+
+    config.agent = settings.agent;
+    config.autonomy = settings.autonomy;
 
     let config_json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
@@ -394,7 +389,9 @@ fn save_project_settings(
 
 #[tauri::command]
 fn load_project_state(project_path: String) -> Result<Option<ProjectState>, String> {
-    let state_path = PathBuf::from(&project_path).join(".ideate").join("state.json");
+    let state_path = PathBuf::from(&project_path)
+        .join(".ideate")
+        .join("state.json");
 
     if !state_path.exists() {
         return Ok(None);
@@ -406,7 +403,7 @@ fn load_project_state(project_path: String) -> Result<Option<ProjectState>, Stri
     match serde_json::from_str::<ProjectState>(&content) {
         Ok(state) => Ok(Some(state)),
         Err(e) => {
-            eprintln!("Warning: Failed to parse state.json (corrupt state handled gracefully): {}", e);
+            eprintln!("Warning: Failed to parse state.json, ignoring corrupt state: {}", e);
             Ok(None)
         }
     }
@@ -414,12 +411,11 @@ fn load_project_state(project_path: String) -> Result<Option<ProjectState>, Stri
 
 #[tauri::command]
 fn save_project_state(project_path: String, state: ProjectState) -> Result<(), String> {
-    let ideate_path = PathBuf::from(&project_path).join(".ideate");
-    let state_path = ideate_path.join("state.json");
+    let ideate_dir = PathBuf::from(&project_path).join(".ideate");
+    fs::create_dir_all(&ideate_dir)
+        .map_err(|e| format!("Failed to create .ideate directory: {}", e))?;
 
-    fs::create_dir_all(&ideate_path)
-        .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
-
+    let state_path = ideate_dir.join("state.json");
     let state_json = serde_json::to_string_pretty(&state)
         .map_err(|e| format!("Failed to serialize state: {}", e))?;
 
@@ -440,13 +436,10 @@ fn load_preferences(app: AppHandle) -> Result<Preferences, String> {
     let content = fs::read_to_string(&prefs_path)
         .map_err(|e| format!("Failed to read preferences.json: {}", e))?;
 
-    match serde_json::from_str::<Preferences>(&content) {
-        Ok(prefs) => Ok(prefs),
-        Err(e) => {
-            eprintln!("Warning: Failed to parse preferences.json: {}. Using defaults.", e);
-            Ok(Preferences::default())
-        }
-    }
+    let preferences: Preferences = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse preferences.json: {}", e))?;
+
+    Ok(preferences)
 }
 
 #[tauri::command]

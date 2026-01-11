@@ -12,8 +12,20 @@
   --warning: 255 149 0;
 }
 
+:root.dark {
+  --background: 28 28 30;
+  --foreground: 255 255 255;
+  --secondary: 142 142 147;
+  --accent: 10 132 255;
+  --border: 56 56 58;
+  --card: 44 44 46;
+  --destructive: 255 69 58;
+  --success: 48 209 88;
+  --warning: 255 159 10;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light):not(.dark) {
     --background: 28 28 30;
     --foreground: 255 255 255;
     --secondary: 142 142 147;
@@ -26,6 +38,18 @@
   }
 }
 
+:root.light {
+  --background: 255 255 255;
+  --foreground: 0 0 0;
+  --secondary: 142 142 147;
+  --accent: 0 122 255;
+  --border: 229 229 234;
+  --card: 250 250 250;
+  --destructive: 255 59 48;
+  --success: 52 199 89;
+  --warning: 255 149 0;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
@@ -34,6 +58,14 @@ body {
   background-color: rgb(var(--background));
   color: rgb(var(--foreground));
   overflow: hidden;
+}
+
+* {
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+*:focus-visible {
+  transition: none;
 }
 
 .drag-region {
@@ -90,7 +122,6 @@ body {
   font-weight: 500;
   font-size: 14px;
   line-height: 1.25;
-  transition: all 150ms ease;
   cursor: pointer;
   border: none;
   outline: none;
@@ -162,7 +193,6 @@ body {
   font-size: 14px;
   line-height: 1.5;
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .input::placeholder {
@@ -202,7 +232,6 @@ body {
 
 .card-interactive {
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .card-interactive:hover {
