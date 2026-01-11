@@ -185,3 +185,16 @@ Thread: https://ampcode.com/threads/T-019babbe-7735-721d-bb66-8fd1fd84b598
   - Filter empty criteria on save: `criteria.filter((c) => c.trim() !== "")`
   - Modal uses max-h-[90vh] overflow-auto for scrollable content on long criteria lists
 ---
+
+## 2026-01-10 - US-014
+Thread: https://ampcode.com/threads/T-019babc0-ca3c-77f3-a67e-972ba5842bda
+- Implemented "Add Story" button at bottom of story list
+- Created CreateStoryModal component similar to EditStoryModal but for new stories
+- Auto-generates next story ID based on highest existing priority + 1
+- New story saved to disk automatically via savePrd
+- Files changed: src/components/CreateStoryModal.tsx (new), src/components/StoryList.tsx
+- **Learnings for future iterations:**
+  - CreateStoryModal reuses same patterns as EditStoryModal with empty initial state
+  - Use `Math.max(...stories.map((s) => s.priority))` to find highest priority
+  - useEffect with isOpen dependency to reset form state when modal opens
+---
