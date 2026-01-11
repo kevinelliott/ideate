@@ -116,3 +116,18 @@ Thread: https://ampcode.com/threads/T-019bac27-9be2-718a-8850-67c6b7c32796
   - Auto-save triggered after addProject, removeProject, updateProject actions
   - Uses Tauri's app.path().app_data_dir() for cross-platform app data location
 ---
+
+## 2026-01-11 - US-009
+Thread: https://ampcode.com/threads/T-019bac29-6f42-7318-9e2d-2cfbb56be4ca
+- Created PRD types and schema in src/types/prd.ts
+- Types implemented:
+  - PRD type with: project, description, branchName, userStories ✓
+  - UserStory type: id, title, description, acceptanceCriteria, priority, passes, status, notes ✓
+  - StoryStatus type: 'pending' | 'in-progress' | 'complete' | 'failed' | 'canceled' ✓
+- Types exported from shared types file (src/types/index.ts) ✓
+- pnpm run build passes ✓
+- Files changed: src/types/prd.ts (new), src/types/index.ts (updated)
+- **Learnings for future iterations:**
+  - UserStory includes both 'passes' boolean (for PRD tracking) and 'status' (for UI display)
+  - Types follow existing pattern in types directory with barrel export via index.ts
+---
