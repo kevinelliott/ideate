@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
@@ -59,6 +60,12 @@ pub struct Prd {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SpawnAgentResult {
     pub process_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KillAgentResult {
+    pub success: bool,
+    pub message: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -273,6 +280,88 @@ fn spawn_agent(
     Ok(SpawnAgentResult { process_id })
 }
 
+#[tauri::command]
+fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
+    let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
+    
+    let child = match processes.get_mut(&process_id) {
+        Some(child) => child,
+        None => {
+            return Ok(KillAgentResult {
+                success: false,
+                message: format!("Process {} not found", process_id),
+            });
+        }
+    };
+
+    #[cfg(unix)]
+    {
+        
+        let pid = child.id();
+        
+        unsafe {
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+        
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(5);
+        
+        loop {
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    processes.remove(&process_id);
+                    return Ok(KillAgentResult {
+                        success: true,
+                        message: "Process terminated gracefully with SIGTERM".to_string(),
+                    });
+                }
+                Ok(None) => {
+                    if start.elapsed() >= timeout {
+                        unsafe {
+                            libc::kill(pid as i32, libc::SIGKILL);
+                        }
+                        let _ = child.wait();
+                        processes.remove(&process_id);
+                        return Ok(KillAgentResult {
+                            success: true,
+                            message: "Process killed with SIGKILL after timeout".to_string(),
+                        });
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+                Err(e) => {
+                    processes.remove(&process_id);
+                    return Ok(KillAgentResult {
+                        success: false,
+                        message: format!("Error waiting for process: {}", e),
+                    });
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        match child.kill() {
+            Ok(()) => {
+                let _ = child.wait();
+                processes.remove(&process_id);
+                Ok(KillAgentResult {
+                    success: true,
+                    message: "Process killed".to_string(),
+                })
+            }
+            Err(e) => {
+                processes.remove(&process_id);
+                Ok(KillAgentResult {
+                    success: false,
+                    message: format!("Failed to kill process: {}", e),
+                })
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -285,7 +374,8 @@ pub fn run() {
             save_prd,
             load_project_settings,
             save_project_settings,
-            spawn_agent
+            spawn_agent,
+            kill_agent
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
