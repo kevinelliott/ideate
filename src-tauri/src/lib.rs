@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::thread;
+use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
@@ -56,6 +59,13 @@ pub struct Prd {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SpawnAgentResult {
     pub process_id: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct AgentOutputEvent {
+    pub process_id: String,
+    pub stream_type: String,
+    pub content: String,
 }
 
 #[tauri::command]
@@ -203,19 +213,59 @@ fn save_project_settings(
 
 #[tauri::command]
 fn spawn_agent(
+    app: AppHandle,
     executable: String,
     args: Vec<String>,
     working_directory: String,
 ) -> Result<SpawnAgentResult, String> {
     let process_id = Uuid::new_v4().to_string();
 
-    let child = Command::new(&executable)
+    let mut child = Command::new(&executable)
         .args(&args)
         .current_dir(&working_directory)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn process '{}': {}", executable, e))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let pid_clone = process_id.clone();
+    let app_clone = app.clone();
+    if let Some(stdout) = stdout {
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let event = AgentOutputEvent {
+                        process_id: pid_clone.clone(),
+                        stream_type: "stdout".to_string(),
+                        content: line,
+                    };
+                    let _ = app_clone.emit("agent-output", event);
+                }
+            }
+        });
+    }
+
+    let pid_clone2 = process_id.clone();
+    let app_clone2 = app.clone();
+    if let Some(stderr) = stderr {
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let event = AgentOutputEvent {
+                        process_id: pid_clone2.clone(),
+                        stream_type: "stderr".to_string(),
+                        content: line,
+                    };
+                    let _ = app_clone2.emit("agent-output", event);
+                }
+            }
+        });
+    }
 
     let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
     processes.insert(process_id.clone(), child);
