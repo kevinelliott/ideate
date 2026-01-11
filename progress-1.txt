@@ -499,3 +499,32 @@ Thread: https://ampcode.com/threads/T-019bac7f-2edc-72ef-9c79-61277c067afa
   - isAnyModalOpen tracks combined modal state for keyboard navigation
   - Agent CLI paths are optional - empty string uses default command
 ---
+
+## 2026-01-11 - US-028
+Thread: https://ampcode.com/threads/T-019bac86-a47c-7717-9a31-31ece15e3643
+- Implemented light/dark mode support with theme override in preferences
+- Added theme field to Rust Preferences struct with serde(default)
+- Created themeStore.ts Zustand store for theme management:
+  - Tracks theme preference (system/light/dark) and resolved theme
+  - Listens to system preference changes when in "system" mode
+  - Applies theme class to document.documentElement
+- Updated index.css with:
+  - Theme-specific CSS variable overrides for :root.dark and :root.light
+  - Smooth 200ms transitions for background-color, border-color, and color
+  - Kept prefers-color-scheme media query as fallback for uninitialized state
+- Added Appearance section to PreferencesWindow with Theme selector dropdown
+- Updated App.tsx to load theme on startup and wait for theme to load
+- All acceptance criteria verified:
+  - App follows system appearance preference ✓
+  - All components render correctly in both modes ✓
+  - Transition between modes is smooth (200ms CSS transitions) ✓
+  - Optional theme override in preferences ✓
+  - pnpm run build passes ✓
+  - Browser verification via dev-browser skill ✓
+- Files changed: src-tauri/src/lib.rs, src/stores/themeStore.ts (new), src/index.css, src/components/PreferencesWindow.tsx, src/App.tsx
+- **Learnings for future iterations:**
+  - Use CSS classes on :root (dark/light) rather than relying solely on media queries for manual override
+  - themeStore listens to system preference changes via matchMedia addEventListener
+  - Theme transitions use CSS transition on * selector with 200ms duration
+  - App waits for both isLoaded (projects) and isThemeLoaded before rendering
+---
