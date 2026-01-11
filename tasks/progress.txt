@@ -282,3 +282,17 @@ Thread: https://ampcode.com/threads/T-019babd2-ed23-76ca-9932-e5c01d322bd0
   - uuid::Uuid::new_v4().to_string() generates unique process IDs
   - PROCESSES global stores Child handles for kill_agent and event streaming
 ---
+
+## 2026-01-10 - US-021
+Thread: https://ampcode.com/threads/T-019babd5-27aa-719a-b091-8e0de07bdc7d
+- Implemented real-time agent output streaming via Tauri events
+- Modified spawn_agent to spawn threads for stdout/stderr that emit "agent-output" events
+- Created AgentOutputEvent struct with process_id, stream_type, content fields
+- Added useEffect in App.tsx to listen for "agent-output" events and append to buildStore logs
+- Files changed: src-tauri/src/lib.rs, src/App.tsx
+- **Learnings for future iterations:**
+  - Use `listen<PayloadType>("event-name", callback)` from `@tauri-apps/api/event` to listen for Tauri events
+  - Use `app.emit("event-name", payload)` from Tauri with AppHandle to emit events to frontend
+  - Spawn threads with `thread::spawn` for async stdout/stderr reading with BufReader
+  - Return cleanup function from useEffect: `unlistenPromise.then((unlisten) => unlisten())`
+---

@@ -3,6 +3,7 @@ import { usePrdStore } from "../stores/prdStore";
 import { StoryList } from "./StoryList";
 import { AgentSettings } from "./AgentSettings";
 import { BuildControls } from "./BuildControls";
+import { LogPanel } from "./LogPanel";
 
 interface ProjectViewProps {
   project: Project;
@@ -25,6 +26,7 @@ export function ProjectView({ project }: ProjectViewProps) {
         {hasStories ? (
           <>
             <BuildControls />
+            <LogPanel />
             <StoryList projectPath={project.path} />
           </>
         ) : (
