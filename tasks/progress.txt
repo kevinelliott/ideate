@@ -349,3 +349,20 @@ Thread: https://ampcode.com/threads/T-019babdb-5901-743d-94a6-b7be7b5cf47e
   - Support autonomy modes: autonomous (continuous), pause-between (pause after each story)
   - Generate prompt from story data with ID, title, description, and acceptance criteria
 ---
+
+## 2026-01-10 - US-025
+Thread: https://ampcode.com/threads/T-019babe3-038a-7119-bf4c-71889e466a9c
+- Implemented project list persistence across app restarts
+- Created Tauri commands: load_projects, save_projects
+- Commands store projects.json in app data directory (~/Library/Application Support/Ideate/)
+- Added StoredProject struct in Rust with camelCase serde renaming
+- Updated projectStore with loadProjects, saveProjects, setProjects actions
+- Projects auto-save when list changes (add, remove, update)
+- App loads projects on startup with loading state
+- Files changed: src-tauri/src/lib.rs, src/stores/projectStore.ts, src/App.tsx
+- **Learnings for future iterations:**
+  - Use `app.path().app_data_dir()` from tauri::Manager to get app data directory
+  - Added isLoaded state to projectStore to show loading UI until projects are loaded
+  - Call saveProjects() after each mutation using get() in zustand actions
+  - StoredProject uses #[serde(rename = "camelCase")] for createdAt field
+---
