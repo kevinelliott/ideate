@@ -396,3 +396,18 @@ Thread: https://ampcode.com/threads/T-019babe9-6406-733c-956b-e06525768900
   - Context menu uses fixed positioning with x/y from MouseEvent.clientX/clientY
   - Click outside detection via mousedown listener checking event.target containment
 ---
+
+## 2026-01-10 - US-028
+Thread: https://ampcode.com/threads/T-019babeb-a538-76fb-ae4d-3a74023bd950
+- Implemented keyboard navigation for the application
+- Created useKeyboardNavigation hook for global keyboard shortcuts (Cmd+N, Escape, Up/Down, Enter)
+- Created useModalKeyboard hook for modal Escape key handling
+- Added keyboard navigation to all 6 modals (NewProject, EditStory, CreateStory, ConfirmDelete, RenameProject, DeleteProject)
+- Files changed: src/hooks/useKeyboardNavigation.ts (new), src/hooks/useModalKeyboard.ts (new), src/App.tsx, src/components/NewProjectModal.tsx, src/components/EditStoryModal.tsx, src/components/CreateStoryModal.tsx, src/components/ConfirmDeleteModal.tsx, src/components/RenameProjectModal.tsx, src/components/DeleteProjectModal.tsx
+- **Learnings for future iterations:**
+  - Use window.addEventListener('keydown') for global keyboard shortcuts
+  - Check document.activeElement to skip shortcuts when typing in inputs/textareas
+  - Create reusable hooks for keyboard handling: useKeyboardNavigation for global, useModalKeyboard for modals
+  - Use e.stopPropagation() in modal escape handler to prevent event bubbling
+  - Arrow keys wrap around list with modulo-style logic
+---
