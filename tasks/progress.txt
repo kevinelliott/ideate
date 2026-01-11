@@ -8,6 +8,8 @@
 - SF Pro font family set in body CSS
 - Components go in src/components/ directory
 - Use .drag-region class for titlebar drag areas, .no-drag for buttons inside
+- Use `invoke<T>("command", { args })` from `@tauri-apps/api/core` to call Tauri commands
+- Register Tauri commands via `.invoke_handler(tauri::generate_handler![cmd1, cmd2])` in lib.rs
 
 ---
 
@@ -63,4 +65,19 @@ Thread: https://ampcode.com/threads/T-019bab87-c54b-76d6-92ed-1824e47cd5e1
   - Use `open({ directory: true, defaultPath })` from @tauri-apps/plugin-dialog for directory selection
   - Import `documentDir` from `@tauri-apps/api/path` to get Documents folder path
   - Dialog permissions already configured in src-tauri/capabilities/default.json
+---
+
+## 2026-01-10 - US-005
+Thread: https://ampcode.com/threads/T-019bab89-42b3-763e-958b-50d9eb34d5e0
+- Implemented Tauri `create_project` command in Rust
+- Command creates project folder with .ideate/ subdirectory and config.json
+- Connected frontend to call command on Create button click via `invoke()`
+- Project added to Zustand store after successful disk creation
+- Modal closes on success
+- Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml, src/App.tsx
+- **Learnings for future iterations:**
+  - Use `invoke<ReturnType>("command_name", { args })` from `@tauri-apps/api/core` to call Tauri commands
+  - Tauri commands use snake_case on Rust side, frontend uses camelCase for args
+  - Added chrono crate for timestamp generation in Rust
+  - Register commands via `.invoke_handler(tauri::generate_handler![command_name])` in tauri::Builder
 ---
