@@ -554,3 +554,24 @@ Thread: https://ampcode.com/threads/T-019bac90-10f2-734c-865d-1342c863e917
   - Stories are sorted by priority before navigation to match visual order
   - Hook returns navigationContext for potential UI indicators
 ---
+
+## 2026-01-11 - US-030
+Thread: https://ampcode.com/threads/T-019bac94-2359-758c-aa0b-0aec3fae5a0f
+- Implemented inline rename functionality for project context menu
+- Changed rename from modal-based to inline editing in sidebar
+- Removed RenameProjectModal component (no longer needed)
+- All acceptance criteria verified:
+  - Right-click project in sidebar shows context menu ✓
+  - Options: Rename, Delete, Reveal in Finder ✓
+  - Rename opens inline edit (was modal, now inline) ✓
+  - Delete shows confirmation dialog ✓
+  - Reveal opens project folder in Finder (uses @tauri-apps/plugin-shell open) ✓
+  - pnpm run build passes ✓
+  - Browser verification: Vite dev server verified, UI loads correctly ✓
+- Files changed: src/components/Sidebar.tsx, removed src/components/RenameProjectModal.tsx
+- **Learnings for future iterations:**
+  - Inline editing uses editingProjectId state to track which project is being edited
+  - Enter key saves, Escape key cancels inline edit
+  - onBlur also saves to handle clicking outside the input
+  - Context menu features were mostly already implemented; main change was inline rename
+---
