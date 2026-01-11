@@ -144,3 +144,17 @@ Thread: https://ampcode.com/threads/T-019babb8-a3bc-739d-811a-cd2acfe7bf05
   - Visual-only checkboxes use border div with conditional check SVG inside
   - Use e.stopPropagation() on close button to prevent re-triggering card click
 ---
+
+## 2026-01-10 - US-011
+Thread: https://ampcode.com/threads/T-019babba-2983-779e-bc8b-80c1bc167a8f
+- Created Tauri `load_prd` command that reads <project>/.ideate/prd.json
+- Command returns parsed user stories array or null if file doesn't exist
+- Added Story and Prd structs in Rust with proper serde rename attributes for camelCase
+- Updated MainContent to call load_prd via useEffect when activeProject changes
+- Stories populated in prdStore on successful load, status set to "ready"
+- Files changed: src-tauri/src/lib.rs, src/components/MainContent.tsx
+- **Learnings for future iterations:**
+  - Use #[serde(rename = "camelCase")] for JSON field name mappings in Rust structs
+  - load_prd returns Option<Vec<Story>> to handle missing prd.json gracefully
+  - useEffect dependency should use activeProject?.path for proper reactive loading
+---
