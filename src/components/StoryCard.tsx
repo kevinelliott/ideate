@@ -1,9 +1,9 @@
-import { useState } from "react";
 import type { Story } from "../stores/prdStore";
 import { useBuildStore, type StoryBuildStatus } from "../stores/buildStore";
 
 interface StoryCardProps {
   story: Story;
+  isSelected?: boolean;
   onClick: (storyId: string) => void;
   onEdit: (story: Story) => void;
   onDelete: (story: Story) => void;
@@ -33,8 +33,7 @@ const statusLabels: Record<StoryBuildStatus, string> = {
   failed: "Failed",
 };
 
-export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function StoryCard({ story, isSelected = false, onClick, onEdit, onDelete }: StoryCardProps) {
   const storyStatuses = useBuildStore((state) => state.storyStatuses);
   const buildStatus = storyStatuses[story.id];
   const status = getStoryStatus(story, buildStatus);
@@ -42,13 +41,7 @@ export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) 
   const isInProgress = status === "in-progress";
 
   const handleClick = () => {
-    setIsExpanded(!isExpanded);
     onClick(story.id);
-  };
-
-  const handleClose = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsExpanded(false);
   };
 
   const handleEdit = (e: React.MouseEvent) => {
@@ -66,8 +59,8 @@ export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) 
       className={`border rounded-xl bg-card p-4 cursor-pointer transition-colors ${
         isInProgress 
           ? "border-blue-500 ring-2 ring-blue-500/20" 
-          : isExpanded 
-            ? "border-accent" 
+          : isSelected 
+            ? "border-accent ring-2 ring-accent/20" 
             : "border-border hover:border-accent/50"
       }`}
       onClick={handleClick}
@@ -94,130 +87,58 @@ export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) 
           >
             {statusLabels[status]}
           </span>
-          {isExpanded && (
-            <>
-              <button
-                onClick={handleEdit}
-                className="p-1 rounded hover:bg-accent/10 text-secondary hover:text-accent transition-colors"
-                aria-label="Edit story"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  <path d="m15 5 4 4" />
-                </svg>
-              </button>
-              <button
-                onClick={handleDelete}
-                className="p-1 rounded hover:bg-red-500/10 text-secondary hover:text-red-500 transition-colors"
-                aria-label="Delete story"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 6h18" />
-                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-              </button>
-              <button
-                onClick={handleClose}
-                className="p-1 rounded hover:bg-secondary/10 text-secondary hover:text-foreground transition-colors"
-                aria-label="Close"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </>
-          )}
+          <button
+            onClick={handleEdit}
+            className="p-1 rounded hover:bg-accent/10 text-secondary hover:text-accent transition-colors"
+            aria-label="Edit story"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              <path d="m15 5 4 4" />
+            </svg>
+          </button>
+          <button
+            onClick={handleDelete}
+            className="p-1 rounded hover:bg-red-500/10 text-secondary hover:text-red-500 transition-colors"
+            aria-label="Delete story"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {isExpanded ? (
-        <div className="space-y-4">
-          <p className="text-sm text-secondary">{story.description}</p>
-
-          <div>
-            <h4 className="text-xs font-medium text-foreground uppercase tracking-wide mb-2">
-              Acceptance Criteria
-            </h4>
-            <ul className="space-y-2">
-              {story.acceptanceCriteria.map((criterion, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <div className="mt-0.5 w-4 h-4 rounded border border-border flex items-center justify-center shrink-0">
-                    {story.passes && (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-green-500"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </div>
-                  <span className="text-secondary">{criterion}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {story.notes && (
-            <div>
-              <h4 className="text-xs font-medium text-foreground uppercase tracking-wide mb-2">
-                Notes
-              </h4>
-              <p className="text-sm text-secondary">{story.notes}</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
-          <p className="text-sm text-secondary line-clamp-2 mb-3">
-            {story.description}
-          </p>
-          <div className="text-xs text-secondary">
-            {criteriaCount} {criteriaCount === 1 ? "criterion" : "criteria"}
-          </div>
-        </>
-      )}
+      <p className="text-sm text-secondary line-clamp-2 mb-3">
+        {story.description}
+      </p>
+      <div className="text-xs text-secondary">
+        {criteriaCount} {criteriaCount === 1 ? "criterion" : "criteria"}
+      </div>
     </div>
   );
 }

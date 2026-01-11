@@ -16,13 +16,15 @@ export function StoryList({ projectPath }: StoryListProps) {
   const addStory = usePrdStore((state) => state.addStory);
   const removeStory = usePrdStore((state) => state.removeStory);
   const savePrd = usePrdStore((state) => state.savePrd);
+  const selectStory = usePrdStore((state) => state.selectStory);
+  const selectedStoryId = usePrdStore((state) => state.selectedStoryId);
   
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [deletingStory, setDeletingStory] = useState<Story | null>(null);
 
   const handleStoryClick = (storyId: string) => {
-    console.log("Story clicked:", storyId);
+    selectStory(storyId === selectedStoryId ? null : storyId);
   };
 
   const handleEditStory = (story: Story) => {
@@ -84,6 +86,7 @@ export function StoryList({ projectPath }: StoryListProps) {
           <StoryCard
             key={story.id}
             story={story}
+            isSelected={story.id === selectedStoryId}
             onClick={handleStoryClick}
             onEdit={handleEditStory}
             onDelete={handleDeleteStory}

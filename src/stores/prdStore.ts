@@ -16,17 +16,20 @@ export type PrdStatus = 'idle' | 'generating' | 'ready' | 'error'
 interface PrdState {
   stories: Story[]
   status: PrdStatus
+  selectedStoryId: string | null
   setStories: (stories: Story[]) => void
   updateStory: (id: string, updates: Partial<Story>) => void
   addStory: (story: Omit<Story, 'id'>) => Story
   removeStory: (id: string) => void
   setStatus: (status: PrdStatus) => void
+  selectStory: (id: string | null) => void
   savePrd: (projectPath: string) => Promise<void>
 }
 
 export const usePrdStore = create<PrdState>((set, get) => ({
   stories: [],
   status: 'idle',
+  selectedStoryId: null,
 
   setStories: (stories) => {
     set({ stories })
@@ -54,11 +57,16 @@ export const usePrdStore = create<PrdState>((set, get) => ({
   removeStory: (id) => {
     set((state) => ({
       stories: state.stories.filter((s) => s.id !== id),
+      selectedStoryId: state.selectedStoryId === id ? null : state.selectedStoryId,
     }))
   },
 
   setStatus: (status) => {
     set({ status })
+  },
+
+  selectStory: (id) => {
+    set({ selectedStoryId: id })
   },
 
   savePrd: async (projectPath: string) => {
