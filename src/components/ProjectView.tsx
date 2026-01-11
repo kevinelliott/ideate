@@ -25,7 +25,7 @@ export function ProjectView({ project }: ProjectViewProps) {
 
         {hasStories ? (
           <>
-            <BuildControls />
+            <BuildControls projectPath={project.path} />
             <LogPanel />
             <StoryList projectPath={project.path} />
           </>

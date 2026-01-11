@@ -313,3 +313,19 @@ Thread: https://ampcode.com/threads/T-019babd7-7883-7365-9312-ff9e374d0403
   - LogEntry type from buildStore determines log color: stdout=gray, stderr=red, system=blue
   - Fixed height (h-64) on container with overflow-auto for scrollable terminal
 ---
+
+## 2026-01-10 - US-023
+Thread: https://ampcode.com/threads/T-019babd9-0afd-737a-910d-fa4cbe26cfaf
+- Created Tauri `kill_agent` command to terminate agent processes
+- Sends SIGTERM first, polls with try_wait() for up to 5 seconds
+- Sends SIGKILL if process hasn't exited after timeout
+- Returns KillAgentResult with success flag and message
+- Removes process from PROCESSES HashMap after termination
+- Added libc crate (cfg(unix)) for signal handling on macOS/Linux
+- Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml
+- **Learnings for future iterations:**
+  - Use `libc::kill(pid, libc::SIGTERM)` for graceful termination on Unix
+  - Use `child.try_wait()` for non-blocking wait to check if process exited
+  - Add platform-specific dependencies with `[target.'cfg(unix)'.dependencies]`
+  - Windows fallback uses child.kill() since Windows doesn't have SIGTERM
+---

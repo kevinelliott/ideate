@@ -68,11 +68,25 @@ pub struct KillAgentResult {
     pub message: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WaitAgentResult {
+    pub process_id: String,
+    pub exit_code: Option<i32>,
+    pub success: bool,
+}
+
 #[derive(Clone, Serialize)]
 pub struct AgentOutputEvent {
     pub process_id: String,
     pub stream_type: String,
     pub content: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct AgentExitEvent {
+    pub process_id: String,
+    pub exit_code: Option<i32>,
+    pub success: bool,
 }
 
 #[tauri::command]
@@ -281,6 +295,53 @@ fn spawn_agent(
 }
 
 #[tauri::command]
+async fn wait_agent(app: AppHandle, process_id: String) -> Result<WaitAgentResult, String> {
+    let result = tokio::task::spawn_blocking(move || {
+        let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
+        
+        let child = match processes.get_mut(&process_id) {
+            Some(child) => child,
+            None => {
+                return Ok(WaitAgentResult {
+                    process_id: process_id.clone(),
+                    exit_code: None,
+                    success: false,
+                });
+            }
+        };
+
+        match child.wait() {
+            Ok(status) => {
+                let exit_code = status.code();
+                let success = status.success();
+                let result = WaitAgentResult {
+                    process_id: process_id.clone(),
+                    exit_code,
+                    success,
+                };
+                processes.remove(&process_id);
+                Ok(result)
+            }
+            Err(e) => {
+                processes.remove(&process_id);
+                Err(format!("Failed to wait for process: {}", e))
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    let event = AgentExitEvent {
+        process_id: result.process_id.clone(),
+        exit_code: result.exit_code,
+        success: result.success,
+    };
+    let _ = app.emit("agent-exit", event);
+
+    Ok(result)
+}
+
+#[tauri::command]
 fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
     let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
     
@@ -375,6 +436,7 @@ pub fn run() {
             load_project_settings,
             save_project_settings,
             spawn_agent,
+            wait_agent,
             kill_agent
         ])
         .run(tauri::generate_context!())

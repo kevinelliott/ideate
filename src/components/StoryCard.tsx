@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Story } from "../stores/prdStore";
-
-type StoryStatus = "pending" | "in-progress" | "complete" | "failed";
+import { useBuildStore, type StoryBuildStatus } from "../stores/buildStore";
 
 interface StoryCardProps {
   story: Story;
@@ -10,21 +9,24 @@ interface StoryCardProps {
   onDelete: (story: Story) => void;
 }
 
-function getStoryStatus(story: Story): StoryStatus {
+function getStoryStatus(story: Story, buildStatus: StoryBuildStatus | undefined): StoryBuildStatus {
+  if (buildStatus) {
+    return buildStatus;
+  }
   if (story.passes) {
     return "complete";
   }
   return "pending";
 }
 
-const statusColors: Record<StoryStatus, string> = {
+const statusColors: Record<StoryBuildStatus, string> = {
   pending: "bg-secondary/20 text-secondary",
   "in-progress": "bg-blue-500/20 text-blue-500",
   complete: "bg-green-500/20 text-green-500",
   failed: "bg-red-500/20 text-red-500",
 };
 
-const statusLabels: Record<StoryStatus, string> = {
+const statusLabels: Record<StoryBuildStatus, string> = {
   pending: "Pending",
   "in-progress": "In Progress",
   complete: "Complete",
@@ -33,8 +35,11 @@ const statusLabels: Record<StoryStatus, string> = {
 
 export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const status = getStoryStatus(story);
+  const storyStatuses = useBuildStore((state) => state.storyStatuses);
+  const buildStatus = storyStatuses[story.id];
+  const status = getStoryStatus(story, buildStatus);
   const criteriaCount = story.acceptanceCriteria.length;
+  const isInProgress = status === "in-progress";
 
   const handleClick = () => {
     setIsExpanded(!isExpanded);
@@ -59,7 +64,11 @@ export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) 
   return (
     <div
       className={`border rounded-xl bg-card p-4 cursor-pointer transition-colors ${
-        isExpanded ? "border-accent" : "border-border hover:border-accent/50"
+        isInProgress 
+          ? "border-blue-500 ring-2 ring-blue-500/20" 
+          : isExpanded 
+            ? "border-accent" 
+            : "border-border hover:border-accent/50"
       }`}
       onClick={handleClick}
     >
@@ -69,6 +78,15 @@ export function StoryCard({ story, onClick, onEdit, onDelete }: StoryCardProps) 
             {story.id}
           </span>
           <h3 className="font-medium text-foreground">{story.title}</h3>
+          {isInProgress && (
+            <span className="flex items-center gap-1 text-xs text-blue-500">
+              <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Building...
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span

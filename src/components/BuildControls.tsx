@@ -1,14 +1,19 @@
 import { useBuildStore } from "../stores/buildStore";
 import { usePrdStore } from "../stores/prdStore";
+import { useBuildLoop } from "../hooks/useBuildLoop";
 
-export function BuildControls() {
+interface BuildControlsProps {
+  projectPath: string;
+}
+
+export function BuildControls({ projectPath }: BuildControlsProps) {
   const status = useBuildStore((state) => state.status);
-  const startBuild = useBuildStore((state) => state.startBuild);
   const pauseBuild = useBuildStore((state) => state.pauseBuild);
-  const resumeBuild = useBuildStore((state) => state.resumeBuild);
-  const cancelBuild = useBuildStore((state) => state.cancelBuild);
+  const currentStoryId = useBuildStore((state) => state.currentStoryId);
 
   const stories = usePrdStore((state) => state.stories);
+
+  const { handleStart, handleResume, handleCancel } = useBuildLoop(projectPath);
 
   const hasIncompleteStories = stories.some((s) => !s.passes);
   const hasStories = stories.length > 0;
@@ -47,11 +52,15 @@ export function BuildControls() {
     </svg>
   );
 
+  const currentStory = currentStoryId 
+    ? stories.find((s) => s.id === currentStoryId) 
+    : null;
+
   if (status === "idle") {
     return (
       <div className="flex items-center gap-3 mb-6">
         <button
-          onClick={startBuild}
+          onClick={handleStart}
           disabled={!canStart}
           className={`${buttonBaseClasses} bg-accent text-white hover:opacity-90 flex items-center`}
         >
@@ -79,13 +88,17 @@ export function BuildControls() {
           Pause
         </button>
         <button
-          onClick={cancelBuild}
+          onClick={handleCancel}
           className={`${buttonBaseClasses} bg-red-500/20 text-red-500 hover:bg-red-500/30 flex items-center`}
         >
           <StopIcon />
           Cancel
         </button>
-        <span className="text-sm text-secondary">Build in progress...</span>
+        <span className="text-sm text-secondary">
+          {currentStory 
+            ? `Building: ${currentStory.id} - ${currentStory.title}`
+            : 'Build in progress...'}
+        </span>
       </div>
     );
   }
@@ -94,14 +107,14 @@ export function BuildControls() {
     return (
       <div className="flex items-center gap-3 mb-6">
         <button
-          onClick={resumeBuild}
+          onClick={handleResume}
           className={`${buttonBaseClasses} bg-accent text-white hover:opacity-90 flex items-center`}
         >
           <PlayIcon />
           Resume
         </button>
         <button
-          onClick={cancelBuild}
+          onClick={handleCancel}
           className={`${buttonBaseClasses} bg-red-500/20 text-red-500 hover:bg-red-500/30 flex items-center`}
         >
           <StopIcon />
