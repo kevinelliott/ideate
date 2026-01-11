@@ -33,3 +33,21 @@ Thread: https://ampcode.com/threads/T-019bac1c-1d11-71be-8d29-7899715eb548
   - Sidebar width is w-60 (240px) with vibrancy via bg-card/80 backdrop-blur-xl
   - Inspector panel is added later in US-012 (story detail panel)
 ---
+
+## 2026-01-11 - US-004
+Thread: https://ampcode.com/threads/T-019bac1f-3fe1-7753-be4c-967f90caed98
+- Verified Zustand store already implemented with all required functionality
+- Zustand v5.0.9 installed in package.json
+- ProjectStore in src/stores/projectStore.ts with:
+  - projects: Project[] array
+  - activeProjectId: string | null (equivalent to selectedProjectId)
+  - Actions: addProject, removeProject, setActiveProject (selectProject), updateProject
+- Project type defined with: id, name, description, path, status, createdAt
+- ProjectStatus type: 'idle' | 'generating' | 'ready' | 'error'
+- pnpm run build passes ✓
+- Files involved: src/stores/projectStore.ts
+- **Learnings for future iterations:**
+  - Project status is stored as activeProjectId not selectedProjectId (naming convention)
+  - Store includes load/save actions for persistence (US-008)
+  - Uses crypto.randomUUID() for id generation
+---
