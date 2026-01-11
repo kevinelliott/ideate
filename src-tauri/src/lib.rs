@@ -95,13 +95,37 @@ fn load_prd(project_path: String) -> Result<Option<Vec<Story>>, String> {
     Ok(Some(prd.user_stories))
 }
 
+#[tauri::command]
+fn save_prd(project_path: String, stories: Vec<Story>) -> Result<(), String> {
+    let ideate_path = PathBuf::from(&project_path).join(".ideate");
+    let prd_path = ideate_path.join("prd.json");
+
+    fs::create_dir_all(&ideate_path)
+        .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
+
+    let prd = Prd {
+        project: None,
+        branch_name: None,
+        description: None,
+        user_stories: stories,
+    };
+
+    let prd_json = serde_json::to_string_pretty(&prd)
+        .map_err(|e| format!("Failed to serialize PRD: {}", e))?;
+
+    fs::write(&prd_path, prd_json)
+        .map_err(|e| format!("Failed to write prd.json: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![create_project, load_prd])
+        .invoke_handler(tauri::generate_handler![create_project, load_prd, save_prd])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

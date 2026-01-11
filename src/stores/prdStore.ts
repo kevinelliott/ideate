@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { invoke } from '@tauri-apps/api/core'
 
 export interface Story {
   id: string
@@ -20,9 +21,10 @@ interface PrdState {
   addStory: (story: Omit<Story, 'id'>) => Story
   removeStory: (id: string) => void
   setStatus: (status: PrdStatus) => void
+  savePrd: (projectPath: string) => Promise<void>
 }
 
-export const usePrdStore = create<PrdState>((set) => ({
+export const usePrdStore = create<PrdState>((set, get) => ({
   stories: [],
   status: 'idle',
 
@@ -57,5 +59,15 @@ export const usePrdStore = create<PrdState>((set) => ({
 
   setStatus: (status) => {
     set({ status })
+  },
+
+  savePrd: async (projectPath: string) => {
+    const { stories } = get()
+    try {
+      await invoke('save_prd', { projectPath, stories })
+      console.log('PRD saved successfully')
+    } catch (error) {
+      console.error('Failed to save PRD:', error)
+    }
   },
 }))
