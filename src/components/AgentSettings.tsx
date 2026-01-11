@@ -22,7 +22,7 @@ const autonomyOptions: { value: AutonomyLevel; label: string }[] = [
 export function AgentSettings({ projectPath }: AgentSettingsProps) {
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [autonomyLevel, setAutonomyLevel] =
-    useState<AutonomyLevel>("autonomous");
+    useState<AutonomyLevel>("pause-between");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

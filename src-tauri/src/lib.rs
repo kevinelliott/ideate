@@ -211,7 +211,7 @@ fn create_project(
         name: name.clone(),
         description: description.clone(),
         agent: None,
-        autonomy: "autonomous".to_string(),
+        autonomy: "pause-between".to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
     };
 
