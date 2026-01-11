@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+  --background: 255 255 255;
+  --foreground: 0 0 0;
+  --secondary: 142 142 147;
+  --accent: 0 122 255;
+  --border: 229 229 234;
+  --card: 250 250 250;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 28 28 30;
+    --foreground: 255 255 255;
+    --secondary: 142 142 147;
+    --accent: 10 132 255;
+    --border: 56 56 58;
+    --card: 44 44 46;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+}
+
+@theme {
+  --color-background: rgb(var(--background));
+  --color-foreground: rgb(var(--foreground));
+  --color-secondary: rgb(var(--secondary));
+  --color-accent: rgb(var(--accent));
+  --color-border: rgb(var(--border));
+  --color-card: rgb(var(--card));
+}
