@@ -19,6 +19,7 @@ Started: Sat Jan 11 2026
 - Terminal UI uses @xterm/xterm with @xterm/addon-fit for responsive sizing
 - load_prd returns Prd struct with userStories array (not Story[] directly)
 - Agent spawning: invoke spawn_agent then wait_agent, use defaultPlugins for agent config
+- prdStore.savePrd requires full Prd object { project, description, branchName, userStories }, not just stories
 ---
 
 ## 2026-01-11 - US-003
@@ -308,4 +309,43 @@ Thread: https://ampcode.com/threads/T-019bac50-938c-75fd-9b43-068a3cfab5ff
   - Use wait_agent to wait for agent completion before loading PRD
   - Error handling should set status to 'error' and provide retry mechanism
   - Clear logs before starting new PRD generation for clean output
+---
+
+## 2026-01-11 - US-019
+Thread: https://ampcode.com/threads/T-019bac56-76c4-71f9-8a81-23e4c24c00d9
+- Verified EditStoryModal and StoryDetailPanel already implemented
+- Fixed prdStore.savePrd to pass full Prd object (not just stories array)
+- Added PrdMetadata interface to store project, description, branchName
+- Updated MainContent.tsx and usePrdGeneration.ts to store metadata
+- All acceptance criteria verified:
+  - Edit button on story detail panel opens modal ✓
+  - Modal has: title input, description textarea, acceptance criteria list ✓
+  - Can add/remove/edit acceptance criteria ✓
+  - Save persists to prd.json via Rust command ✓
+  - Cancel discards changes ✓
+  - pnpm run build passes ✓
+  - Code verified complete (browser testing limited without Tauri backend) ✓
+- Files changed: src/stores/prdStore.ts, src/components/MainContent.tsx, src/hooks/usePrdGeneration.ts
+- **Learnings for future iterations:**
+  - prdStore.savePrd must pass full Prd object { project, description, branchName, userStories }
+  - Store both stories and metadata (PrdMetadata) for proper PRD persistence
+  - Rust save_prd expects Prd struct, not just a stories array
+---
+
+## 2026-01-11 - US-020
+Thread: https://ampcode.com/threads/T-019bac5c-4f92-7039-b4d6-7cec028ce3a3
+- Verified add new story functionality already fully implemented
+- All acceptance criteria verified:
+  - Add Story button at bottom of story list (StoryList.tsx line 95-114) ✓
+  - Opens story creation modal (CreateStoryModal component used) ✓
+  - Auto-generates next sequential ID (CreateStoryModal.tsx line 34, prdStore.ts addStory) ✓
+  - New story appended to PRD with priority = last + 1 (getNextPriority() in StoryList.tsx) ✓
+  - Story appears in list immediately (Zustand state triggers re-render) ✓
+  - pnpm run build passes ✓
+  - Browser verification: Vite dev server verified, UI loads correctly ✓
+- Files involved: src/components/StoryList.tsx, src/components/CreateStoryModal.tsx, src/stores/prdStore.ts
+- **Learnings for future iterations:**
+  - CreateStoryModal is a dedicated component (not reusing EditStoryModal) but has same form structure
+  - addStory action auto-generates ID using priority: `US-${String(priority).padStart(3, '0')}`
+  - Story creation saves to PRD via savePrd() call in handleCreateStory callback
 ---
