@@ -51,3 +51,18 @@ Thread: https://ampcode.com/threads/T-019bac1f-3fe1-7753-be4c-967f90caed98
   - Store includes load/save actions for persistence (US-008)
   - Uses crypto.randomUUID() for id generation
 ---
+
+## 2026-01-11 - US-005
+Thread: https://ampcode.com/threads/T-019bac20-d2fd-7363-9aef-bf09db9325d5
+- Verified Rust backend for project folder operations already implemented
+- create_project(name, description, directory) creates folder with .ideate/ subdirectory ✓
+- load_projects() returns project metadata from Application Support ✓
+- Project metadata stored in .ideate/config.json via ProjectConfig struct ✓
+- Error handling implemented with .map_err() pattern throughout ✓
+- cargo check passes ✓
+- Files involved: src-tauri/src/lib.rs
+- **Learnings for future iterations:**
+  - create_project takes (name, description, directory) not just (name, path)
+  - load_projects() loads from Application Support, not from base_path scan
+  - All Rust command errors use .map_err() for proper error handling
+---
