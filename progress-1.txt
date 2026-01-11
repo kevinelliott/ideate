@@ -469,3 +469,33 @@ Thread: https://ampcode.com/threads/T-019bac79-5a4c-77fa-9e7c-d6407dce0bbd
   - State includes storyStatuses but NOT logs (logs can be large, not persisted)
   - Use restoreRetryInfo for retry counts; previousLogs are NOT persisted (session-only)
 ---
+
+## 2026-01-11 - US-027
+Thread: https://ampcode.com/threads/T-019bac7f-2edc-72ef-9c79-61277c067afa
+- Implemented global preferences window with Cmd+, keyboard shortcut
+- Created Rust backend for preferences persistence:
+  - Added Preferences struct with defaultAgent, defaultAutonomy, logBufferSize, agentPaths
+  - Added load_preferences and save_preferences Tauri commands
+  - Preferences saved to ~/Library/Application Support/Ideate/preferences.json
+- Created PreferencesWindow.tsx component with:
+  - Default AI Agent selector
+  - Default Autonomy Level selector (Pause Between Stories default)
+  - Log Buffer Size input (100-10000 range, default 1000)
+  - Agent CLI Paths section for Amp and Claude Code
+- Updated useKeyboardNavigation hook to add Cmd+, shortcut
+- Updated App.tsx to include PreferencesWindow and manage modal state
+- All acceptance criteria verified:
+  - Cmd+, opens preferences window ✓
+  - Settings: default agent, default autonomy, log buffer size ✓
+  - Agent CLI paths configurable ✓
+  - Settings saved to ~/Library/Application Support/Ideate/preferences.json ✓
+  - Changes apply immediately (auto-save on change) ✓
+  - pnpm run build passes ✓
+  - Verify in browser using dev-browser skill ✓
+- Files changed: src-tauri/src/lib.rs, src/App.tsx, src/hooks/useKeyboardNavigation.ts, src/components/PreferencesWindow.tsx (new)
+- **Learnings for future iterations:**
+  - Use serde(default) and default functions for optional fields in Preferences struct
+  - PreferencesWindow auto-saves on every change (no explicit save button)
+  - isAnyModalOpen tracks combined modal state for keyboard navigation
+  - Agent CLI paths are optional - empty string uses default command
+---
