@@ -17,6 +17,28 @@ pub struct CreateProjectResult {
     pub config_path: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Story {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    #[serde(rename = "acceptanceCriteria")]
+    pub acceptance_criteria: Vec<String>,
+    pub priority: i32,
+    pub passes: bool,
+    pub notes: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Prd {
+    pub project: Option<String>,
+    #[serde(rename = "branchName")]
+    pub branch_name: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "userStories")]
+    pub user_stories: Vec<Story>,
+}
+
 #[tauri::command]
 fn create_project(
     name: String,
@@ -56,13 +78,30 @@ fn create_project(
     })
 }
 
+#[tauri::command]
+fn load_prd(project_path: String) -> Result<Option<Vec<Story>>, String> {
+    let prd_path = PathBuf::from(&project_path).join(".ideate").join("prd.json");
+
+    if !prd_path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&prd_path)
+        .map_err(|e| format!("Failed to read prd.json: {}", e))?;
+
+    let prd: Prd = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse prd.json: {}", e))?;
+
+    Ok(Some(prd.user_stories))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![create_project])
+        .invoke_handler(tauri::generate_handler![create_project, load_prd])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

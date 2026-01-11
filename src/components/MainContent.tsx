@@ -1,10 +1,46 @@
+import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "../stores/projectStore";
+import { usePrdStore, type Story } from "../stores/prdStore";
 import { ProjectView } from "./ProjectView";
 
 export function MainContent() {
   const projects = useProjectStore((state) => state.projects);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const activeProject = projects.find((p) => p.id === activeProjectId);
+
+  const setStories = usePrdStore((state) => state.setStories);
+  const setStatus = usePrdStore((state) => state.setStatus);
+
+  useEffect(() => {
+    async function loadPrd() {
+      if (!activeProject?.path) {
+        setStories([]);
+        setStatus("idle");
+        return;
+      }
+
+      try {
+        const stories = await invoke<Story[] | null>("load_prd", {
+          projectPath: activeProject.path,
+        });
+
+        if (stories) {
+          setStories(stories);
+          setStatus("ready");
+        } else {
+          setStories([]);
+          setStatus("idle");
+        }
+      } catch (error) {
+        console.error("Failed to load PRD:", error);
+        setStories([]);
+        setStatus("error");
+      }
+    }
+
+    loadPrd();
+  }, [activeProject?.path, setStories, setStatus]);
 
   if (activeProject) {
     return <ProjectView project={activeProject} />;
