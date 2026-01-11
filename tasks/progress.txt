@@ -240,3 +240,16 @@ Thread: https://ampcode.com/threads/T-019babc6-3ca1-7422-a8da-6e202eff4a0d
   - Save settings preserves existing config by reading file first, then updating fields
   - Dropdowns use focus:ring-2 focus:ring-accent pattern consistent with other inputs
 ---
+
+## 2026-01-10 - US-018
+Thread: https://ampcode.com/threads/T-019babc8-dc47-7126-91c2-3e7305cfd3a8
+- Created src/stores/buildStore.ts with full build loop state management
+- Implemented BuildStatus type: 'idle' | 'running' | 'paused'
+- Implemented LogEntry interface with id, timestamp, type (stdout/stderr/system), content
+- Implemented actions: startBuild, pauseBuild, resumeBuild, cancelBuild, setCurrentStoryId, appendLog, clearLogs
+- Files changed: src/stores/buildStore.ts (new)
+- **Learnings for future iterations:**
+  - Build store follows same zustand pattern as prdStore and projectStore
+  - LogEntry uses crypto.randomUUID() for unique IDs and includes timestamp for ordering
+  - Added clearLogs action for resetting between builds
+---

@@ -2,6 +2,7 @@ import type { Project } from "../stores/projectStore";
 import { usePrdStore } from "../stores/prdStore";
 import { StoryList } from "./StoryList";
 import { AgentSettings } from "./AgentSettings";
+import { BuildControls } from "./BuildControls";
 
 interface ProjectViewProps {
   project: Project;
@@ -22,7 +23,10 @@ export function ProjectView({ project }: ProjectViewProps) {
         <AgentSettings projectPath={project.path} />
 
         {hasStories ? (
-          <StoryList projectPath={project.path} />
+          <>
+            <BuildControls />
+            <StoryList projectPath={project.path} />
+          </>
         ) : (
           <div className="border border-border rounded-xl bg-card p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-background border border-border flex items-center justify-center">
