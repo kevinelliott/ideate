@@ -366,3 +366,18 @@ Thread: https://ampcode.com/threads/T-019babe3-038a-7119-bf4c-71889e466a9c
   - Call saveProjects() after each mutation using get() in zustand actions
   - StoredProject uses #[serde(rename = "camelCase")] for createdAt field
 ---
+
+## 2026-01-10 - US-026
+Thread: https://ampcode.com/threads/T-019babe7-d1da-753d-b91e-084a7cecf6fb
+- Verified dark mode support is fully implemented
+- CSS variables in index.css already support prefers-color-scheme:dark
+- All 12 components verified to use semantic color tokens (bg-background, bg-card, text-foreground, text-secondary, text-accent, border-border)
+- LogPanel intentionally uses hardcoded dark colors (#1e1e1e, #252526) for terminal-always-dark behavior
+- Modal overlays use bg-black/50 which works in both light and dark modes
+- No code changes required - verification pass only
+- Files verified: Sidebar.tsx, MainContent.tsx, NewProjectModal.tsx, EditStoryModal.tsx, CreateStoryModal.tsx, ConfirmDeleteModal.tsx, StoryCard.tsx, ProjectView.tsx, BuildControls.tsx, AgentSettings.tsx, StoryList.tsx, LogPanel.tsx
+- **Learnings for future iterations:**
+  - Semantic color tokens: bg-background, bg-card, bg-border, text-foreground, text-secondary, text-accent
+  - Always-dark components (like terminals) can use hardcoded colors like #1e1e1e
+  - Modal overlays with bg-black/50 work correctly in both modes
+---
