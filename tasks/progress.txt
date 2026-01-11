@@ -253,3 +253,16 @@ Thread: https://ampcode.com/threads/T-019babc8-dc47-7126-91c2-3e7305cfd3a8
   - LogEntry uses crypto.randomUUID() for unique IDs and includes timestamp for ordering
   - Added clearLogs action for resetting between builds
 ---
+
+## 2026-01-10 - US-019
+Thread: https://ampcode.com/threads/T-019babca-7894-734f-9637-b783c9bb2587
+- Implemented BuildControls component with Start/Pause/Resume/Cancel buttons
+- Integrated BuildControls into ProjectView above story list
+- Connected buttons to buildStore actions (startBuild, pauseBuild, resumeBuild, cancelBuild)
+- Added disabled states: disabled when no stories or all stories complete
+- Files changed: src/components/BuildControls.tsx (new), src/components/ProjectView.tsx
+- **Learnings for future iterations:**
+  - BuildControls renders different button sets based on status via conditional returns
+  - Use `stories.some((s) => !s.passes)` to check for incomplete stories
+  - Button disabled state uses Tailwind disabled:opacity-50 disabled:cursor-not-allowed
+---
