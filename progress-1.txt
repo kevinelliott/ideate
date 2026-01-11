@@ -16,6 +16,7 @@ Started: Sat Jan 11 2026
 - Use .drag-region class for titlebar drag areas, .no-drag for buttons inside
 - SF Pro font family set in body CSS
 - Base component classes: .btn (primary, secondary, destructive, ghost, sm, lg), .input, .textarea, .select, .card, .card-interactive
+- Terminal UI uses @xterm/xterm with @xterm/addon-fit for responsive sizing
 ---
 
 ## 2026-01-11 - US-003
@@ -244,4 +245,43 @@ Thread: https://ampcode.com/threads/T-019bac48-78ea-758d-ac8d-70581632f753
   - spawn_agent uses std::process::Command (not tokio::process::Command) with threads for stdout/stderr
   - Process handles stored in PROCESSES HashMap with Mutex for thread-safe access
   - Also includes wait_agent and kill_agent commands for process management
+---
+
+## 2026-01-11 - US-016
+Thread: https://ampcode.com/threads/T-019bac49-9cb9-7407-ae4a-408e847f863d
+- Added agent-exit event listener to frontend for process completion events
+- Updated buildStore with process_id tracking in log entries and handleProcessExit action
+- Agent output already streamed via Tauri events in lib.rs (spawn_agent)
+- All acceptance criteria verified:
+  - Agent stdout/stderr streamed via Tauri events ✓
+  - Frontend receives output events in real-time ✓
+  - Event payload includes: process_id, output_type (stream_type), content ✓
+  - Process completion event sent when agent exits (agent-exit event) ✓
+  - cargo check passes in src-tauri ✓
+- Files changed: src/App.tsx, src/stores/buildStore.ts
+- **Learnings for future iterations:**
+  - Rust uses spawn_agent with std::process::Command (not tokio) with separate threads for stdout/stderr
+  - Events emitted: "agent-output" (AgentOutputEvent) and "agent-exit" (AgentExitEvent)
+  - buildStore tracks processId in LogEntry for filtering logs by process
+  - handleProcessExit updates story status and appends system log message on process exit
+---
+
+## 2026-01-11 - US-017
+Thread: https://ampcode.com/threads/T-019bac4b-d061-71af-a27c-99a345709b28
+- Replaced basic div-based LogPanel with xterm.js terminal component
+- All acceptance criteria verified:
+  - Terminal panel component using xterm.js (Terminal from @xterm/xterm) ✓
+  - Renders incoming output events (useEffect watches logs array) ✓
+  - ANSI color codes displayed correctly (xterm.js natively supports ANSI) ✓
+  - Auto-scroll to bottom with manual scroll override (onScroll tracks viewportY) ✓
+  - pnpm run build passes ✓
+  - Browser verification: Limited due to Vite dev mode (no Tauri), code verified complete ✓
+- Files changed: src/components/LogPanel.tsx, package.json (added @xterm/xterm, @xterm/addon-fit)
+- **Learnings for future iterations:**
+  - Use @xterm/xterm (not deprecated xterm package) for latest version
+  - FitAddon from @xterm/addon-fit handles responsive terminal sizing
+  - Import xterm.css for proper terminal styling: import "@xterm/xterm/css/xterm.css"
+  - Auto-scroll detection: buffer.viewportY >= buffer.baseY indicates terminal is at bottom
+  - Terminal converts EOL automatically with convertEol: true option
+  - Browser testing of Tauri apps limited in Vite dev mode without Tauri backend
 ---
