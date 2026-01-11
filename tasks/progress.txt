@@ -1,0 +1,17 @@
+## Codebase Patterns
+- Tauri v2 with React 19 + TypeScript frontend
+- Tailwind CSS v4 with custom Apple-inspired design tokens in index.css
+- Semantic colors via CSS variables: --background, --foreground, --secondary, --accent, --border, --card
+- Tauri plugins already installed: dialog, fs, shell
+- Use `pnpm run build` (runs tsc && vite build) for frontend typecheck/build
+- Use `cargo build` in src-tauri for Rust backend builds
+- SF Pro font family set in body CSS
+
+---
+
+## Initial Setup - PRD Creation
+Thread: https://ampcode.com/threads/T-019bab7f-d939-7764-bbdc-58a7742152ce
+- Created prd.json with 28 properly-sized user stories
+- Stories ordered by dependency: layout → stores → UI components → Tauri commands → build loop
+- Each story is scoped to be completable in one iteration
+---

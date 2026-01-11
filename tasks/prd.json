@@ -1,0 +1,442 @@
+{
+  "project": "Ideate",
+  "branchName": "ralph/ideate-mvp",
+  "description": "AI-Powered App Development Platform - MVP build with core project management and build loop",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Sidebar Layout Shell",
+      "description": "As a user, I want to see an Apple-style sidebar layout so that I have the foundation for project navigation.",
+      "acceptanceCriteria": [
+        "App has 3-column layout: sidebar (240px), main content, optional inspector",
+        "Sidebar has vibrancy/blur effect background using backdrop-blur-xl",
+        "Sidebar has 'Projects' header with 'New Project' button (plus icon)",
+        "Main content area shows 'No Project Selected' placeholder",
+        "Traffic light window controls visible in titlebar area",
+        "pnpm run build passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Project Store with Zustand",
+      "description": "As a developer, I need a Zustand store for projects so that state is properly managed.",
+      "acceptanceCriteria": [
+        "Install zustand package",
+        "Create src/stores/projectStore.ts with project state",
+        "Store has: projects array, activeProjectId, actions (addProject, removeProject, setActiveProject)",
+        "Project type: { id, name, description, path, status, createdAt }",
+        "pnpm run build passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "New Project Modal UI",
+      "description": "As a user, I want to click 'New Project' and see a modal to enter project details.",
+      "acceptanceCriteria": [
+        "Clicking 'New Project' button opens centered modal with overlay",
+        "Modal has: project name input, idea description textarea, directory picker button",
+        "Directory picker shows current selection or 'Choose Directory...'",
+        "Cancel and Create buttons at bottom",
+        "Modal closes on overlay click or Cancel",
+        "pnpm run build passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Directory Picker Integration",
+      "description": "As a user, I want to pick a directory for my project using native file dialog.",
+      "acceptanceCriteria": [
+        "Directory picker button invokes Tauri dialog plugin's open() with directory: true",
+        "Selected path displayed in modal",
+        "Default to Documents folder if available",
+        "pnpm run build passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create Project on Disk",
+      "description": "As a user, I want creating a project to create the folder structure on disk.",
+      "acceptanceCriteria": [
+        "Create Tauri command 'create_project' in Rust that creates project folder",
+        "Command creates .ideate/ subdirectory inside project folder",
+        "Command creates .ideate/config.json with initial settings",
+        "Frontend calls command on Create button click",
+        "Project added to store after successful creation",
+        "Modal closes on success",
+        "cargo build passes",
+        "pnpm run build passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Display Projects in Sidebar",
+      "description": "As a user, I want to see my projects listed in the sidebar.",
+      "acceptanceCriteria": [
+        "Sidebar shows list of projects from store below 'Projects' header",
+        "Each project shows name and status indicator dot",
+        "Status colors: gray (idle), blue (generating), green (ready), red (error)",
+        "Clicking project sets it as active (highlighted)",
+        "Active project has accent color background",
+        "pnpm run build passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Project View - Empty State",
+      "description": "As a user, I want to see project details when I select a project.",
+      "acceptanceCriteria": [
+        "Main content shows ProjectView component when project is selected",
+        "ProjectView shows project name as heading",
+        "Shows project description below heading",
+        "Shows 'No PRD generated yet' empty state with Generate PRD button",
+        "pnpm run build passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "PRD Store with Stories",
+      "description": "As a developer, I need a store for PRD data and user stories.",
+      "acceptanceCriteria": [
+        "Create src/stores/prdStore.ts with PRD state",
+        "Store has: stories array, status (idle/generating/ready/error), actions",
+        "Story type matches Ralph format: { id, title, description, acceptanceCriteria, priority, passes, notes }",
+        "Actions: setStories, updateStory, addStory, removeStory, setStatus",
+        "pnpm run build passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Story List Display",
+      "description": "As a user, I want to see user stories as cards when PRD is loaded.",
+      "acceptanceCriteria": [
+        "StoryList component renders stories from prdStore",
+        "Each StoryCard shows: story ID badge, title, description truncated to 2 lines",
+        "Card shows acceptance criteria count as '5 criteria'",
+        "Card shows status badge: pending (gray), in-progress (blue), complete (green), failed (red)",
+        "Cards are clickable (logs story ID for now)",
+        "pnpm run build passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Expanded Story Detail View",
+      "description": "As a user, I want to click a story card to see full details.",
+      "acceptanceCriteria": [
+        "Clicking story card expands it or shows detail panel",
+        "Expanded view shows full description",
+        "Shows all acceptance criteria as checklist (visual only)",
+        "Shows notes field if present",
+        "Click again or close button collapses",
+        "pnpm run build passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Load PRD from Disk",
+      "description": "As a user, I want the app to load existing PRD when I select a project.",
+      "acceptanceCriteria": [
+        "Create Tauri command 'load_prd' that reads <project>/.ideate/prd.json",
+        "Command returns parsed PRD JSON or null if not exists",
+        "Frontend calls command when project is selected",
+        "Stories populated in prdStore on successful load",
+        "pnpm run build passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Save PRD to Disk",
+      "description": "As a user, I want PRD changes to be saved automatically.",
+      "acceptanceCriteria": [
+        "Create Tauri command 'save_prd' that writes prd.json to project .ideate folder",
+        "Command takes project path and PRD data as arguments",
+        "Frontend calls command when stories are modified",
+        "Success/error feedback via console (toast notification later)",
+        "pnpm run build passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Edit Story Modal",
+      "description": "As a user, I want to edit a story's details.",
+      "acceptanceCriteria": [
+        "Edit button on expanded story opens edit modal",
+        "Modal has fields: title input, description textarea, acceptance criteria list",
+        "Each criterion is editable text input with delete button",
+        "Add Criterion button appends new empty criterion",
+        "Save button persists changes to store and disk",
+        "Cancel discards changes",
+        "pnpm run build passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Add New Story",
+      "description": "As a user, I want to add a new story to the PRD.",
+      "acceptanceCriteria": [
+        "Add Story button at bottom of story list",
+        "Opens story creation modal (similar to edit modal but empty)",
+        "Auto-generates next story ID (US-XXX based on existing)",
+        "New story added to store with priority = last + 1",
+        "Saved to disk automatically",
+        "pnpm run build passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Delete Story with Confirmation",
+      "description": "As a user, I want to delete a story with confirmation.",
+      "acceptanceCriteria": [
+        "Delete button (trash icon) on story card",
+        "Clicking shows confirmation dialog: 'Delete US-XXX?'",
+        "Confirm removes story from store and saves PRD",
+        "Cancel keeps story",
+        "pnpm run build passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Agent Plugin Type Definitions",
+      "description": "As a developer, I need type definitions for agent plugins.",
+      "acceptanceCriteria": [
+        "Create src/types/plugin.ts with AgentPlugin interface",
+        "AgentPlugin has: id, name, command, args template, workingDir behavior",
+        "Create default plugins array with Amp and Claude Code definitions",
+        "Export from types/index.ts",
+        "pnpm run build passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Agent Settings in Project Config",
+      "description": "As a user, I want to select which agent to use for my project.",
+      "acceptanceCriteria": [
+        "Add settings panel/section to ProjectView",
+        "Dropdown to select agent from available plugins",
+        "Dropdown to select autonomy level: Autonomous, Pause Between, Manual",
+        "Settings saved to .ideate/config.json via Tauri command",
+        "pnpm run build passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Build Store with Status",
+      "description": "As a developer, I need a store for build loop state.",
+      "acceptanceCriteria": [
+        "Create src/stores/buildStore.ts with build state",
+        "Store has: status (idle/running/paused), currentStoryId, logs array",
+        "Actions: startBuild, pauseBuild, resumeBuild, cancelBuild, appendLog",
+        "pnpm run build passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Build Control Buttons",
+      "description": "As a user, I want Start/Pause/Cancel buttons for the build loop.",
+      "acceptanceCriteria": [
+        "Build Controls component with Start Build button (when idle)",
+        "Shows Pause and Cancel buttons when running",
+        "Shows Resume button when paused",
+        "Buttons update build store status",
+        "Disabled states when no stories or all complete",
+        "pnpm run build passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Spawn Agent Process",
+      "description": "As a developer, I need a Tauri command to spawn agent CLI processes.",
+      "acceptanceCriteria": [
+        "Create Tauri command 'spawn_agent' that spawns a CLI process",
+        "Command takes: executable, args array, working directory",
+        "Process runs with stdout/stderr capture",
+        "Returns process handle/ID for tracking",
+        "cargo build passes",
+        "pnpm run build passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Stream Agent Output via Events",
+      "description": "As a user, I want to see real-time agent output.",
+      "acceptanceCriteria": [
+        "Rust side emits Tauri events for stdout/stderr lines",
+        "Event payload includes: process_id, stream type, content",
+        "Frontend listens for events and appends to build store logs",
+        "Terminal-style log panel displays logs",
+        "pnpm run build passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Terminal Log Panel UI",
+      "description": "As a user, I want a terminal-style panel showing agent output.",
+      "acceptanceCriteria": [
+        "LogPanel component with dark terminal-style background",
+        "Monospace font for log content",
+        "Auto-scroll to bottom on new content",
+        "Manual scroll disables auto-scroll until scroll to bottom",
+        "Shows 'Waiting for build to start...' when empty",
+        "pnpm run build passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Kill Agent Process",
+      "description": "As a developer, I need to cleanly terminate agent processes.",
+      "acceptanceCriteria": [
+        "Create Tauri command 'kill_agent' that terminates a process",
+        "Sends SIGTERM first, SIGKILL after 5 second timeout",
+        "Returns success/failure status",
+        "cargo build passes",
+        "pnpm run build passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Build Loop Orchestration",
+      "description": "As a user, I want the build loop to execute stories in order.",
+      "acceptanceCriteria": [
+        "When build starts, find first story with passes=false",
+        "Mark story as in-progress in store",
+        "Spawn agent with story context as prompt",
+        "When agent exits code 0: mark story passes=true, save PRD",
+        "When agent exits non-0: mark story failed, pause build",
+        "Move to next story based on autonomy setting",
+        "pnpm run build passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Project List Persistence",
+      "description": "As a user, I want my project list to persist across app restarts.",
+      "acceptanceCriteria": [
+        "Create Tauri command 'load_projects' that reads projects from app data dir",
+        "Create Tauri command 'save_projects' that writes projects list",
+        "Projects stored in ~/Library/Application Support/Ideate/projects.json",
+        "Load projects on app startup",
+        "Save projects when list changes",
+        "pnpm run build passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Dark Mode Support",
+      "description": "As a user, I want the app to respect system dark mode.",
+      "acceptanceCriteria": [
+        "CSS variables already support prefers-color-scheme",
+        "Verify all components use semantic color tokens",
+        "Terminal panel uses dark theme always",
+        "Modal overlays work in both modes",
+        "pnpm run build passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Right-click Project Context Menu",
+      "description": "As a user, I want to right-click projects for quick actions.",
+      "acceptanceCriteria": [
+        "Right-click on project shows context menu",
+        "Menu options: Reveal in Finder, Rename, Delete",
+        "Reveal in Finder uses Tauri shell plugin",
+        "Delete shows confirmation dialog",
+        "pnpm run build passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Keyboard Navigation",
+      "description": "As a user, I want keyboard shortcuts for common actions.",
+      "acceptanceCriteria": [
+        "Cmd+N opens new project modal",
+        "Escape closes modals",
+        "Up/Down arrows navigate project list when sidebar focused",
+        "Enter selects highlighted project",
+        "pnpm run build passes"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

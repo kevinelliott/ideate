@@ -27,6 +27,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: rgb(var(--background));
   color: rgb(var(--foreground));
+  overflow: hidden;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
 }
 
 @theme {

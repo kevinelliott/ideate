@@ -1,12 +1,19 @@
+import { useState } from "react";
+import { Sidebar } from "./components/Sidebar";
+import { MainContent } from "./components/MainContent";
+
 function App() {
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+
+  const handleNewProject = () => {
+    setShowNewProjectModal(true);
+    console.log("New project modal:", showNewProjectModal);
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-semibold tracking-tight mb-2">Ideate</h1>
-        <p className="text-secondary">
-          AI-Powered App Development Platform
-        </p>
-      </div>
+    <div className="flex h-screen bg-background text-foreground">
+      <Sidebar onNewProject={handleNewProject} />
+      <MainContent />
     </div>
   );
 }
