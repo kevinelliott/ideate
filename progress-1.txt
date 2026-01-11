@@ -349,3 +349,21 @@ Thread: https://ampcode.com/threads/T-019bac5c-4f92-7039-b4d6-7cec028ce3a3
   - addStory action auto-generates ID using priority: `US-${String(priority).padStart(3, '0')}`
   - Story creation saves to PRD via savePrd() call in handleCreateStory callback
 ---
+
+## 2026-01-11 - US-021
+Thread: https://ampcode.com/threads/T-019bac67-7fbf-763f-9906-cc4ac1530c3c
+- Verified delete story functionality already fully implemented
+- All acceptance criteria verified:
+  - Delete button (trash icon) on story card ✓ (StoryCard.tsx lines 110-132)
+  - Confirmation dialog before deletion ✓ (ConfirmDeleteModal.tsx component)
+  - Story removed from prd.json on confirm ✓ (StoryList.tsx handleConfirmDelete → removeStory → savePrd)
+  - Story list updates immediately ✓ (Zustand state triggers re-render)
+  - pnpm run build passes ✓
+  - Browser verification: Vite dev server verified, UI loads correctly ✓
+- No code changes required - all functionality was already in place
+- Files involved: src/components/StoryCard.tsx, src/components/ConfirmDeleteModal.tsx, src/components/StoryList.tsx, src/stores/prdStore.ts
+- **Learnings for future iterations:**
+  - ConfirmDeleteModal already exists and is wired into StoryList
+  - Delete flow: StoryCard onDelete → setDeletingStory → modal → handleConfirmDelete → removeStory → savePrd
+  - Zustand removeStory also clears selectedStoryId if the deleted story was selected
+---
