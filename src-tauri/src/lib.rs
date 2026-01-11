@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
+use uuid::Uuid;
+
+lazy_static::lazy_static! {
+    static ref PROCESSES: Mutex<HashMap<String, Child>> = Mutex::new(HashMap::new());
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectConfig {
@@ -43,6 +51,11 @@ pub struct Prd {
     pub description: Option<String>,
     #[serde(rename = "userStories")]
     pub user_stories: Vec<Story>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpawnAgentResult {
+    pub process_id: String,
 }
 
 #[tauri::command]
@@ -188,6 +201,28 @@ fn save_project_settings(
     Ok(())
 }
 
+#[tauri::command]
+fn spawn_agent(
+    executable: String,
+    args: Vec<String>,
+    working_directory: String,
+) -> Result<SpawnAgentResult, String> {
+    let process_id = Uuid::new_v4().to_string();
+
+    let child = Command::new(&executable)
+        .args(&args)
+        .current_dir(&working_directory)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn process '{}': {}", executable, e))?;
+
+    let mut processes = PROCESSES.lock().map_err(|e| format!("Lock error: {}", e))?;
+    processes.insert(process_id.clone(), child);
+
+    Ok(SpawnAgentResult { process_id })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -199,7 +234,8 @@ pub fn run() {
             load_prd,
             save_prd,
             load_project_settings,
-            save_project_settings
+            save_project_settings,
+            spawn_agent
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

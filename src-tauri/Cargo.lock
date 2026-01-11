@@ -1383,6 +1383,7 @@ name = "ideate"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "lazy_static",
  "serde",
  "serde_json",
  "tauri",
@@ -1391,6 +1392,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-shell",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
