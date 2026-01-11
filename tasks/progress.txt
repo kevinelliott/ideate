@@ -93,3 +93,14 @@ Thread: https://ampcode.com/threads/T-019bab8c-a1f6-76c1-a1d1-84c43f770bec
   - Conditional classes pattern: `${isActive ? 'active-styles' : 'default-styles'}`
   - Import types with `type` keyword for type-only imports
 ---
+
+## 2026-01-10 - US-007
+Thread: https://ampcode.com/threads/T-019bab8d-f694-742b-a946-84e30b92c747
+- Created ProjectView component showing project name, description, and empty PRD state
+- MainContent now conditionally renders ProjectView when a project is active
+- Files changed: src/components/ProjectView.tsx, src/components/MainContent.tsx
+- **Learnings for future iterations:**
+  - Use `projects.find((p) => p.id === activeProjectId)` to get active project
+  - Empty states follow card pattern: rounded-xl border with centered content
+  - ProjectView uses max-w-3xl mx-auto for constrained, centered content
+---
