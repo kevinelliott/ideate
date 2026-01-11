@@ -10,6 +10,7 @@
 - Use .drag-region class for titlebar drag areas, .no-drag for buttons inside
 - Use `invoke<T>("command", { args })` from `@tauri-apps/api/core` to call Tauri commands
 - Register Tauri commands via `.invoke_handler(tauri::generate_handler![cmd1, cmd2])` in lib.rs
+- Type definitions go in src/types/ directory, export via index.ts barrel
 
 ---
 
@@ -211,4 +212,18 @@ Thread: https://ampcode.com/threads/T-019babc2-c57d-70ea-85a9-a4292ac9d2fc
   - Use e.stopPropagation() on delete button to prevent card click event
   - Delete button uses red-500/10 hover for danger indication
   - Confirmation modal uses simple pattern: isOpen, storyId, onConfirm, onCancel props
+---
+
+## 2026-01-10 - US-016
+Thread: https://ampcode.com/threads/T-019babc4-d254-741c-87dc-44c13099969a
+- Created src/types/plugin.ts with AgentPlugin interface
+- Defined WorkingDirBehavior type: 'project' | 'custom'
+- AgentPlugin has: id, name, command, argsTemplate, workingDir
+- Created defaultPlugins array with Amp and Claude Code definitions
+- Created src/types/index.ts to export all types and default plugins
+- Files changed: src/types/plugin.ts (new), src/types/index.ts (new)
+- **Learnings for future iterations:**
+  - Types go in src/types/ directory with index.ts barrel export
+  - Use argsTemplate array with {{prompt}} placeholder for agent CLI args
+  - WorkingDirBehavior allows specifying if agent runs from project dir or custom path
 ---
