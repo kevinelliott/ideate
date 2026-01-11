@@ -528,3 +528,29 @@ Thread: https://ampcode.com/threads/T-019bac86-a47c-7717-9a31-31ece15e3643
   - Theme transitions use CSS transition on * selector with 200ms duration
   - App waits for both isLoaded (projects) and isThemeLoaded before rendering
 ---
+
+## 2026-01-11 - US-029
+Thread: https://ampcode.com/threads/T-019bac90-10f2-734c-865d-1342c863e917
+- Enhanced useKeyboardNavigation hook with story list navigation
+- Added navigation context state (projects/stories) for dual-context navigation
+- Keyboard shortcuts implemented:
+  - Cmd+N: New project ✓ (already existed)
+  - Cmd+,: Preferences ✓ (already existed)
+  - Up/Down arrows: Navigate story list (added, respects navigation context)
+  - Enter: Select story (added, also switches context to stories)
+  - Escape: Close modals ✓ (already existed)
+  - Tab: Toggle navigation context between projects and stories
+- All acceptance criteria verified:
+  - Cmd+N: New project ✓
+  - Cmd+,: Preferences ✓
+  - Up/Down arrows: Navigate story list ✓
+  - Enter: Select story ✓
+  - Escape: Close modals ✓
+  - pnpm run build passes ✓
+- Files changed: src/hooks/useKeyboardNavigation.ts
+- **Learnings for future iterations:**
+  - Navigation context (projects vs stories) determines which list Up/Down navigates
+  - Tab key toggles between project sidebar and story list navigation
+  - Stories are sorted by priority before navigation to match visual order
+  - Hook returns navigationContext for potential UI indicators
+---
