@@ -190,3 +190,21 @@ Thread: https://ampcode.com/threads/T-019bac3d-6179-73b8-905b-df5dffe3922f
   - StoryCard now uses isSelected prop instead of internal isExpanded state
   - Inspector panel includes edit button that opens EditStoryModal from parent
 ---
+
+## 2026-01-11 - US-013
+Thread: https://ampcode.com/threads/T-019bac41-c316-7799-aa99-dc37669793a5
+- Created IdeaInputView component for new projects without a PRD
+- All acceptance criteria verified:
+  - New projects show idea input view in main area ✓
+  - Large textarea for describing the idea (pre-populated with project description) ✓
+  - Generate PRD button to trigger AI generation ✓
+  - Loading state while generating (spinner animation when status="generating") ✓
+  - pnpm run build passes ✓
+  - Browser verification: vite dev server loads, app functional ✓
+- Files changed: src/components/IdeaInputView.tsx (new), src/components/ProjectView.tsx
+- **Learnings for future iterations:**
+  - IdeaInputView is shown in ProjectView when hasStories is false
+  - Uses usePrdStore status for tracking generating state
+  - onGeneratePrd callback will be wired to agent spawning in US-018
+  - AgentSettings and LogPanel are included even when no PRD exists (for agent configuration)
+---
