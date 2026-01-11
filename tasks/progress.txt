@@ -171,3 +171,17 @@ Thread: https://ampcode.com/threads/T-019babbc-1a71-7648-b5e4-fcda6f7d83dd
   - save_prd creates .ideate folder if it doesn't exist (fs::create_dir_all)
   - Frontend components should call `savePrd(projectPath)` after modifying stories
 ---
+
+## 2026-01-10 - US-013
+Thread: https://ampcode.com/threads/T-019babbe-7735-721d-bb66-8fd1fd84b598
+- Implemented EditStoryModal component with title, description, and acceptance criteria editing
+- Added Edit button to expanded StoryCard that opens the modal
+- Updated StoryList to manage modal state and handle save/close
+- Updated ProjectView to pass projectPath to StoryList for PRD saving
+- Files changed: src/components/EditStoryModal.tsx (new), src/components/StoryCard.tsx, src/components/StoryList.tsx, src/components/ProjectView.tsx
+- **Learnings for future iterations:**
+  - Use useEffect to sync form state with story prop when modal opens
+  - StoryList now accepts projectPath prop for saving PRD after edits
+  - Filter empty criteria on save: `criteria.filter((c) => c.trim() !== "")`
+  - Modal uses max-h-[90vh] overflow-auto for scrollable content on long criteria lists
+---
