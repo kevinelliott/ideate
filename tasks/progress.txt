@@ -130,3 +130,17 @@ Thread: https://ampcode.com/threads/T-019bab90-ce9d-7212-a042-e327d0b5977e
   - Status is derived from story.passes: true=complete, false=pending (can be extended later for in-progress/failed)
   - Story status colors use Tailwind opacity pattern: `bg-green-500/20 text-green-500`
 ---
+
+## 2026-01-10 - US-010
+Thread: https://ampcode.com/threads/T-019babb8-a3bc-739d-811a-cd2acfe7bf05
+- Implemented expandable story card with full detail view
+- Added useState to track expanded/collapsed state
+- Expanded view shows: full description, acceptance criteria as visual checklist, notes if present
+- Close button (X icon) collapses the card
+- Checkmarks display on criteria when story.passes is true
+- Files changed: src/components/StoryCard.tsx
+- **Learnings for future iterations:**
+  - Use useState for local expand/collapse state in cards
+  - Visual-only checkboxes use border div with conditional check SVG inside
+  - Use e.stopPropagation() on close button to prevent re-triggering card click
+---
