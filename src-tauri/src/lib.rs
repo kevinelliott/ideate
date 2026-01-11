@@ -46,7 +46,7 @@ pub struct StoredProject {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Story {
     pub id: String,
     pub title: String,
@@ -55,14 +55,18 @@ pub struct Story {
     pub acceptance_criteria: Vec<String>,
     pub priority: i32,
     pub passes: bool,
+    #[serde(default)]
+    pub status: Option<String>,
     pub notes: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prd {
+    #[serde(default)]
     pub project: Option<String>,
-    #[serde(rename = "branchName")]
+    #[serde(rename = "branchName", default)]
     pub branch_name: Option<String>,
+    #[serde(default)]
     pub description: Option<String>,
     #[serde(rename = "userStories")]
     pub user_stories: Vec<Story>,
@@ -182,7 +186,7 @@ fn create_project(
 }
 
 #[tauri::command]
-fn load_prd(project_path: String) -> Result<Option<Vec<Story>>, String> {
+fn load_prd(project_path: String) -> Result<Option<Prd>, String> {
     let prd_path = PathBuf::from(&project_path).join(".ideate").join("prd.json");
 
     if !prd_path.exists() {
@@ -195,23 +199,16 @@ fn load_prd(project_path: String) -> Result<Option<Vec<Story>>, String> {
     let prd: Prd = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse prd.json: {}", e))?;
 
-    Ok(Some(prd.user_stories))
+    Ok(Some(prd))
 }
 
 #[tauri::command]
-fn save_prd(project_path: String, stories: Vec<Story>) -> Result<(), String> {
+fn save_prd(project_path: String, prd: Prd) -> Result<(), String> {
     let ideate_path = PathBuf::from(&project_path).join(".ideate");
     let prd_path = ideate_path.join("prd.json");
 
     fs::create_dir_all(&ideate_path)
         .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
-
-    let prd = Prd {
-        project: None,
-        branch_name: None,
-        description: None,
-        user_stories: stories,
-    };
 
     let prd_json = serde_json::to_string_pretty(&prd)
         .map_err(|e| format!("Failed to serialize PRD: {}", e))?;
