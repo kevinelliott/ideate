@@ -3,6 +3,7 @@ import type { Project } from "../stores/projectStore";
 import { usePrdStore } from "../stores/prdStore";
 import type { Story } from "../stores/prdStore";
 import { usePrdGeneration } from "../hooks/usePrdGeneration";
+import { useProjectState } from "../hooks/useProjectState";
 import { StoryList } from "./StoryList";
 import { AgentSettings } from "./AgentSettings";
 import { BuildControls } from "./BuildControls";
@@ -30,6 +31,8 @@ export function ProjectView({ project }: ProjectViewProps) {
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   const { generatePrd } = usePrdGeneration();
+
+  useProjectState(project.path);
 
   const handleCloseInspector = () => {
     selectStory(null);

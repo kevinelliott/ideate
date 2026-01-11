@@ -44,6 +44,8 @@ interface BuildState {
   handleProcessExit: (exitInfo: ProcessExitInfo) => void
   retryStory: (storyId: string) => void
   getStoryRetryInfo: (storyId: string) => StoryRetryInfo | undefined
+  restoreRetryInfo: (storyId: string, retryCount: number) => void
+  resetBuildState: () => void
 }
 
 export const useBuildStore = create<BuildState>((set, get) => ({
@@ -174,5 +176,29 @@ export const useBuildStore = create<BuildState>((set, get) => ({
 
   getStoryRetryInfo: (storyId) => {
     return get().storyRetries[storyId]
+  },
+
+  restoreRetryInfo: (storyId, retryCount) => {
+    set((state) => ({
+      storyRetries: {
+        ...state.storyRetries,
+        [storyId]: {
+          retryCount,
+          previousLogs: state.storyRetries[storyId]?.previousLogs || [],
+        },
+      },
+    }))
+  },
+
+  resetBuildState: () => {
+    set({
+      status: 'idle',
+      currentStoryId: null,
+      currentProcessId: null,
+      storyStatuses: {},
+      storyRetries: {},
+      logs: [],
+      lastExitInfo: null,
+    })
   },
 }))

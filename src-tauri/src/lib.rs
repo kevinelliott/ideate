@@ -115,6 +115,24 @@ pub struct AgentPlugin {
     pub working_dir: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoryRetryInfo {
+    #[serde(rename = "retryCount")]
+    pub retry_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectState {
+    #[serde(rename = "currentStoryId")]
+    pub current_story_id: Option<String>,
+    #[serde(rename = "storyStatuses")]
+    pub story_statuses: HashMap<String, String>,
+    #[serde(rename = "storyRetries")]
+    pub story_retries: HashMap<String, StoryRetryInfo>,
+    #[serde(rename = "buildPhase")]
+    pub build_phase: String,
+}
+
 fn get_projects_file_path(app: &AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app
         .path()
@@ -320,6 +338,43 @@ fn save_project_settings(
 
     fs::write(&config_path, config_json)
         .map_err(|e| format!("Failed to write config.json: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_project_state(project_path: String) -> Result<Option<ProjectState>, String> {
+    let state_path = PathBuf::from(&project_path).join(".ideate").join("state.json");
+
+    if !state_path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&state_path)
+        .map_err(|e| format!("Failed to read state.json: {}", e))?;
+
+    match serde_json::from_str::<ProjectState>(&content) {
+        Ok(state) => Ok(Some(state)),
+        Err(e) => {
+            eprintln!("Warning: Failed to parse state.json (corrupt state handled gracefully): {}", e);
+            Ok(None)
+        }
+    }
+}
+
+#[tauri::command]
+fn save_project_state(project_path: String, state: ProjectState) -> Result<(), String> {
+    let ideate_path = PathBuf::from(&project_path).join(".ideate");
+    let state_path = ideate_path.join("state.json");
+
+    fs::create_dir_all(&ideate_path)
+        .map_err(|e| format!("Failed to create .ideate folder: {}", e))?;
+
+    let state_json = serde_json::to_string_pretty(&state)
+        .map_err(|e| format!("Failed to serialize state: {}", e))?;
+
+    fs::write(&state_path, state_json)
+        .map_err(|e| format!("Failed to write state.json: {}", e))?;
 
     Ok(())
 }
@@ -546,6 +601,8 @@ pub fn run() {
             save_prd,
             load_project_settings,
             save_project_settings,
+            load_project_state,
+            save_project_state,
             list_agents,
             spawn_agent,
             wait_agent,
