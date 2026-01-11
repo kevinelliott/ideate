@@ -27,3 +27,16 @@ Thread: https://ampcode.com/threads/T-019bab7f-d939-7764-bbdc-58a7742152ce
   - Added .drag-region and .no-drag CSS classes for macOS window dragging
   - Tailwind v4 uses @theme directive for custom color definitions
 ---
+
+## 2026-01-10 - US-002
+Thread: https://ampcode.com/threads/T-019bab84-01eb-758b-9a4b-14253920f7ab
+- Installed zustand package (v5.0.9)
+- Created src/stores/projectStore.ts with full project state management
+- Implemented Project type: { id, name, description, path, status, createdAt }
+- Implemented actions: addProject, removeProject, setActiveProject, updateProject
+- Files changed: package.json, pnpm-lock.yaml, src/stores/projectStore.ts
+- **Learnings for future iterations:**
+  - Zustand uses `create<StateType>((set) => ({...}))` pattern in v5
+  - Don't include unused `get` parameter in zustand create callback - TypeScript will error
+  - Use `crypto.randomUUID()` for generating unique IDs
+---
