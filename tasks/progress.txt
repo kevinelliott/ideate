@@ -81,3 +81,15 @@ Thread: https://ampcode.com/threads/T-019bab89-42b3-763e-958b-50d9eb34d5e0
   - Added chrono crate for timestamp generation in Rust
   - Register commands via `.invoke_handler(tauri::generate_handler![command_name])` in tauri::Builder
 ---
+
+## 2026-01-10 - US-006
+Thread: https://ampcode.com/threads/T-019bab8c-a1f6-76c1-a1d1-84c43f770bec
+- Implemented project list display in Sidebar component
+- Added status indicator dots with color mapping: gray (idle), blue (generating), green (ready), red (error)
+- Implemented click-to-select with active state highlighting using accent background
+- Files changed: src/components/Sidebar.tsx
+- **Learnings for future iterations:**
+  - Use Record<ProjectStatus, string> for type-safe status color mappings
+  - Conditional classes pattern: `${isActive ? 'active-styles' : 'default-styles'}`
+  - Import types with `type` keyword for type-only imports
+---
