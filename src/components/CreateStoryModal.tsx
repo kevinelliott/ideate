@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Story } from "../stores/prdStore";
+import { useModalKeyboard } from "../hooks/useModalKeyboard";
 
 interface CreateStoryModalProps {
   isOpen: boolean;
@@ -17,6 +18,8 @@ export function CreateStoryModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [criteria, setCriteria] = useState<string[]>([""]);
+
+  useModalKeyboard(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {

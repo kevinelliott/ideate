@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { documentDir } from "@tauri-apps/api/path";
+import { useModalKeyboard } from "../hooks/useModalKeyboard";
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalPr
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [directory, setDirectory] = useState<string | null>(null);
+
+  useModalKeyboard(isOpen, onClose);
 
   if (!isOpen) return null;
 

@@ -1,3 +1,5 @@
+import { useModalKeyboard } from "../hooks/useModalKeyboard";
+
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
   storyId: string;
@@ -11,6 +13,8 @@ export function ConfirmDeleteModal({
   onConfirm,
   onCancel,
 }: ConfirmDeleteModalProps) {
+  useModalKeyboard(isOpen, onCancel);
+
   if (!isOpen) return null;
 
   const handleOverlayClick = (e: React.MouseEvent) => {

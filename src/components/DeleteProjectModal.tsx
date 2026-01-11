@@ -1,3 +1,5 @@
+import { useModalKeyboard } from "../hooks/useModalKeyboard";
+
 interface DeleteProjectModalProps {
   isOpen: boolean
   projectName: string
@@ -11,6 +13,8 @@ export function DeleteProjectModal({
   onConfirm,
   onCancel,
 }: DeleteProjectModalProps) {
+  useModalKeyboard(isOpen, onCancel);
+
   if (!isOpen) return null
 
   const handleOverlayClick = (e: React.MouseEvent) => {

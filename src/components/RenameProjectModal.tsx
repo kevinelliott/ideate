@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useModalKeyboard } from "../hooks/useModalKeyboard";
 
 interface RenameProjectModalProps {
   isOpen: boolean
@@ -16,6 +17,8 @@ export function RenameProjectModal({
   onClose,
 }: RenameProjectModalProps) {
   const [name, setName] = useState(currentName)
+
+  useModalKeyboard(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {

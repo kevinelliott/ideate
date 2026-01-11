@@ -6,6 +6,7 @@ import { MainContent } from "./components/MainContent";
 import { NewProjectModal } from "./components/NewProjectModal";
 import { useProjectStore } from "./stores/projectStore";
 import { useBuildStore } from "./stores/buildStore";
+import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 
 interface CreateProjectResult {
   path: string;
@@ -24,6 +25,12 @@ function App() {
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const isLoaded = useProjectStore((state) => state.isLoaded);
   const appendLog = useBuildStore((state) => state.appendLog);
+
+  useKeyboardNavigation({
+    onNewProject: () => setShowNewProjectModal(true),
+    isModalOpen: showNewProjectModal,
+    onCloseModal: () => setShowNewProjectModal(false),
+  });
 
   useEffect(() => {
     loadProjects();
