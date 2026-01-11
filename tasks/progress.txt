@@ -116,3 +116,17 @@ Thread: https://ampcode.com/threads/T-019bab8f-70d2-72c9-8d41-bbeddf543983
   - Story ID generation uses priority for consistency: `US-${String(priority).padStart(3, '0')}`
   - PrdStore follows same pattern as projectStore with create<StateType>((set) => ({...}))
 ---
+
+## 2026-01-10 - US-009
+Thread: https://ampcode.com/threads/T-019bab90-ce9d-7212-a042-e327d0b5977e
+- Created StoryCard component with ID badge, title, truncated description, criteria count, status badge
+- Created StoryList component that renders stories from prdStore
+- Integrated StoryList into ProjectView (shows story list when stories exist, empty state otherwise)
+- Status colors: pending (gray), in-progress (blue), complete (green), failed (red)
+- Cards are clickable and log story ID to console
+- Files changed: src/components/StoryCard.tsx, src/components/StoryList.tsx, src/components/ProjectView.tsx
+- **Learnings for future iterations:**
+  - Use `line-clamp-2` for truncating text to 2 lines
+  - Status is derived from story.passes: true=complete, false=pending (can be extended later for in-progress/failed)
+  - Story status colors use Tailwind opacity pattern: `bg-green-500/20 text-green-500`
+---
