@@ -198,3 +198,17 @@ Thread: https://ampcode.com/threads/T-019babc0-ca3c-77f3-a67e-972ba5842bda
   - Use `Math.max(...stories.map((s) => s.priority))` to find highest priority
   - useEffect with isOpen dependency to reset form state when modal opens
 ---
+
+## 2026-01-10 - US-015
+Thread: https://ampcode.com/threads/T-019babc2-c57d-70ea-85a9-a4292ac9d2fc
+- Implemented delete button (trash icon) on expanded story card
+- Created ConfirmDeleteModal component with 'Delete US-XXX?' confirmation
+- Added onDelete prop to StoryCard, wired up delete flow in StoryList
+- Delete removes story from store and saves PRD to disk
+- Cancel closes dialog and keeps story
+- Files changed: src/components/ConfirmDeleteModal.tsx (new), src/components/StoryCard.tsx, src/components/StoryList.tsx
+- **Learnings for future iterations:**
+  - Use e.stopPropagation() on delete button to prevent card click event
+  - Delete button uses red-500/10 hover for danger indication
+  - Confirmation modal uses simple pattern: isOpen, storyId, onConfirm, onCancel props
+---
