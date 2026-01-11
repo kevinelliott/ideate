@@ -8,6 +8,7 @@ import { BuildControls } from "./BuildControls";
 import { LogPanel } from "./LogPanel";
 import { StoryDetailPanel } from "./StoryDetailPanel";
 import { EditStoryModal } from "./EditStoryModal";
+import { IdeaInputView } from "./IdeaInputView";
 
 interface ProjectViewProps {
   project: Project;
@@ -19,6 +20,7 @@ export function ProjectView({ project }: ProjectViewProps) {
   const selectStory = usePrdStore((state) => state.selectStory);
   const updateStory = usePrdStore((state) => state.updateStory);
   const savePrd = usePrdStore((state) => state.savePrd);
+  const setStatus = usePrdStore((state) => state.setStatus);
   const hasStories = stories.length > 0;
   
   const selectedStory = stories.find((s) => s.id === selectedStoryId);
@@ -43,6 +45,14 @@ export function ProjectView({ project }: ProjectViewProps) {
     }
   };
 
+  const handleGeneratePrd = async (idea: string) => {
+    setStatus("generating");
+    // PRD generation will be handled in US-018
+    // For now, just show the loading state and log the idea
+    console.log("Generating PRD for idea:", idea);
+    // The actual agent spawning will be implemented in US-018
+  };
+
   return (
     <div className="flex flex-1 h-screen">
       <main className="flex-1 h-screen overflow-auto p-8 bg-background">
@@ -52,41 +62,24 @@ export function ProjectView({ project }: ProjectViewProps) {
           </h1>
           <p className="text-secondary mb-8">{project.description}</p>
 
-          <AgentSettings projectPath={project.path} />
-
           {hasStories ? (
             <>
+              <AgentSettings projectPath={project.path} />
               <BuildControls projectPath={project.path} />
               <LogPanel />
               <StoryList projectPath={project.path} />
             </>
           ) : (
-            <div className="border border-border rounded-xl bg-card p-8 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-background border border-border flex items-center justify-center">
-                <svg
-                  className="w-8 h-8 text-secondary"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              </div>
-              <h2 className="text-lg font-medium text-foreground mb-1">
-                No PRD generated yet
-              </h2>
-              <p className="text-sm text-secondary mb-6">
-                Generate a PRD to break down your idea into user stories
-              </p>
-              <button className="px-4 py-2 bg-accent text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
-                Generate PRD
-              </button>
-            </div>
+            <>
+              <AgentSettings projectPath={project.path} />
+              <LogPanel />
+              <IdeaInputView
+                projectName={project.name}
+                projectDescription={project.description}
+                projectPath={project.path}
+                onGeneratePrd={handleGeneratePrd}
+              />
+            </>
           )}
         </div>
       </main>
