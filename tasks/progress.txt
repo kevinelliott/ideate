@@ -266,3 +266,19 @@ Thread: https://ampcode.com/threads/T-019babca-7894-734f-9637-b783c9bb2587
   - Use `stories.some((s) => !s.passes)` to check for incomplete stories
   - Button disabled state uses Tailwind disabled:opacity-50 disabled:cursor-not-allowed
 ---
+
+## 2026-01-10 - US-020
+Thread: https://ampcode.com/threads/T-019babd2-ed23-76ca-9932-e5c01d322bd0
+- Created Tauri `spawn_agent` command to spawn CLI processes
+- Command accepts executable, args array, and working directory
+- Process spawned with stdout/stderr piped for capture
+- Returns process_id (UUID v4) for tracking
+- Uses lazy_static HashMap to store Child processes for later access
+- Added uuid and lazy_static crates to Cargo.toml
+- Files changed: src-tauri/src/lib.rs, src-tauri/Cargo.toml
+- **Learnings for future iterations:**
+  - Use lazy_static! macro with Mutex<HashMap<String, Child>> to store process handles
+  - Spawn with Stdio::piped() to enable stdout/stderr capture for streaming
+  - uuid::Uuid::new_v4().to_string() generates unique process IDs
+  - PROCESSES global stores Child handles for kill_agent and event streaming
+---
