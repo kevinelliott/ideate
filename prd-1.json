@@ -219,7 +219,7 @@
         "cargo check passes in src-tauri"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -234,7 +234,7 @@
         "cargo check passes in src-tauri"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

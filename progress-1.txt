@@ -208,3 +208,40 @@ Thread: https://ampcode.com/threads/T-019bac41-c316-7799-aa99-dc37669793a5
   - onGeneratePrd callback will be wired to agent spawning in US-018
   - AgentSettings and LogPanel are included even when no PRD exists (for agent configuration)
 ---
+
+## 2026-01-11 - US-014
+Thread: https://ampcode.com/threads/T-019bac45-5052-74be-b7f2-1c6bb276be81
+- Added AgentPlugin struct to Rust backend matching TypeScript types
+- Implemented list_agents() Tauri command that:
+  - Returns agents from agents.json in Application Support (if exists)
+  - Falls back to built-in default agents (Amp, Claude Code)
+- Built-in plugins defined with proper argsTemplate and workingDir fields
+- All acceptance criteria verified:
+  - Plugin type: name, command, args template, workingDirBehavior ✓
+  - Built-in plugins defined for: Amp, Claude Code ✓
+  - Plugins stored in agents.json config ✓
+  - Rust command: list_agents() returns available agents ✓
+  - cargo check passes in src-tauri ✓
+- Files changed: src-tauri/src/lib.rs
+- **Learnings for future iterations:**
+  - TypeScript types already existed in src/types/plugin.ts - check types directory first
+  - Use serde(rename = "camelCase") for JSON field names in Rust structs
+  - Default agent configuration lives in Application Support/Ideate/agents.json
+  - get_default_agents() provides fallback when no agents.json exists
+---
+
+## 2026-01-11 - US-015
+Thread: https://ampcode.com/threads/T-019bac48-78ea-758d-ac8d-70581632f753
+- Verified agent process spawning already fully implemented in src-tauri/src/lib.rs
+- All acceptance criteria verified:
+  - Tauri command spawn_agent(executable, args, working_directory) spawns process ✓
+  - Uses std::process::Command with threaded async execution ✓
+  - Captures stdout and stderr via separate threads ✓
+  - Returns process handle/id (SpawnAgentResult with process_id) ✓
+  - cargo check passes in src-tauri ✓
+- Files involved: src-tauri/src/lib.rs (lines 344-404)
+- **Learnings for future iterations:**
+  - spawn_agent uses std::process::Command (not tokio::process::Command) with threads for stdout/stderr
+  - Process handles stored in PROCESSES HashMap with Mutex for thread-safe access
+  - Also includes wait_agent and kill_agent commands for process management
+---
