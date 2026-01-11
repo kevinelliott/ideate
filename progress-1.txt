@@ -1,0 +1,35 @@
+# Ralph Progress Log - Ideate MVP
+Started: Sat Jan 11 2026
+---
+
+## Codebase Patterns
+- Tauri v2 with React 19 + TypeScript frontend
+- Tailwind CSS v4 with custom Apple-inspired design tokens in index.css
+- Semantic colors via CSS variables: --background, --foreground, --secondary, --accent, --border, --card
+- Tauri plugins installed: dialog, fs, shell
+- Use `pnpm run build` (runs tsc && vite build) for frontend typecheck/build
+- Use `cargo build` in src-tauri for Rust backend builds
+- Components go in src/components/ directory
+- Hooks go in src/hooks/ directory
+- Stores go in src/stores/ directory (Zustand v5)
+- Types go in src/types/ directory with index.ts barrel export
+- Use .drag-region class for titlebar drag areas, .no-drag for buttons inside
+- SF Pro font family set in body CSS
+- Base component classes: .btn (primary, secondary, destructive, ghost, sm, lg), .input, .textarea, .select, .card, .card-interactive
+---
+
+## 2026-01-11 - US-003
+Thread: https://ampcode.com/threads/T-019bac1c-1d11-71be-8d29-7899715eb548
+- Verified sidebar layout component already implemented
+- All acceptance criteria verified in browser:
+  - Three-column layout: sidebar (240px) + main content + optional inspector ✓
+  - Sidebar has vibrancy/translucent background effect (backdrop-blur-xl) ✓
+  - Native macOS window controls space integrated ✓
+  - Sidebar shows 'Projects' header and placeholder project list ✓
+  - pnpm run build passes ✓
+  - Browser verification complete ✓
+- Files involved: src/components/Sidebar.tsx, src/App.tsx, src/components/MainContent.tsx
+- **Learnings for future iterations:**
+  - Sidebar width is w-60 (240px) with vibrancy via bg-card/80 backdrop-blur-xl
+  - Inspector panel is added later in US-012 (story detail panel)
+---
