@@ -7,10 +7,12 @@
 - Use `cargo build` in src-tauri for Rust backend builds
 - SF Pro font family set in body CSS
 - Components go in src/components/ directory
+- Hooks go in src/hooks/ directory
 - Use .drag-region class for titlebar drag areas, .no-drag for buttons inside
 - Use `invoke<T>("command", { args })` from `@tauri-apps/api/core` to call Tauri commands
 - Register Tauri commands via `.invoke_handler(tauri::generate_handler![cmd1, cmd2])` in lib.rs
 - Type definitions go in src/types/ directory, export via index.ts barrel
+- For async Tauri commands that may block, use `tokio::task::spawn_blocking` to avoid blocking the Tauri runtime
 
 ---
 
@@ -328,4 +330,22 @@ Thread: https://ampcode.com/threads/T-019babd9-0afd-737a-910d-fa4cbe26cfaf
   - Use `child.try_wait()` for non-blocking wait to check if process exited
   - Add platform-specific dependencies with `[target.'cfg(unix)'.dependencies]`
   - Windows fallback uses child.kill() since Windows doesn't have SIGTERM
+---
+
+## 2026-01-10 - US-024
+Thread: https://ampcode.com/threads/T-019babdb-5901-743d-94a6-b7be7b5cf47e
+- Implemented full build loop orchestration with story execution in order
+- Created `wait_agent` Tauri command that waits for process to complete and returns exit code
+- Created `useBuildLoop` hook to orchestrate the build flow
+- Extended buildStore with storyStatuses tracking and currentProcessId
+- Updated StoryCard to show build status (in-progress with spinner, complete, failed)
+- BuildControls now uses useBuildLoop hook for Start/Resume/Cancel actions
+- Files changed: src-tauri/src/lib.rs, src/hooks/useBuildLoop.ts (new), src/stores/buildStore.ts, src/components/BuildControls.tsx, src/components/StoryCard.tsx, src/components/ProjectView.tsx
+- **Learnings for future iterations:**
+  - Use `tokio::task::spawn_blocking` for blocking operations in async Tauri commands
+  - Track story build status separately in buildStore.storyStatuses for UI updates
+  - useBuildLoop hook encapsulates all build orchestration logic
+  - Use useRef to track isRunning to prevent concurrent build loops
+  - Support autonomy modes: autonomous (continuous), pause-between (pause after each story)
+  - Generate prompt from story data with ID, title, description, and acceptance criteria
 ---

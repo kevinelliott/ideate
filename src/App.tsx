@@ -21,7 +21,13 @@ interface AgentOutputPayload {
 function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const addProject = useProjectStore((state) => state.addProject);
+  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const isLoaded = useProjectStore((state) => state.isLoaded);
   const appendLog = useBuildStore((state) => state.appendLog);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   useEffect(() => {
     const unlistenPromise = listen<AgentOutputPayload>("agent-output", (event) => {
@@ -67,6 +73,14 @@ function App() {
       console.error("Failed to create project:", error);
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="flex h-screen bg-background text-foreground items-center justify-center">
+        <div className="text-secondary">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background text-foreground">

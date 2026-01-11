@@ -7,7 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
@@ -33,6 +33,17 @@ pub struct ProjectSettings {
 pub struct CreateProjectResult {
     pub path: String,
     pub config_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredProject {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub path: String,
+    pub status: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -87,6 +98,48 @@ pub struct AgentExitEvent {
     pub process_id: String,
     pub exit_code: Option<i32>,
     pub success: bool,
+}
+
+fn get_projects_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    
+    Ok(app_data_dir.join("projects.json"))
+}
+
+#[tauri::command]
+fn load_projects(app: AppHandle) -> Result<Vec<StoredProject>, String> {
+    let projects_path = get_projects_file_path(&app)?;
+
+    if !projects_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(&projects_path)
+        .map_err(|e| format!("Failed to read projects.json: {}", e))?;
+
+    let projects: Vec<StoredProject> = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse projects.json: {}", e))?;
+
+    Ok(projects)
+}
+
+#[tauri::command]
+fn save_projects(app: AppHandle, projects: Vec<StoredProject>) -> Result<(), String> {
+    let projects_path = get_projects_file_path(&app)?;
+
+    let projects_json = serde_json::to_string_pretty(&projects)
+        .map_err(|e| format!("Failed to serialize projects: {}", e))?;
+
+    fs::write(&projects_path, projects_json)
+        .map_err(|e| format!("Failed to write projects.json: {}", e))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -431,6 +484,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             create_project,
+            load_projects,
+            save_projects,
             load_prd,
             save_prd,
             load_project_settings,

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { invoke } from '@tauri-apps/api/core'
 
 export type ProjectStatus = 'idle' | 'generating' | 'ready' | 'error'
 
@@ -14,15 +15,20 @@ export interface Project {
 interface ProjectState {
   projects: Project[]
   activeProjectId: string | null
+  isLoaded: boolean
   addProject: (project: Omit<Project, 'id' | 'createdAt'>) => Project
   removeProject: (id: string) => void
   setActiveProject: (id: string | null) => void
   updateProject: (id: string, updates: Partial<Project>) => void
+  loadProjects: () => Promise<void>
+  saveProjects: () => Promise<void>
+  setProjects: (projects: Project[]) => void
 }
 
-export const useProjectStore = create<ProjectState>((set) => ({
+export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
   activeProjectId: null,
+  isLoaded: false,
 
   addProject: (projectData) => {
     const newProject: Project = {
@@ -33,6 +39,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
     set((state) => ({
       projects: [...state.projects, newProject],
     }))
+    get().saveProjects()
     return newProject
   },
 
@@ -41,6 +48,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
       projects: state.projects.filter((p) => p.id !== id),
       activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
     }))
+    get().saveProjects()
   },
 
   setActiveProject: (id) => {
@@ -53,5 +61,29 @@ export const useProjectStore = create<ProjectState>((set) => ({
         p.id === id ? { ...p, ...updates } : p
       ),
     }))
+    get().saveProjects()
+  },
+
+  setProjects: (projects) => {
+    set({ projects, isLoaded: true })
+  },
+
+  loadProjects: async () => {
+    try {
+      const projects = await invoke<Project[]>('load_projects')
+      set({ projects, isLoaded: true })
+    } catch (error) {
+      console.error('Failed to load projects:', error)
+      set({ isLoaded: true })
+    }
+  },
+
+  saveProjects: async () => {
+    const { projects } = get()
+    try {
+      await invoke('save_projects', { projects })
+    } catch (error) {
+      console.error('Failed to save projects:', error)
+    }
   },
 }))
