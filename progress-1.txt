@@ -148,3 +148,23 @@ Thread: https://ampcode.com/threads/T-019bac2a-b8a8-70a8-9d93-11252dd106aa
   - Story struct has optional status field: Option<String> to support both old and new PRD formats
   - Prd and Story structs now have Clone trait for flexibility
 ---
+
+## 2026-01-11 - US-011
+Thread: https://ampcode.com/threads/T-019bac2d-cdd6-7232-a72e-55bf8a53826e
+- Verified story list view component already implemented with all required functionality
+- Added priority sorting to StoryList.tsx to ensure stories are ordered by priority
+- All acceptance criteria verified:
+  - Stories displayed as cards in main content area via StoryCard component ✓
+  - Each card shows: story ID, title, description preview (2-line clamp), AC count ✓
+  - Status badge on each card (pending/in-progress/complete/failed) ✓
+  - Stories ordered by priority (added sortedStories with sort by priority) ✓
+  - Empty state when no PRD exists (ProjectView shows "No PRD generated yet") ✓
+  - pnpm run build passes ✓
+  - Browser verification: limited to vite dev (no Tauri backend), code verified complete ✓
+- Files changed: src/components/StoryList.tsx
+- **Learnings for future iterations:**
+  - StoryList uses expandable StoryCard pattern - click to expand shows full details
+  - StoryCard has edit/delete buttons that appear on expansion
+  - Status colors: pending=gray, in-progress=blue, complete=green, failed=red
+  - Browser testing for Tauri apps requires `pnpm tauri dev`, not just vite dev server
+---

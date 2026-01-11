@@ -75,10 +75,12 @@ export function StoryList({ projectPath }: StoryListProps) {
     return maxPriority + 1;
   };
 
+  const sortedStories = [...stories].sort((a, b) => a.priority - b.priority);
+
   return (
     <>
       <div className="space-y-3">
-        {stories.map((story) => (
+        {sortedStories.map((story) => (
           <StoryCard
             key={story.id}
             story={story}
