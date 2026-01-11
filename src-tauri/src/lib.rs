@@ -104,6 +104,17 @@ pub struct AgentExitEvent {
     pub success: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPlugin {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    #[serde(rename = "argsTemplate")]
+    pub args_template: Vec<String>,
+    #[serde(rename = "workingDir")]
+    pub working_dir: String,
+}
+
 fn get_projects_file_path(app: &AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app
         .path()
@@ -114,6 +125,37 @@ fn get_projects_file_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to create app data directory: {}", e))?;
     
     Ok(app_data_dir.join("projects.json"))
+}
+
+fn get_agents_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    
+    Ok(app_data_dir.join("agents.json"))
+}
+
+fn get_default_agents() -> Vec<AgentPlugin> {
+    vec![
+        AgentPlugin {
+            id: "amp".to_string(),
+            name: "Amp".to_string(),
+            command: "amp".to_string(),
+            args_template: vec!["-p".to_string(), "{{prompt}}".to_string()],
+            working_dir: "project".to_string(),
+        },
+        AgentPlugin {
+            id: "claude-code".to_string(),
+            name: "Claude Code".to_string(),
+            command: "claude".to_string(),
+            args_template: vec!["-p".to_string(), "{{prompt}}".to_string()],
+            working_dir: "project".to_string(),
+        },
+    ]
 }
 
 #[tauri::command]
@@ -280,6 +322,23 @@ fn save_project_settings(
         .map_err(|e| format!("Failed to write config.json: {}", e))?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn list_agents(app: AppHandle) -> Result<Vec<AgentPlugin>, String> {
+    let agents_path = get_agents_file_path(&app)?;
+
+    if !agents_path.exists() {
+        return Ok(get_default_agents());
+    }
+
+    let content = fs::read_to_string(&agents_path)
+        .map_err(|e| format!("Failed to read agents.json: {}", e))?;
+
+    let agents: Vec<AgentPlugin> = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse agents.json: {}", e))?;
+
+    Ok(agents)
 }
 
 #[tauri::command]
@@ -487,6 +546,7 @@ pub fn run() {
             save_prd,
             load_project_settings,
             save_project_settings,
+            list_agents,
             spawn_agent,
             wait_agent,
             kill_agent
