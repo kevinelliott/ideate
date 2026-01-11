@@ -40,3 +40,14 @@ Thread: https://ampcode.com/threads/T-019bab84-01eb-758b-9a4b-14253920f7ab
   - Don't include unused `get` parameter in zustand create callback - TypeScript will error
   - Use `crypto.randomUUID()` for generating unique IDs
 ---
+
+## 2026-01-10 - US-003
+Thread: https://ampcode.com/threads/T-019bab85-fb5d-7443-b0e7-b718a89c4b60
+- Implemented NewProjectModal component with all required fields
+- Files changed: src/components/NewProjectModal.tsx, src/App.tsx
+- **Learnings for future iterations:**
+  - Modal uses fixed positioning with bg-black/50 overlay for dimming
+  - Use `no-drag` class on modal content to prevent window dragging
+  - Input focus ring uses `focus:ring-2 focus:ring-accent` pattern
+  - Clicking overlay triggers close via `e.target === e.currentTarget` check
+---

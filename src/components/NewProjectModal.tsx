@@ -1,10 +1,12 @@
+import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { documentDir } from "@tauri-apps/api/path";
+
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (name: string, description: string, directory: string | null) => void;
 }
-
-import { useState } from "react";
 
 export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalProps) {
   const [name, setName] = useState("");
@@ -28,8 +30,21 @@ export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalPr
     }
   };
 
-  const handleDirectoryPick = () => {
-    console.log("Directory picker will be implemented in US-004");
+  const handleDirectoryPick = async () => {
+    try {
+      const defaultPath = await documentDir();
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath,
+        title: "Choose Project Directory",
+      });
+      if (selected) {
+        setDirectory(selected);
+      }
+    } catch (error) {
+      console.error("Failed to open directory picker:", error);
+    }
   };
 
   return (
