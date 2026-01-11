@@ -381,3 +381,18 @@ Thread: https://ampcode.com/threads/T-019babe7-d1da-753d-b91e-084a7cecf6fb
   - Always-dark components (like terminals) can use hardcoded colors like #1e1e1e
   - Modal overlays with bg-black/50 work correctly in both modes
 ---
+
+## 2026-01-10 - US-027
+Thread: https://ampcode.com/threads/T-019babe9-6406-733c-956b-e06525768900
+- Implemented right-click context menu for projects in sidebar
+- Created ProjectContextMenu component with Reveal in Finder, Rename, Delete options
+- Created RenameProjectModal for renaming projects
+- Created DeleteProjectModal for delete confirmation
+- Reveal in Finder uses @tauri-apps/plugin-shell open() function
+- Files changed: src/components/ProjectContextMenu.tsx (new), src/components/RenameProjectModal.tsx (new), src/components/DeleteProjectModal.tsx (new), src/components/Sidebar.tsx
+- **Learnings for future iterations:**
+  - Use onContextMenu event handler for right-click menu
+  - Use @tauri-apps/plugin-shell open() to reveal files/folders in Finder
+  - Context menu uses fixed positioning with x/y from MouseEvent.clientX/clientY
+  - Click outside detection via mousedown listener checking event.target containment
+---
