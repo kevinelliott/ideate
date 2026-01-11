@@ -100,3 +100,19 @@ Thread: https://ampcode.com/threads/T-019bac25-3a43-7228-9b0e-aceaaa706f1d
   - Status colors defined in statusColors object: idle=gray, generating=blue, ready=green, error=red
   - Context menu, rename, and delete modals are already integrated into Sidebar
 ---
+
+## 2026-01-11 - US-008
+Thread: https://ampcode.com/threads/T-019bac27-9be2-718a-8850-67c6b7c32796
+- Verified projects persistence already fully implemented
+- All acceptance criteria verified:
+  - Projects saved to ~/Library/Application Support/Ideate/projects.json via get_projects_file_path() ✓
+  - Projects loaded on app startup via loadProjects() in App.tsx useEffect ✓
+  - Rust command save_projects (equivalent to save_projects_index) implemented ✓
+  - Rust command load_projects (equivalent to load_projects_index) returns projects ✓
+  - cargo check passes in src-tauri ✓
+- Files involved: src-tauri/src/lib.rs, src/stores/projectStore.ts, src/App.tsx
+- **Learnings for future iterations:**
+  - Commands named save_projects/load_projects (not save_projects_index/load_projects_index)
+  - Auto-save triggered after addProject, removeProject, updateProject actions
+  - Uses Tauri's app.path().app_data_dir() for cross-platform app data location
+---
