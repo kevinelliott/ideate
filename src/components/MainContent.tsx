@@ -4,6 +4,22 @@ import { useProjectStore } from "../stores/projectStore";
 import { usePrdStore, type Story } from "../stores/prdStore";
 import { ProjectView } from "./ProjectView";
 
+interface Prd {
+  project?: string
+  branchName?: string
+  description?: string
+  userStories: Array<{
+    id: string
+    title: string
+    description: string
+    acceptanceCriteria: string[]
+    priority: number
+    passes: boolean
+    status?: string
+    notes: string
+  }>
+}
+
 export function MainContent() {
   const projects = useProjectStore((state) => state.projects);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
@@ -21,11 +37,20 @@ export function MainContent() {
       }
 
       try {
-        const stories = await invoke<Story[] | null>("load_prd", {
+        const prd = await invoke<Prd | null>("load_prd", {
           projectPath: activeProject.path,
         });
 
-        if (stories) {
+        if (prd && prd.userStories && prd.userStories.length > 0) {
+          const stories: Story[] = prd.userStories.map(story => ({
+            id: story.id,
+            title: story.title,
+            description: story.description,
+            acceptanceCriteria: story.acceptanceCriteria,
+            priority: story.priority,
+            passes: story.passes,
+            notes: story.notes
+          }));
           setStories(stories);
           setStatus("ready");
         } else {

@@ -17,6 +17,8 @@ Started: Sat Jan 11 2026
 - SF Pro font family set in body CSS
 - Base component classes: .btn (primary, secondary, destructive, ghost, sm, lg), .input, .textarea, .select, .card, .card-interactive
 - Terminal UI uses @xterm/xterm with @xterm/addon-fit for responsive sizing
+- load_prd returns Prd struct with userStories array (not Story[] directly)
+- Agent spawning: invoke spawn_agent then wait_agent, use defaultPlugins for agent config
 ---
 
 ## 2026-01-11 - US-003
@@ -284,4 +286,26 @@ Thread: https://ampcode.com/threads/T-019bac4b-d061-71af-a27c-99a345709b28
   - Auto-scroll detection: buffer.viewportY >= buffer.baseY indicates terminal is at bottom
   - Terminal converts EOL automatically with convertEol: true option
   - Browser testing of Tauri apps limited in Vite dev mode without Tauri backend
+---
+
+## 2026-01-11 - US-018
+Thread: https://ampcode.com/threads/T-019bac50-938c-75fd-9b43-068a3cfab5ff
+- Implemented PRD generation via AI agent
+- Created usePrdGeneration hook for managing agent spawning and PRD loading
+- Updated ProjectView to use the hook and handle generation errors with retry option
+- Fixed MainContent to correctly parse Prd response (userStories array, not Story[])
+- All acceptance criteria verified:
+  - Generate PRD button spawns configured agent ✓
+  - Agent receives prompt with idea and PRD generation instructions ✓
+  - Agent output streamed to terminal panel (via existing event system) ✓
+  - On completion, generated prd.json loaded and displayed ✓
+  - Errors shown with retry option ✓
+  - pnpm run build passes ✓
+- Files changed: src/hooks/usePrdGeneration.ts (new), src/components/ProjectView.tsx, src/components/MainContent.tsx
+- **Learnings for future iterations:**
+  - load_prd Rust command returns Option<Prd> not Story[], need to extract userStories
+  - Agent plugin args use {{prompt}} template for substitution
+  - Use wait_agent to wait for agent completion before loading PRD
+  - Error handling should set status to 'error' and provide retry mechanism
+  - Clear logs before starting new PRD generation for clean output
 ---
