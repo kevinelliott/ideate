@@ -6,6 +6,8 @@
 - Use `pnpm run build` (runs tsc && vite build) for frontend typecheck/build
 - Use `cargo build` in src-tauri for Rust backend builds
 - SF Pro font family set in body CSS
+- Components go in src/components/ directory
+- Use .drag-region class for titlebar drag areas, .no-drag for buttons inside
 
 ---
 
@@ -14,4 +16,14 @@ Thread: https://ampcode.com/threads/T-019bab7f-d939-7764-bbdc-58a7742152ce
 - Created prd.json with 28 properly-sized user stories
 - Stories ordered by dependency: layout → stores → UI components → Tauri commands → build loop
 - Each story is scoped to be completable in one iteration
+---
+
+## 2026-01-10 - US-001
+Thread: https://ampcode.com/threads/T-019bab7f-d939-7764-bbdc-58a7742152ce
+- Implemented sidebar layout shell with 3-column structure
+- Files changed: src/App.tsx, src/components/Sidebar.tsx, src/components/MainContent.tsx, src/index.css
+- **Learnings for future iterations:**
+  - Sidebar uses backdrop-blur-xl for vibrancy effect
+  - Added .drag-region and .no-drag CSS classes for macOS window dragging
+  - Tailwind v4 uses @theme directive for custom color definitions
 ---
