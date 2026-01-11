@@ -227,3 +227,16 @@ Thread: https://ampcode.com/threads/T-019babc4-d254-741c-87dc-44c13099969a
   - Use argsTemplate array with {{prompt}} placeholder for agent CLI args
   - WorkingDirBehavior allows specifying if agent runs from project dir or custom path
 ---
+
+## 2026-01-10 - US-017
+Thread: https://ampcode.com/threads/T-019babc6-3ca1-7422-a8da-6e202eff4a0d
+- Implemented AgentSettings component with agent and autonomy level dropdowns
+- Created Tauri commands: load_project_settings, save_project_settings
+- Settings saved to .ideate/config.json, preserving existing config fields
+- Added AgentSettings section to ProjectView above story list
+- Files changed: src/components/AgentSettings.tsx (new), src/components/ProjectView.tsx, src-tauri/src/lib.rs
+- **Learnings for future iterations:**
+  - Use ProjectSettings struct for loading partial config data (agent + autonomy only)
+  - Save settings preserves existing config by reading file first, then updating fields
+  - Dropdowns use focus:ring-2 focus:ring-accent pattern consistent with other inputs
+---
