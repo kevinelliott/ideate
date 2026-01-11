@@ -7,6 +7,9 @@
   --accent: 0 122 255;
   --border: 229 229 234;
   --card: 250 250 250;
+  --destructive: 255 59 48;
+  --success: 52 199 89;
+  --warning: 255 149 0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +20,9 @@
     --accent: 10 132 255;
     --border: 56 56 58;
     --card: 44 44 46;
+    --destructive: 255 69 58;
+    --success: 48 209 88;
+    --warning: 255 159 10;
   }
 }
 
@@ -45,4 +51,208 @@ body {
   --color-accent: rgb(var(--accent));
   --color-border: rgb(var(--border));
   --color-card: rgb(var(--card));
+  --color-destructive: rgb(var(--destructive));
+  --color-success: rgb(var(--success));
+  --color-warning: rgb(var(--warning));
+
+  /* 4px/8px spacing scale */
+  --spacing-0: 0px;
+  --spacing-0-5: 2px;
+  --spacing-1: 4px;
+  --spacing-1-5: 6px;
+  --spacing-2: 8px;
+  --spacing-2-5: 10px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+
+  /* Border radius scale */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+}
+
+/* Base Button Styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.25;
+  transition: all 150ms ease;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--background)), 0 0 0 4px rgb(var(--accent));
+}
+
+.btn-primary {
+  background-color: rgb(var(--accent));
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: rgb(var(--secondary));
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: rgb(var(--border) / 0.5);
+}
+
+.btn-destructive {
+  background-color: rgb(var(--destructive) / 0.2);
+  color: rgb(var(--destructive));
+}
+
+.btn-destructive:hover:not(:disabled) {
+  background-color: rgb(var(--destructive) / 0.3);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: rgb(var(--foreground));
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: rgb(var(--border) / 0.3);
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.btn-lg {
+  padding: 12px 24px;
+  font-size: 16px;
+}
+
+/* Base Input Styles */
+.input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--border));
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.input::placeholder {
+  color: rgb(var(--secondary) / 0.6);
+}
+
+.input:focus {
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.2);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.textarea {
+  resize: none;
+  min-height: 80px;
+}
+
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+/* Base Card Styles */
+.card {
+  background-color: rgb(var(--card));
+  border: 1px solid rgb(var(--border));
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.card-interactive {
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.card-interactive:hover {
+  background-color: rgb(var(--border) / 0.3);
+}
+
+.card-interactive:active {
+  background-color: rgb(var(--border) / 0.5);
+}
+
+/* Base Label Styles */
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--secondary));
+  margin-bottom: 4px;
+}
+
+/* Base Badge Styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-default {
+  background-color: rgb(var(--secondary) / 0.2);
+  color: rgb(var(--secondary));
+}
+
+.badge-success {
+  background-color: rgb(var(--success) / 0.2);
+  color: rgb(var(--success));
+}
+
+.badge-warning {
+  background-color: rgb(var(--warning) / 0.2);
+  color: rgb(var(--warning));
+}
+
+.badge-destructive {
+  background-color: rgb(var(--destructive) / 0.2);
+  color: rgb(var(--destructive));
+}
+
+.badge-accent {
+  background-color: rgb(var(--accent) / 0.2);
+  color: rgb(var(--accent));
 }

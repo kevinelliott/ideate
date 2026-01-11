@@ -1,34 +1,35 @@
 {
   "project": "Ideate",
-  "branchName": "ralph/ideate-mvp",
-  "description": "AI-Powered App Development Platform - A native macOS app built with Tauri that transforms user ideas into complete applications",
+  "branchName": "ralph/ideate-macos-testing",
+  "description": "Comprehensive testing suite for the Ideate Tauri-based macOS application",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Initialize Tauri project with React + TypeScript",
-      "description": "As a developer, I need a Tauri v2 project scaffolded with React 19 and TypeScript so we have a foundation to build on.",
+      "title": "Development Build Verification",
+      "description": "As a developer, I want to verify the development build compiles and launches so that I know the dev environment is working.",
       "acceptanceCriteria": [
-        "Tauri v2 project created with React 19 + TypeScript frontend",
-        "Tailwind CSS installed and configured",
-        "Basic window opens with placeholder content",
-        "pnpm run tauri dev starts the app successfully",
-        "cargo check passes in src-tauri directory"
+        "pnpm install completes without errors",
+        "pnpm tauri dev compiles Rust backend without errors",
+        "pnpm tauri dev compiles TypeScript frontend without errors",
+        "Application window opens with correct title 'Ideate'",
+        "No panic or crash on startup",
+        "Console shows no critical errors",
+        "pnpm run build passes"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "Foundation story - everything depends on this"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Create Apple-style design tokens and base styles",
-      "description": "As a developer, I need design tokens and base styles following Apple HIG so the app has consistent styling.",
+      "title": "Release Build Verification",
+      "description": "As a developer, I want to verify the release build compiles so that I know production builds work.",
       "acceptanceCriteria": [
-        "Tailwind config extended with Apple-inspired color palette (semantic colors)",
-        "SF Pro font family configured (with system fallbacks)",
-        "4px/8px spacing scale defined",
-        "Light/dark mode CSS variables set up",
-        "Base component styles created (buttons, inputs, cards)",
-        "pnpm run build passes"
+        "pnpm tauri build completes without errors",
+        "Release binary is created in src-tauri/target/release/",
+        "Release binary launches without errors",
+        "Application window opens correctly",
+        "No panic or crash on startup"
       ],
       "priority": 2,
       "passes": false,
@@ -36,15 +37,14 @@
     },
     {
       "id": "US-003",
-      "title": "Create sidebar layout component",
-      "description": "As a user, I want a sidebar layout so I can navigate between projects.",
+      "title": "DMG Packaging Verification",
+      "description": "As a developer, I want to verify the DMG installer is created correctly so that the app can be distributed.",
       "acceptanceCriteria": [
-        "Three-column layout: sidebar (240px) + main content + optional inspector",
-        "Sidebar has vibrancy/translucent background effect",
-        "Native macOS window controls (traffic lights) integrated",
-        "Sidebar shows 'Projects' header and placeholder project list",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
+        "DMG file is generated in src-tauri/target/release/bundle/dmg/",
+        "DMG can be mounted on macOS",
+        "App can be dragged to Applications folder",
+        "App launches from Applications folder",
+        "App icon displays correctly in Finder and Dock"
       ],
       "priority": 3,
       "passes": false,
@@ -52,14 +52,16 @@
     },
     {
       "id": "US-004",
-      "title": "Set up Zustand store for project state",
-      "description": "As a developer, I need state management so project data can be shared across components.",
+      "title": "Sidebar and Project List UI",
+      "description": "As a user, I want to see the sidebar with project list so I can navigate between projects.",
       "acceptanceCriteria": [
-        "Zustand installed and configured",
-        "ProjectStore created with: projects array, selectedProjectId, actions",
-        "Project type defined: id, name, path, status, createdAt",
-        "Actions: addProject, removeProject, selectProject, updateProject",
-        "pnpm run build passes"
+        "Sidebar renders on the left side of the window",
+        "New Project button is visible and clickable",
+        "Project list displays any existing projects",
+        "Clicking a project selects it and highlights it",
+        "Selected project shows in main content area",
+        "Verify in browser using dev-browser skill",
+        "Check color contrast meets WCAG AA standards"
       ],
       "priority": 4,
       "passes": false,
@@ -67,14 +69,18 @@
     },
     {
       "id": "US-005",
-      "title": "Create Rust backend for project folder operations",
-      "description": "As a developer, I need Rust commands to create and manage project folders.",
+      "title": "Create New Project",
+      "description": "As a user, I want to create a new project so I can start managing stories.",
       "acceptanceCriteria": [
-        "Tauri command: create_project(name, path) creates folder with .ideate/ subdirectory",
-        "Tauri command: list_projects(base_path) returns project metadata",
-        "Project metadata stored in .ideate/config.json",
-        "Error handling for invalid paths or permissions",
-        "cargo check passes in src-tauri"
+        "Clicking New Project button opens modal",
+        "Modal has fields for name, description, and directory picker",
+        "Directory picker opens native macOS folder dialog",
+        "Submitting with valid data creates project folder on disk",
+        ".ideate/config.json is created in project folder",
+        "New project appears in sidebar",
+        "Modal closes after successful creation",
+        "Verify in browser using dev-browser skill",
+        "Tab navigation works through all form fields"
       ],
       "priority": 5,
       "passes": false,
@@ -82,15 +88,15 @@
     },
     {
       "id": "US-006",
-      "title": "Create new project modal UI",
-      "description": "As a user, I want to create a new project by entering name and selecting a directory.",
+      "title": "Rename Project",
+      "description": "As a user, I want to rename an existing project so I can correct mistakes.",
       "acceptanceCriteria": [
-        "New Project button in sidebar opens modal",
-        "Modal has: project name input, directory picker button, create/cancel buttons",
-        "Directory picker uses Tauri's native file dialog",
-        "Create button calls Rust backend to create project",
-        "Modal closes and project appears in sidebar on success",
-        "pnpm run build passes",
+        "Right-click on project shows context menu",
+        "Rename option is available in context menu",
+        "Clicking Rename opens rename modal",
+        "Current name is pre-filled in input",
+        "Submitting updates project name in sidebar",
+        "Project persists after app restart",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 6,
@@ -99,14 +105,14 @@
     },
     {
       "id": "US-007",
-      "title": "Display projects in sidebar list",
-      "description": "As a user, I want to see all my projects in the sidebar so I can switch between them.",
+      "title": "Delete Project",
+      "description": "As a user, I want to delete a project so I can remove unwanted items.",
       "acceptanceCriteria": [
-        "Projects listed in sidebar with name and status icon",
-        "Click project to select it (highlight selected)",
-        "Selected project ID stored in Zustand",
-        "Empty state shown when no projects exist",
-        "pnpm run build passes",
+        "Right-click on project shows context menu with Delete option",
+        "Clicking Delete shows confirmation modal",
+        "Confirming deletion removes project from sidebar",
+        "Project no longer appears after app restart",
+        "Canceling deletion keeps project intact",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 7,
@@ -115,14 +121,14 @@
     },
     {
       "id": "US-008",
-      "title": "Persist projects list to Application Support",
-      "description": "As a user, I want my projects list to persist across app restarts.",
+      "title": "Project Persistence",
+      "description": "As a user, I want my projects to persist across app restarts so I don't lose my work.",
       "acceptanceCriteria": [
-        "Projects saved to ~/Library/Application Support/Ideate/projects.json",
-        "Projects loaded on app startup",
-        "Rust command: save_projects_index(projects)",
-        "Rust command: load_projects_index() returns projects",
-        "cargo check passes in src-tauri"
+        "Create a new project and close the app",
+        "Reopen the app",
+        "Previously created project appears in sidebar",
+        "projects.json exists in app data directory",
+        "Project data matches what was created"
       ],
       "priority": 8,
       "passes": false,
@@ -130,14 +136,16 @@
     },
     {
       "id": "US-009",
-      "title": "Create PRD types and schema",
-      "description": "As a developer, I need TypeScript types for PRD structure so we can work with user stories.",
+      "title": "Story List Display",
+      "description": "As a user, I want to see the list of stories for a project so I can track work items.",
       "acceptanceCriteria": [
-        "PRD type defined with: project, description, branchName, userStories",
-        "UserStory type: id, title, description, acceptanceCriteria, priority, passes, notes",
-        "StoryStatus enum: pending, in-progress, complete, failed, canceled",
-        "Types exported from shared types file",
-        "pnpm run build passes"
+        "Selecting a project shows story list in main content",
+        "Stories display title, description, and priority",
+        "Acceptance criteria are visible on story cards",
+        "Pass/fail status is indicated visually",
+        "Empty state shows when no stories exist",
+        "Verify in browser using dev-browser skill",
+        "Story cards have sufficient color contrast"
       ],
       "priority": 9,
       "passes": false,
@@ -145,14 +153,16 @@
     },
     {
       "id": "US-010",
-      "title": "Create Rust commands for PRD file operations",
-      "description": "As a developer, I need Rust commands to read and write prd.json files.",
+      "title": "Create New Story",
+      "description": "As a user, I want to create a new story so I can add work items to a project.",
       "acceptanceCriteria": [
-        "Tauri command: load_prd(project_path) reads .ideate/prd.json",
-        "Tauri command: save_prd(project_path, prd) writes .ideate/prd.json",
-        "Returns typed PRD structure to frontend",
-        "Handles missing file gracefully (returns null)",
-        "cargo check passes in src-tauri"
+        "Add Story or + button is visible when project selected",
+        "Clicking button opens create story modal",
+        "Modal has fields for title, description, priority, acceptance criteria",
+        "Submitting creates story and adds to list",
+        "Story persists to .ideate/prd.json in project folder",
+        "Verify in browser using dev-browser skill",
+        "Form fields are keyboard accessible"
       ],
       "priority": 10,
       "passes": false,
@@ -160,15 +170,14 @@
     },
     {
       "id": "US-011",
-      "title": "Create story list view component",
-      "description": "As a user, I want to see all user stories from my PRD displayed as cards.",
+      "title": "Edit Story",
+      "description": "As a user, I want to edit an existing story so I can update details.",
       "acceptanceCriteria": [
-        "Stories displayed as cards in main content area",
-        "Each card shows: story ID, title, description preview, AC count",
-        "Status badge on each card (pending/in-progress/complete/failed)",
-        "Stories ordered by priority",
-        "Empty state when no PRD exists",
-        "pnpm run build passes",
+        "Clicking edit on a story opens edit modal",
+        "All current values are pre-filled",
+        "Changes are saved when submitted",
+        "Updated story displays in list",
+        "Changes persist to prd.json",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 11,
@@ -177,14 +186,13 @@
     },
     {
       "id": "US-012",
-      "title": "Create story detail panel",
-      "description": "As a user, I want to click a story to see its full details.",
+      "title": "Delete Story",
+      "description": "As a user, I want to delete a story so I can remove completed or invalid items.",
       "acceptanceCriteria": [
-        "Click story card to select it",
-        "Selected story shows in inspector panel (right side)",
-        "Inspector shows: full title, description, all acceptance criteria",
-        "Acceptance criteria shown as checklist",
-        "pnpm run build passes",
+        "Delete button/action is available on story cards",
+        "Confirmation is shown before deletion",
+        "Story is removed from list after confirmation",
+        "Deletion persists to prd.json",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 12,
@@ -193,15 +201,16 @@
     },
     {
       "id": "US-013",
-      "title": "Create idea input view for new projects",
-      "description": "As a user, I want to enter my project idea after creating a project.",
+      "title": "Agent Settings Configuration",
+      "description": "As a user, I want to configure agent settings so I can customize how agents run.",
       "acceptanceCriteria": [
-        "New projects show idea input view in main area",
-        "Large textarea for describing the idea",
-        "Generate PRD button to trigger AI generation",
-        "Loading state while generating",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
+        "Agent settings panel is accessible from project view",
+        "Can select agent executable (amp, claude, etc.)",
+        "Can set autonomy level",
+        "Settings persist to .ideate/config.json",
+        "Settings load correctly when project is selected",
+        "Verify in browser using dev-browser skill",
+        "Dropdown/select elements are keyboard navigable"
       ],
       "priority": 13,
       "passes": false,
@@ -209,14 +218,15 @@
     },
     {
       "id": "US-014",
-      "title": "Create plugin manifest schema",
-      "description": "As a developer, I need a schema for agent plugins so we can support multiple CLI agents.",
+      "title": "Spawn Agent with Real Executable",
+      "description": "As a user, I want to spawn a real agent (amp or claude) so I can run automated tasks.",
       "acceptanceCriteria": [
-        "Plugin type: name, command, args template, workingDirBehavior",
-        "Built-in plugins defined for: Amp, Claude Code",
-        "Plugins stored in agents.json config",
-        "Rust command: list_agents() returns available agents",
-        "cargo check passes in src-tauri"
+        "Configure agent to use amp or claude executable",
+        "Click run/build button to spawn agent",
+        "Agent process starts successfully",
+        "Process ID is returned and tracked",
+        "No errors in Rust backend when spawning",
+        "Agent runs in the correct working directory (project path)"
       ],
       "priority": 14,
       "passes": false,
@@ -224,14 +234,16 @@
     },
     {
       "id": "US-015",
-      "title": "Create agent process spawning in Rust",
-      "description": "As a developer, I need to spawn CLI agent processes from Rust.",
+      "title": "Agent Output Streaming",
+      "description": "As a user, I want to see agent output in real-time so I can monitor progress.",
       "acceptanceCriteria": [
-        "Tauri command: spawn_agent(agent_name, working_dir, prompt) spawns process",
-        "Uses tokio::process::Command for async execution",
-        "Captures stdout and stderr",
-        "Returns process handle/id for management",
-        "cargo check passes in src-tauri"
+        "Log panel displays in the UI",
+        "stdout from agent appears in log panel",
+        "stderr from agent appears in log panel",
+        "Output updates in real-time without manual refresh",
+        "Large output doesn't crash the app",
+        "Verify in browser using dev-browser skill",
+        "Log panel is scrollable and readable"
       ],
       "priority": 15,
       "passes": false,
@@ -239,14 +251,15 @@
     },
     {
       "id": "US-016",
-      "title": "Stream agent output to frontend",
-      "description": "As a user, I want to see real-time output from running agents.",
+      "title": "Kill Running Agent",
+      "description": "As a user, I want to stop a running agent so I can cancel tasks.",
       "acceptanceCriteria": [
-        "Agent stdout/stderr streamed via Tauri events",
-        "Frontend receives output events in real-time",
-        "Event payload includes: process_id, output_type (stdout/stderr), content",
-        "Process completion event sent when agent exits",
-        "cargo check passes in src-tauri"
+        "Stop/Kill button is visible when agent is running",
+        "Clicking stop sends SIGTERM to agent process",
+        "Agent process terminates within 5 seconds (or SIGKILL after timeout)",
+        "UI updates to show agent is no longer running",
+        "No orphaned processes remain",
+        "Can spawn a new agent after killing previous one"
       ],
       "priority": 16,
       "passes": false,
@@ -254,14 +267,13 @@
     },
     {
       "id": "US-017",
-      "title": "Create terminal log panel component",
-      "description": "As a user, I want a terminal-style panel showing agent output.",
+      "title": "Agent Exit Handling",
+      "description": "As a user, I want to know when an agent finishes so I can see results.",
       "acceptanceCriteria": [
-        "Terminal panel component using xterm.js",
-        "Renders incoming output events",
-        "ANSI color codes displayed correctly",
-        "Auto-scroll to bottom (with manual scroll override)",
-        "pnpm run build passes",
+        "When agent exits naturally, exit event is emitted",
+        "Exit code is displayed in UI",
+        "Success/failure is indicated visually",
+        "UI state updates (run button re-enabled, etc.)",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 17,
@@ -270,15 +282,15 @@
     },
     {
       "id": "US-018",
-      "title": "Trigger PRD generation via agent",
-      "description": "As a user, I want to generate a PRD from my idea using an AI agent.",
+      "title": "Keyboard Navigation",
+      "description": "As a user, I want to navigate the app with keyboard so I can work efficiently.",
       "acceptanceCriteria": [
-        "Generate PRD button spawns configured agent",
-        "Agent receives prompt with idea and PRD generation instructions",
-        "Agent output streamed to terminal panel",
-        "On completion, generated prd.json loaded and displayed",
-        "Errors shown with retry option",
-        "pnpm run build passes"
+        "Cmd+N opens new project modal",
+        "Escape closes open modals",
+        "Tab navigates through interactive elements",
+        "Enter activates focused buttons",
+        "Focus indicators are visible on all interactive elements",
+        "Verify keyboard shortcuts work in dev-browser"
       ],
       "priority": 18,
       "passes": false,
@@ -286,16 +298,15 @@
     },
     {
       "id": "US-019",
-      "title": "Create story edit modal",
-      "description": "As a user, I want to edit a story's details.",
+      "title": "Accessibility Audit",
+      "description": "As a user with accessibility needs, I want the app to be accessible so I can use it effectively.",
       "acceptanceCriteria": [
-        "Edit button on story detail panel opens modal",
-        "Modal has: title input, description textarea, acceptance criteria list",
-        "Can add/remove/edit acceptance criteria",
-        "Save persists to prd.json via Rust command",
-        "Cancel discards changes",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
+        "All interactive elements have visible focus states",
+        "Color contrast ratio meets WCAG AA (4.5:1 for text)",
+        "Form inputs have associated labels",
+        "Buttons have accessible names",
+        "Modal dialogs trap focus appropriately",
+        "No keyboard traps exist"
       ],
       "priority": 19,
       "passes": false,
@@ -303,180 +314,16 @@
     },
     {
       "id": "US-020",
-      "title": "Add new story functionality",
-      "description": "As a user, I want to add a new story to the PRD.",
+      "title": "Error Handling and Edge Cases",
+      "description": "As a user, I want the app to handle errors gracefully so I don't lose work.",
       "acceptanceCriteria": [
-        "Add Story button at bottom of story list",
-        "Opens story creation modal (reuses edit modal)",
-        "Auto-generates next sequential ID (US-XXX)",
-        "New story appended to PRD with priority = last + 1",
-        "Story appears in list immediately",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
+        "Creating project in read-only directory shows error message",
+        "Invalid JSON in config files doesn't crash app",
+        "Missing project folder is handled gracefully",
+        "App recovers from agent spawn failures",
+        "No unhandled promise rejections in console"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-021",
-      "title": "Delete story functionality",
-      "description": "As a user, I want to delete a story from the PRD.",
-      "acceptanceCriteria": [
-        "Delete button (trash icon) on story card",
-        "Confirmation dialog before deletion",
-        "Story removed from prd.json on confirm",
-        "Story list updates immediately",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 21,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-022",
-      "title": "Create autonomy settings UI",
-      "description": "As a user, I want to configure autonomy level for the build loop.",
-      "acceptanceCriteria": [
-        "Autonomy selector in project settings area",
-        "Options: Fully Autonomous, Pause Between Stories, Manual Per Story",
-        "Setting saved to .ideate/config.json",
-        "Default is Pause Between Stories",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 22,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-023",
-      "title": "Create build loop orchestration",
-      "description": "As a developer, I need the build loop to execute stories sequentially.",
-      "acceptanceCriteria": [
-        "Build loop tracks current story index",
-        "Spawns agent for current story with story context",
-        "Updates story status during execution (pending -> in-progress -> complete/failed)",
-        "Respects autonomy setting for pausing",
-        "Handles agent success/failure appropriately",
-        "pnpm run build passes"
-      ],
-      "priority": 23,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-024",
-      "title": "Create build controls UI",
-      "description": "As a user, I want Start/Pause/Resume/Cancel buttons for the build loop.",
-      "acceptanceCriteria": [
-        "Start Build button visible when PRD has stories",
-        "Pause button stops after current story",
-        "Resume continues from next pending story",
-        "Cancel terminates running agent",
-        "Button states reflect build loop state",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 24,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-025",
-      "title": "Create retry failed story functionality",
-      "description": "As a user, I want to retry a failed story.",
-      "acceptanceCriteria": [
-        "Retry button on failed story cards",
-        "Clears failure state and re-queues story",
-        "Retry count displayed on card",
-        "Previous logs preserved (collapsed section)",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 25,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-026",
-      "title": "Save and restore project state",
-      "description": "As a user, I want project state to persist across restarts.",
-      "acceptanceCriteria": [
-        "Project state saved to .ideate/state.json on changes",
-        "State includes: current story, story statuses, build phase",
-        "State restored when project loaded",
-        "Corrupt state handled gracefully",
-        "cargo check passes in src-tauri"
-      ],
-      "priority": 26,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-027",
-      "title": "Create global preferences window",
-      "description": "As a user, I want to configure global app preferences.",
-      "acceptanceCriteria": [
-        "Cmd+, opens preferences window",
-        "Settings: default agent, default autonomy, log buffer size",
-        "Agent CLI paths configurable",
-        "Settings saved to ~/Library/Application Support/Ideate/preferences.json",
-        "Changes apply immediately",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 27,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-028",
-      "title": "Add light/dark mode support",
-      "description": "As a user, I want the app to respect system light/dark mode.",
-      "acceptanceCriteria": [
-        "App follows system appearance preference",
-        "All components render correctly in both modes",
-        "Transition between modes is smooth",
-        "Optional theme override in preferences",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 28,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-029",
-      "title": "Add keyboard navigation",
-      "description": "As a user, I want keyboard shortcuts for common actions.",
-      "acceptanceCriteria": [
-        "Cmd+N: New project",
-        "Cmd+,: Preferences",
-        "Up/Down arrows: Navigate story list",
-        "Enter: Select story",
-        "Escape: Close modals",
-        "pnpm run build passes"
-      ],
-      "priority": 29,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-030",
-      "title": "Project context menu",
-      "description": "As a user, I want right-click context menu on projects.",
-      "acceptanceCriteria": [
-        "Right-click project in sidebar shows context menu",
-        "Options: Rename, Delete, Reveal in Finder",
-        "Rename opens inline edit",
-        "Delete shows confirmation dialog",
-        "Reveal opens project folder in Finder",
-        "pnpm run build passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 30,
       "passes": false,
       "notes": ""
     }
