@@ -104,3 +104,15 @@ Thread: https://ampcode.com/threads/T-019bab8d-f694-742b-a946-84e30b92c747
   - Empty states follow card pattern: rounded-xl border with centered content
   - ProjectView uses max-w-3xl mx-auto for constrained, centered content
 ---
+
+## 2026-01-10 - US-008
+Thread: https://ampcode.com/threads/T-019bab8f-70d2-72c9-8d41-bbeddf543983
+- Created src/stores/prdStore.ts with full PRD state management
+- Implemented Story type matching Ralph format: { id, title, description, acceptanceCriteria, priority, passes, notes }
+- Implemented status tracking: idle/generating/ready/error
+- Implemented actions: setStories, updateStory, addStory, removeStory, setStatus
+- Files changed: src/stores/prdStore.ts
+- **Learnings for future iterations:**
+  - Story ID generation uses priority for consistency: `US-${String(priority).padStart(3, '0')}`
+  - PrdStore follows same pattern as projectStore with create<StateType>((set) => ({...}))
+---
