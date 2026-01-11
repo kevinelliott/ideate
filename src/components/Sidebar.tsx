@@ -1,7 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useProjectStore, type ProjectStatus, type Project } from '../stores/projectStore'
 import { ProjectContextMenu } from './ProjectContextMenu'
-import { RenameProjectModal } from './RenameProjectModal'
 import { DeleteProjectModal } from './DeleteProjectModal'
 
 interface SidebarProps {
@@ -36,15 +35,9 @@ export function Sidebar({ onNewProject }: SidebarProps) {
     y: 0,
   })
 
-  const [renameModal, setRenameModal] = useState<{
-    isOpen: boolean
-    projectId: string
-    currentName: string
-  }>({
-    isOpen: false,
-    projectId: '',
-    currentName: '',
-  })
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean
@@ -55,6 +48,13 @@ export function Sidebar({ onNewProject }: SidebarProps) {
     projectId: '',
     projectName: '',
   })
+
+  useEffect(() => {
+    if (editingProjectId && editInputRef.current) {
+      editInputRef.current.focus()
+      editInputRef.current.select()
+    }
+  }, [editingProjectId])
 
   const handleContextMenu = (e: React.MouseEvent, project: Project) => {
     e.preventDefault()
@@ -72,11 +72,8 @@ export function Sidebar({ onNewProject }: SidebarProps) {
 
   const handleRename = () => {
     if (contextMenu.project) {
-      setRenameModal({
-        isOpen: true,
-        projectId: contextMenu.project.id,
-        currentName: contextMenu.project.name,
-      })
+      setEditingProjectId(contextMenu.project.id)
+      setEditingName(contextMenu.project.name)
     }
   }
 
@@ -90,9 +87,27 @@ export function Sidebar({ onNewProject }: SidebarProps) {
     }
   }
 
-  const handleSaveRename = (projectId: string, newName: string) => {
-    updateProject(projectId, { name: newName })
-    setRenameModal({ isOpen: false, projectId: '', currentName: '' })
+  const handleSaveInlineRename = () => {
+    if (editingProjectId && editingName.trim()) {
+      updateProject(editingProjectId, { name: editingName.trim() })
+    }
+    setEditingProjectId(null)
+    setEditingName('')
+  }
+
+  const handleCancelInlineRename = () => {
+    setEditingProjectId(null)
+    setEditingName('')
+  }
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSaveInlineRename()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      handleCancelInlineRename()
+    }
   }
 
   const handleConfirmDelete = () => {
@@ -141,6 +156,30 @@ export function Sidebar({ onNewProject }: SidebarProps) {
             <ul className="space-y-1">
               {projects.map((project) => {
                 const isActive = project.id === activeProjectId
+                const isEditing = project.id === editingProjectId
+
+                if (isEditing) {
+                  return (
+                    <li key={project.id}>
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        <span
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[project.status]}`}
+                          aria-label={`Status: ${project.status}`}
+                        />
+                        <input
+                          ref={editInputRef}
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onBlur={handleSaveInlineRename}
+                          onKeyDown={handleRenameKeyDown}
+                          className="flex-1 text-sm bg-background border border-accent rounded px-1 py-0.5 text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                        />
+                      </div>
+                    </li>
+                  )
+                }
+
                 return (
                   <li key={project.id}>
                     <button
@@ -178,14 +217,6 @@ export function Sidebar({ onNewProject }: SidebarProps) {
           onDelete={handleDelete}
         />
       )}
-
-      <RenameProjectModal
-        isOpen={renameModal.isOpen}
-        projectId={renameModal.projectId}
-        currentName={renameModal.currentName}
-        onSave={handleSaveRename}
-        onClose={() => setRenameModal({ isOpen: false, projectId: '', currentName: '' })}
-      />
 
       <DeleteProjectModal
         isOpen={deleteModal.isOpen}
