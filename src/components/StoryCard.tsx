@@ -7,6 +7,7 @@ interface StoryCardProps {
   onClick: (storyId: string) => void;
   onEdit: (story: Story) => void;
   onDelete: (story: Story) => void;
+  onRetry?: (story: Story) => void;
 }
 
 function getStoryStatus(story: Story, buildStatus: StoryBuildStatus | undefined): StoryBuildStatus {
@@ -33,12 +34,16 @@ const statusLabels: Record<StoryBuildStatus, string> = {
   failed: "Failed",
 };
 
-export function StoryCard({ story, isSelected = false, onClick, onEdit, onDelete }: StoryCardProps) {
+export function StoryCard({ story, isSelected = false, onClick, onEdit, onDelete, onRetry }: StoryCardProps) {
   const storyStatuses = useBuildStore((state) => state.storyStatuses);
+  const storyRetries = useBuildStore((state) => state.storyRetries);
   const buildStatus = storyStatuses[story.id];
+  const retryInfo = storyRetries[story.id];
   const status = getStoryStatus(story, buildStatus);
   const criteriaCount = story.acceptanceCriteria.length;
   const isInProgress = status === "in-progress";
+  const isFailed = status === "failed";
+  const retryCount = retryInfo?.retryCount ?? 0;
 
   const handleClick = () => {
     onClick(story.id);
@@ -54,14 +59,21 @@ export function StoryCard({ story, isSelected = false, onClick, onEdit, onDelete
     onDelete(story);
   };
 
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRetry?.(story);
+  };
+
   return (
     <div
       className={`border rounded-xl bg-card p-4 cursor-pointer transition-colors ${
         isInProgress 
           ? "border-blue-500 ring-2 ring-blue-500/20" 
-          : isSelected 
-            ? "border-accent ring-2 ring-accent/20" 
-            : "border-border hover:border-accent/50"
+          : isFailed
+            ? "border-red-500 ring-2 ring-red-500/20"
+            : isSelected 
+              ? "border-accent ring-2 ring-accent/20" 
+              : "border-border hover:border-accent/50"
       }`}
       onClick={handleClick}
     >
@@ -82,11 +94,41 @@ export function StoryCard({ story, isSelected = false, onClick, onEdit, onDelete
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {retryCount > 0 && (
+            <span className="px-2 py-0.5 text-xs font-medium bg-orange-500/20 text-orange-500 rounded">
+              {retryCount} {retryCount === 1 ? "retry" : "retries"}
+            </span>
+          )}
           <span
             className={`px-2 py-0.5 text-xs font-medium rounded ${statusColors[status]}`}
           >
             {statusLabels[status]}
           </span>
+          {isFailed && onRetry && (
+            <button
+              onClick={handleRetry}
+              className="p-1 rounded hover:bg-orange-500/10 text-orange-500 hover:text-orange-400 transition-colors"
+              aria-label="Retry story"
+              title="Retry this story"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16h5v5" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={handleEdit}
             className="p-1 rounded hover:bg-accent/10 text-secondary hover:text-accent transition-colors"

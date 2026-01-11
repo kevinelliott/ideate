@@ -18,11 +18,17 @@ export interface ProcessExitInfo {
   success: boolean
 }
 
+export interface StoryRetryInfo {
+  retryCount: number
+  previousLogs: LogEntry[][]
+}
+
 interface BuildState {
   status: BuildStatus
   currentStoryId: string | null
   currentProcessId: string | null
   storyStatuses: Record<string, StoryBuildStatus>
+  storyRetries: Record<string, StoryRetryInfo>
   logs: LogEntry[]
   lastExitInfo: ProcessExitInfo | null
   startBuild: () => void
@@ -36,6 +42,8 @@ interface BuildState {
   appendLog: (type: LogEntry['type'], content: string, processId?: string) => void
   clearLogs: () => void
   handleProcessExit: (exitInfo: ProcessExitInfo) => void
+  retryStory: (storyId: string) => void
+  getStoryRetryInfo: (storyId: string) => StoryRetryInfo | undefined
 }
 
 export const useBuildStore = create<BuildState>((set, get) => ({
@@ -43,6 +51,7 @@ export const useBuildStore = create<BuildState>((set, get) => ({
   currentStoryId: null,
   currentProcessId: null,
   storyStatuses: {},
+  storyRetries: {},
   logs: [],
   lastExitInfo: null,
 
@@ -98,7 +107,7 @@ export const useBuildStore = create<BuildState>((set, get) => ({
   },
 
   handleProcessExit: (exitInfo) => {
-    const { currentStoryId, currentProcessId } = get()
+    const { currentStoryId, currentProcessId, logs } = get()
     
     set({ lastExitInfo: exitInfo })
     
@@ -110,10 +119,60 @@ export const useBuildStore = create<BuildState>((set, get) => ({
       get().appendLog('system', exitMessage, exitInfo.processId)
       
       if (currentStoryId) {
-        get().setStoryStatus(currentStoryId, exitInfo.success ? 'complete' : 'failed')
+        const newStatus = exitInfo.success ? 'complete' : 'failed'
+        get().setStoryStatus(currentStoryId, newStatus)
+        
+        if (!exitInfo.success) {
+          const storyLogs = [...logs, {
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            type: 'system' as const,
+            content: exitMessage,
+            processId: exitInfo.processId,
+          }]
+          
+          set((state) => {
+            const existingRetryInfo = state.storyRetries[currentStoryId] || {
+              retryCount: 0,
+              previousLogs: [],
+            }
+            return {
+              storyRetries: {
+                ...state.storyRetries,
+                [currentStoryId]: {
+                  retryCount: existingRetryInfo.retryCount,
+                  previousLogs: [...existingRetryInfo.previousLogs, storyLogs],
+                },
+              },
+            }
+          })
+        }
       }
       
       set({ currentProcessId: null })
     }
+  },
+
+  retryStory: (storyId) => {
+    set((state) => {
+      const existingRetryInfo = state.storyRetries[storyId] || {
+        retryCount: 0,
+        previousLogs: [],
+      }
+      return {
+        storyStatuses: { ...state.storyStatuses, [storyId]: 'pending' },
+        storyRetries: {
+          ...state.storyRetries,
+          [storyId]: {
+            ...existingRetryInfo,
+            retryCount: existingRetryInfo.retryCount + 1,
+          },
+        },
+      }
+    })
+  },
+
+  getStoryRetryInfo: (storyId) => {
+    return get().storyRetries[storyId]
   },
 }))
