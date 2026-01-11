@@ -131,3 +131,20 @@ Thread: https://ampcode.com/threads/T-019bac29-6f42-7318-9e2d-2cfbb56be4ca
   - UserStory includes both 'passes' boolean (for PRD tracking) and 'status' (for UI display)
   - Types follow existing pattern in types directory with barrel export via index.ts
 ---
+
+## 2026-01-11 - US-010
+Thread: https://ampcode.com/threads/T-019bac2a-b8a8-70a8-9d93-11252dd106aa
+- Updated load_prd and save_prd Rust commands to work with full PRD structure
+- Changes implemented:
+  - load_prd(project_path) now returns Option<Prd> (full PRD structure, not just stories) ✓
+  - save_prd(project_path, prd) now accepts full Prd struct ✓
+  - Returns typed PRD structure to frontend ✓
+  - Handles missing file gracefully (returns None/null) ✓
+  - Added status field to Story struct with #[serde(default)] for backwards compatibility ✓
+  - cargo check passes in src-tauri ✓
+- Files changed: src-tauri/src/lib.rs
+- **Learnings for future iterations:**
+  - Use #[serde(default)] for optional fields in Rust structs for backwards compatibility with existing JSON files
+  - Story struct has optional status field: Option<String> to support both old and new PRD formats
+  - Prd and Story structs now have Clone trait for flexibility
+---

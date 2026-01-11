@@ -155,7 +155,7 @@
         "cargo check passes in src-tauri"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
