@@ -158,3 +158,16 @@ Thread: https://ampcode.com/threads/T-019babba-2983-779e-bc8b-80c1bc167a8f
   - load_prd returns Option<Vec<Story>> to handle missing prd.json gracefully
   - useEffect dependency should use activeProject?.path for proper reactive loading
 ---
+
+## 2026-01-10 - US-012
+Thread: https://ampcode.com/threads/T-019babbc-1a71-7648-b5e4-fcda6f7d83dd
+- Created Tauri `save_prd` command that writes prd.json to project .ideate folder
+- Command takes project_path and stories as arguments
+- Added `savePrd` action to prdStore that invokes the Tauri command
+- Success/error feedback via console.log/console.error
+- Files changed: src-tauri/src/lib.rs, src/stores/prdStore.ts
+- **Learnings for future iterations:**
+  - Use `get()` in zustand to access current state in async actions
+  - save_prd creates .ideate folder if it doesn't exist (fs::create_dir_all)
+  - Frontend components should call `savePrd(projectPath)` after modifying stories
+---

@@ -6,6 +6,7 @@ type StoryStatus = "pending" | "in-progress" | "complete" | "failed";
 interface StoryCardProps {
   story: Story;
   onClick: (storyId: string) => void;
+  onEdit: (story: Story) => void;
 }
 
 function getStoryStatus(story: Story): StoryStatus {
@@ -29,7 +30,7 @@ const statusLabels: Record<StoryStatus, string> = {
   failed: "Failed",
 };
 
-export function StoryCard({ story, onClick }: StoryCardProps) {
+export function StoryCard({ story, onClick, onEdit }: StoryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const status = getStoryStatus(story);
   const criteriaCount = story.acceptanceCriteria.length;
@@ -42,6 +43,11 @@ export function StoryCard({ story, onClick }: StoryCardProps) {
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsExpanded(false);
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit(story);
   };
 
   return (
@@ -65,26 +71,48 @@ export function StoryCard({ story, onClick }: StoryCardProps) {
             {statusLabels[status]}
           </span>
           {isExpanded && (
-            <button
-              onClick={handleClose}
-              className="p-1 rounded hover:bg-secondary/10 text-secondary hover:text-foreground transition-colors"
-              aria-label="Close"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            <>
+              <button
+                onClick={handleEdit}
+                className="p-1 rounded hover:bg-accent/10 text-secondary hover:text-accent transition-colors"
+                aria-label="Edit story"
               >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  <path d="m15 5 4 4" />
+                </svg>
+              </button>
+              <button
+                onClick={handleClose}
+                className="p-1 rounded hover:bg-secondary/10 text-secondary hover:text-foreground transition-colors"
+                aria-label="Close"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </>
           )}
         </div>
       </div>

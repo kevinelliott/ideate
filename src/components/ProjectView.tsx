@@ -19,7 +19,7 @@ export function ProjectView({ project }: ProjectViewProps) {
         <p className="text-secondary mb-8">{project.description}</p>
 
         {hasStories ? (
-          <StoryList />
+          <StoryList projectPath={project.path} />
         ) : (
           <div className="border border-border rounded-xl bg-card p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-background border border-border flex items-center justify-center">

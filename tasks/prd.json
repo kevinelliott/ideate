@@ -187,7 +187,7 @@
         "pnpm run build passes"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
