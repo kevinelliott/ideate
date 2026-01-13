@@ -82,6 +82,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   void useProcessStore((state) => state.processes) // Subscribe to process changes
   const getProcessesByProject = useProcessStore((state) => state.getProcessesByProject)
   const selectProcess = useProcessStore((state) => state.selectProcess)
+  const selectedProcessId = useProcessStore((state) => state.selectedProcessId)
 
   const ideas = useIdeasStore((state) => state.ideas)
   const selectedIdeaId = useIdeasStore((state) => state.selectedIdeaId)
@@ -502,10 +503,10 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                         {/* Requirements item */}
                         <li>
                           <div
-                            onClick={() => { selectIdea(null); setActiveProject(project.id); }}
+                          onClick={() => { selectIdea(null); selectProcess(null); setActiveProject(project.id); }}
                             className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
-                              isActive
-                                ? 'text-foreground hover:bg-card/50'
+                              isActive && !selectedProcessId
+                                ? 'text-foreground font-medium hover:bg-card/50'
                                 : 'text-secondary hover:text-foreground hover:bg-card/50'
                             }`}
                           >
@@ -517,22 +518,29 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                         </li>
 
                         {/* Running processes */}
-                        {runningProcesses.map((process) => (
-                          <li key={process.processId}>
-                            <button
-                              onClick={() => selectProcess(process.processId)}
-                              className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-secondary hover:text-foreground hover:bg-card/50 transition-colors cursor-pointer"
-                            >
-                              <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent animate-pulse" />
-                              <span className="text-muted flex-shrink-0">
-                                {processTypeIcons[process.type]}
-                              </span>
-                              <span className="truncate" title={process.label}>
-                                {process.label}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
+                        {runningProcesses.map((process) => {
+                          const isProcessSelected = selectedProcessId === process.processId;
+                          return (
+                            <li key={process.processId}>
+                              <button
+                                onClick={() => selectProcess(process.processId)}
+                                className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+                                  isProcessSelected
+                                    ? 'text-foreground font-medium hover:bg-card/50'
+                                    : 'text-secondary hover:text-foreground hover:bg-card/50'
+                                }`}
+                              >
+                                <span className="w-2 h-2 rounded-full flex-shrink-0 bg-accent animate-pulse" />
+                                <span className="text-muted flex-shrink-0">
+                                  {processTypeIcons[process.type]}
+                                </span>
+                                <span className="truncate" title={process.label}>
+                                  {process.label}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
 
                         {/* Show build status if paused but no processes */}
                         {isRunningOrPaused && runningProcesses.length === 0 && (

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useBuildStore } from "../stores/buildStore";
+import { usePanelStore } from "../stores/panelStore";
 import { useTheme } from "../hooks/useTheme";
 import { getTerminalTheme } from "../utils/terminalThemes";
 import { Terminal } from "@xterm/xterm";
@@ -12,17 +13,21 @@ interface LogPanelProps {
 
 const MIN_HEIGHT = 80;
 const MAX_HEIGHT = 400;
-const DEFAULT_HEIGHT = 150;
 const COLLAPSED_HEIGHT = 36;
+
 
 export function LogPanel({ projectId }: LogPanelProps) {
   const getProjectState = useBuildStore((state) => state.getProjectState);
   const projectState = getProjectState(projectId);
   const logs = projectState.logs;
   const status = projectState.status;
-  
+
   const { resolvedTheme } = useTheme();
-  
+
+  const panelState = usePanelStore((state) => state.getPanelState(projectId));
+  const setLogPanelCollapsed = usePanelStore((state) => state.setLogPanelCollapsed);
+  const setLogPanelHeight = usePanelStore((state) => state.setLogPanelHeight);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -30,9 +35,12 @@ export function LogPanel({ projectId }: LogPanelProps) {
   const [autoScroll, setAutoScroll] = useState(true);
   const lastLogCountRef = useRef(0);
   const lastProjectIdRef = useRef<string | null>(null);
-  
-  const [height, setHeight] = useState(DEFAULT_HEIGHT);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const height = panelState.logPanelHeight;
+  const isCollapsed = panelState.logPanelCollapsed;
+  const setHeight = (h: number) => setLogPanelHeight(projectId, h);
+  const setIsCollapsed = (c: boolean) => setLogPanelCollapsed(projectId, c);
+
   const [isResizing, setIsResizing] = useState(false);
   const startYRef = useRef(0);
   const startHeightRef = useRef(0);
@@ -57,7 +65,6 @@ export function LogPanel({ projectId }: LogPanelProps) {
     const handleMouseUp = () => {
       setIsResizing(false);
     };
-
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
 

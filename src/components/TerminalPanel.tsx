@@ -6,6 +6,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { useTheme } from "../hooks/useTheme";
 import { getTerminalTheme } from "../utils/terminalThemes";
 import { useTerminalStore } from "../stores/terminalStore";
+import { usePanelStore } from "../stores/panelStore";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalPanelProps {
@@ -29,9 +30,7 @@ interface TerminalExitPayload {
 
 const MIN_HEIGHT = 100;
 const MAX_HEIGHT = 500;
-const DEFAULT_HEIGHT = 200;
 const COLLAPSED_HEIGHT = 36;
-
 export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalWrapperRef = useRef<HTMLDivElement>(null);
@@ -42,8 +41,15 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
   const unlistenExitRef = useRef<UnlistenFn | null>(null);
   const currentTerminalIdRef = useRef<string | null>(null);
 
-  const [height, setHeight] = useState(DEFAULT_HEIGHT);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const panelState = usePanelStore((state) => state.getPanelState(projectId));
+  const setTerminalPanelCollapsed = usePanelStore((state) => state.setTerminalPanelCollapsed);
+  const setTerminalPanelHeight = usePanelStore((state) => state.setTerminalPanelHeight);
+
+  const height = panelState.terminalPanelHeight;
+  const isCollapsed = panelState.terminalPanelCollapsed;
+  const setHeight = (h: number) => setTerminalPanelHeight(projectId, h);
+  const setIsCollapsed = (c: boolean) => setTerminalPanelCollapsed(projectId, c);
+
   const [isResizing, setIsResizing] = useState(false);
   const [isSpawning, setIsSpawning] = useState(false);
   const startYRef = useRef(0);

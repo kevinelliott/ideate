@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDevServer } from "../hooks/useDevServer";
 import { useBuildStore } from "../stores/buildStore";
+import { usePanelStore } from "../stores/panelStore";
 
 interface PreviewPanelProps {
   projectId: string;
@@ -9,7 +10,6 @@ interface PreviewPanelProps {
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 800;
-const DEFAULT_WIDTH = 400;
 const COLLAPSED_WIDTH = 36;
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200];
@@ -21,15 +21,22 @@ const DEFAULT_ZOOM = 100;
 export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+
+  const panelState = usePanelStore((state) => state.getPanelState(projectId));
+  const setPreviewPanelCollapsed = usePanelStore((state) => state.setPreviewPanelCollapsed);
+  const setPreviewPanelWidth = usePanelStore((state) => state.setPreviewPanelWidth);
+
+  const width = panelState.previewPanelWidth;
+  const isCollapsed = panelState.previewPanelCollapsed;
+  const setWidth = (w: number) => setPreviewPanelWidth(projectId, w);
+  const setIsCollapsed = (c: boolean) => setPreviewPanelCollapsed(projectId, c);
+
   const [isResizing, setIsResizing] = useState(false);
   const [userStopped, setUserStopped] = useState(false);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [showZoomPresets, setShowZoomPresets] = useState(false);
   const [isIframeLoaded, setIsIframeLoaded] = useState(false);
-  
+
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const lastCompletedCountRef = useRef(0);
