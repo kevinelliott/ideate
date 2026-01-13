@@ -194,7 +194,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
     terminal.onData((data) => {
       if (currentTerminalIdRef.current) {
         invoke("write_terminal", {
-          terminalId: currentTerminalIdRef.current,
+          terminal_id: currentTerminalIdRef.current,
           data,
         }).catch((err) => console.error("Failed to write to terminal:", err));
       }
@@ -218,7 +218,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           const rows = xtermRef.current?.rows ?? 24;
 
           const result = await invoke<SpawnTerminalResult>("spawn_terminal", {
-            workingDirectory: projectPath,
+            working_directory: projectPath,
             cols,
             rows,
           });
@@ -228,7 +228,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
             registerTerminal(projectId, result.terminal_id, projectPath);
           } else {
             // Component unmounted during spawn, kill the terminal
-            await invoke("kill_terminal", { terminalId: result.terminal_id });
+            await invoke("kill_terminal", { terminal_id: result.terminal_id });
           }
         } catch (error) {
           console.error("Failed to spawn terminal:", error);
@@ -256,7 +256,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           // Notify PTY of resize
           if (currentTerminalIdRef.current) {
             invoke("resize_terminal", {
-              terminalId: currentTerminalIdRef.current,
+              terminal_id: currentTerminalIdRef.current,
               cols: xtermRef.current.cols,
               rows: xtermRef.current.rows,
             }).catch((err) => console.error("Failed to resize terminal:", err));
@@ -304,7 +304,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           const rows = xtermRef.current.rows ?? 24;
 
           const result = await invoke<SpawnTerminalResult>("spawn_terminal", {
-            workingDirectory: projectPath,
+            working_directory: projectPath,
             cols,
             rows,
           });
@@ -336,7 +336,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
         // Notify PTY of resize
         if (currentTerminalIdRef.current && xtermRef.current) {
           invoke("resize_terminal", {
-            terminalId: currentTerminalIdRef.current,
+            terminal_id: currentTerminalIdRef.current,
             cols: xtermRef.current.cols,
             rows: xtermRef.current.rows,
           }).catch((err) => console.error("Failed to resize terminal:", err));
@@ -364,7 +364,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
     const existingId = getTerminalId(projectId);
     if (existingId) {
       unregisterTerminal(projectId);
-      await invoke("kill_terminal", { terminalId: existingId }).catch((err) =>
+      await invoke("kill_terminal", { terminal_id: existingId }).catch((err) =>
         console.error("Failed to kill terminal:", err)
       );
     }
@@ -377,7 +377,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
       const rows = xtermRef.current?.rows ?? 24;
 
       const result = await invoke<SpawnTerminalResult>("spawn_terminal", {
-        workingDirectory: projectPath,
+        working_directory: projectPath,
         cols,
         rows,
       });
