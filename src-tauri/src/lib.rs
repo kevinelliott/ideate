@@ -268,12 +268,21 @@ struct AmpThread {
     messages: Vec<AmpMessage>,
 }
 
+
 #[derive(Debug, Clone, Deserialize)]
 struct AmpMessage {
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
     usage: Option<AmpMessageUsage>,
+    #[serde(default)]
+    state: Option<AmpMessageState>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AmpMessageState {
+    #[serde(rename = "stopReason", default)]
+    stop_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -313,8 +322,9 @@ pub struct AmpUsageEntry {
     pub credits: f64,
     #[serde(rename = "durationMs")]
     pub duration_ms: i64,
+    #[serde(rename = "stopReason")]
+    pub stop_reason: Option<String>,
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AmpUsageSummary {
     pub entries: Vec<AmpUsageEntry>,
@@ -1057,12 +1067,14 @@ fn load_amp_usage_sync(since_timestamp: Option<i64>) -> Result<AmpUsageSummary, 
                     }
 
                     // Aggregate usage from all assistant messages
+                    // Aggregate usage from all assistant messages
                     let mut input_tokens: i64 = 0;
                     let mut output_tokens: i64 = 0;
                     let mut cache_creation_tokens: i64 = 0;
                     let mut cache_read_tokens: i64 = 0;
                     let mut credits: f64 = 0.0;
                     let mut last_model: Option<String> = None;
+                    let mut last_stop_reason: Option<String> = None;
 
                     for msg in &thread.messages {
                         if msg.role.as_deref() == Some("assistant") {
@@ -1074,6 +1086,11 @@ fn load_amp_usage_sync(since_timestamp: Option<i64>) -> Result<AmpUsageSummary, 
                                 credits += usage.credits.unwrap_or(0.0);
                                 if usage.model.is_some() {
                                     last_model = usage.model.clone();
+                                }
+                            }
+                            if let Some(state) = &msg.state {
+                                if state.stop_reason.is_some() {
+                                    last_stop_reason = state.stop_reason.clone();
                                 }
                             }
                         }
@@ -1116,6 +1133,7 @@ fn load_amp_usage_sync(since_timestamp: Option<i64>) -> Result<AmpUsageSummary, 
                             cache_read_tokens,
                             credits,
                             duration_ms,
+                            stop_reason: last_stop_reason,
                         };
                         entries.push(entry);
                     }

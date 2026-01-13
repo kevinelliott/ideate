@@ -368,16 +368,35 @@ export function CostModal({ isOpen, onClose, projectId, projectPath, projectName
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-foreground truncate">
-                                  {entry.threadTitle || entry.threadId.substring(0, 12)}
+                                  {entry.threadTitle || 'Untitled Thread'}
                                 </span>
                                 {entry.model && (
                                   <span className="text-xs px-1.5 py-0.5 rounded bg-card text-muted">
                                     {entry.model.replace('claude-', '').replace(/-\d+$/, '')}
                                   </span>
                                 )}
+                                {entry.stopReason && (
+                                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                    entry.stopReason === 'end_turn' ? 'bg-green-500/15 text-green-400' :
+                                    entry.stopReason === 'tool_use' ? 'bg-blue-500/15 text-blue-400' :
+                                    entry.stopReason === 'max_tokens' ? 'bg-yellow-500/15 text-yellow-400' :
+                                    'bg-card text-muted'
+                                  }`}>
+                                    {entry.stopReason.replace('_', ' ')}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-3 mt-1 text-xs text-muted">
                                 <span>{formatDate(entry.timestamp)}</span>
+                                <a
+                                  href={`https://ampcode.com/threads/${entry.threadId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-accent hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {entry.threadId.substring(0, 12)}...
+                                </a>
                                 <span>{formatNumber(entry.inputTokens)} in / {formatNumber(entry.outputTokens)} out</span>
                                 {entry.durationMs > 0 && (
                                   <span>⏱ {formatDuration(entry.durationMs)}</span>

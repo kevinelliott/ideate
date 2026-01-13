@@ -59,6 +59,7 @@ export interface AmpUsageEntry {
   cacheReadTokens: number
   credits: number
   durationMs: number
+  stopReason: string | null
 }
 
 export interface AmpUsageSummary {
@@ -82,6 +83,7 @@ export interface ClaudeUsageEntry {
   cacheCreationTokens: number
   cacheReadTokens: number
   durationMs: number
+  stopReason: string | null
   serviceTier: string | null
 }
 
@@ -98,6 +100,7 @@ export interface ClaudeUsageSummary {
 interface RecentThreadDuration {
   threadId: string | null
   durationMs: number
+  stopReason: string | null
 }
 
 interface CostStore {
