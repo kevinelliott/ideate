@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useBuildStore } from '../stores/buildStore'
 import { usePrdStore } from '../stores/prdStore'
+import { useCostStore } from '../stores/costStore'
+import { useProcessStore } from '../stores/processStore'
 import { defaultPlugins } from '../types'
-import type { AutonomyLevel } from '../components/AgentSettings'
+import { usePromptStore } from '../stores/promptStore'
+import type { AutonomyLevel, BuildMode } from '../components/ProjectTopBar'
 
 interface SpawnAgentResult {
   process_id: string
@@ -18,16 +21,17 @@ interface WaitAgentResult {
 interface ProjectSettings {
   agent: string | null
   autonomy: AutonomyLevel
+  build_mode: BuildMode | null
 }
 
-export function useBuildLoop(projectPath: string | undefined) {
-  const status = useBuildStore((state) => state.status)
-  const currentStoryId = useBuildStore((state) => state.currentStoryId)
-  const currentProcessId = useBuildStore((state) => state.currentProcessId)
+const DEFAULT_PARALLEL_LIMIT = 3
+
+export function useBuildLoop(projectId: string | undefined, projectPath: string | undefined) {
+  const getProjectState = useBuildStore((state) => state.getProjectState)
   const startBuild = useBuildStore((state) => state.startBuild)
   const pauseBuild = useBuildStore((state) => state.pauseBuild)
   const cancelBuild = useBuildStore((state) => state.cancelBuild)
-  const setCurrentStoryId = useBuildStore((state) => state.setCurrentStoryId)
+  const setCurrentStory = useBuildStore((state) => state.setCurrentStory)
   const setCurrentProcessId = useBuildStore((state) => state.setCurrentProcessId)
   const setStoryStatus = useBuildStore((state) => state.setStoryStatus)
   const appendLog = useBuildStore((state) => state.appendLog)
@@ -38,31 +42,40 @@ export function useBuildLoop(projectPath: string | undefined) {
   const updateStory = usePrdStore((state) => state.updateStory)
   const savePrd = usePrdStore((state) => state.savePrd)
 
+  const parseAndAddFromOutput = useCostStore((state) => state.parseAndAddFromOutput)
+  const getPrompt = usePromptStore((state) => state.getPrompt)
+
+  const registerProcess = useProcessStore((state) => state.registerProcess)
+  const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
+
   const isRunningRef = useRef(false)
   const storyIndexRef = useRef(0)
+  const activeProcessesRef = useRef<Map<string, string>>(new Map())
+
+  const projectState = projectId ? getProjectState(projectId) : null
+  const status = projectState?.status || 'idle'
+  const currentStoryId = projectState?.currentStoryId || null
+  const currentProcessId = projectState?.currentProcessId || null
 
   const generatePrompt = useCallback((story: typeof stories[0]): string => {
     const criteria = story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
-    return `Implement the following user story:
-
-## ${story.id}: ${story.title}
-
-${story.description}
-
-### Acceptance Criteria:
-${criteria}
-
-${story.notes ? `### Notes:\n${story.notes}` : ''}
-
-Please implement this user story following the acceptance criteria. When done, ensure all quality checks pass (typecheck, lint, build).`
-  }, [])
+    const notesSection = story.notes ? `### Notes:\n${story.notes}` : ''
+    
+    return getPrompt('storyImplementation', {
+      '{{storyId}}': story.id,
+      '{{storyTitle}}': story.title,
+      '{{storyDescription}}': story.description,
+      '{{acceptanceCriteria}}': criteria,
+      '{{notes}}': notesSection,
+    })
+  }, [getPrompt])
 
   const runStory = useCallback(async (story: typeof stories[0]): Promise<boolean> => {
-    if (!projectPath) return false
+    if (!projectPath || !projectId) return false
 
-    setCurrentStoryId(story.id)
-    setStoryStatus(story.id, 'in-progress')
-    appendLog('system', `Starting story ${story.id}: ${story.title}`)
+    setCurrentStory(projectId, story.id, story.title)
+    setStoryStatus(projectId, story.id, 'in-progress')
+    appendLog(projectId, 'system', `Starting story ${story.id}: ${story.title}`)
 
     try {
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
@@ -74,7 +87,9 @@ Please implement this user story following the acceptance criteria. When done, e
         arg.replace('{{prompt}}', prompt)
       )
 
-      appendLog('system', `Spawning ${plugin.name} agent...`)
+      appendLog(projectId, 'system', `Spawning ${plugin.name} agent...`)
+
+      const startTime = Date.now()
 
       const result = await invoke<SpawnAgentResult>('spawn_agent', {
         executable: plugin.command,
@@ -82,63 +97,299 @@ Please implement this user story following the acceptance criteria. When done, e
         workingDirectory: projectPath,
       })
 
-      setCurrentProcessId(result.process_id)
-      appendLog('system', `Agent process started (ID: ${result.process_id})`)
+      setCurrentProcessId(projectId, result.process_id)
+      appendLog(projectId, 'system', `Agent process started (ID: ${result.process_id})`)
+
+      registerProcess({
+        processId: result.process_id,
+        projectId,
+        type: 'build',
+        label: story.title,
+      })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
         processId: result.process_id,
       })
 
-      setCurrentProcessId(null)
+      const durationMs = Date.now() - startTime
+
+      unregisterProcess(result.process_id)
+      setCurrentProcessId(projectId, null)
+
+      const logs = useBuildStore.getState().getProjectState(projectId).logs
+      const recentLogs = logs.slice(-50).map(l => l.content).join('\n')
+      parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
       if (waitResult.success) {
-        appendLog('system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exit_code})`)
-        setStoryStatus(story.id, 'complete')
+        appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exit_code})`)
+        setStoryStatus(projectId, story.id, 'complete')
         updateStory(story.id, { passes: true })
         await savePrd(projectPath)
         return true
       } else {
-        appendLog('system', `✗ Story ${story.id} failed (exit code: ${waitResult.exit_code})`)
-        setStoryStatus(story.id, 'failed')
+        appendLog(projectId, 'system', `✗ Story ${story.id} failed (exit code: ${waitResult.exit_code})`)
+        setStoryStatus(projectId, story.id, 'failed')
         return false
       }
     } catch (error) {
-      appendLog('system', `✗ Error running story ${story.id}: ${error}`)
-      setStoryStatus(story.id, 'failed')
-      setCurrentProcessId(null)
+      appendLog(projectId, 'system', `✗ Error running story ${story.id}: ${error}`)
+      setStoryStatus(projectId, story.id, 'failed')
+      setCurrentProcessId(projectId, null)
       return false
     }
-  }, [projectPath, generatePrompt, setCurrentStoryId, setCurrentProcessId, setStoryStatus, appendLog, updateStory, savePrd])
+  }, [projectPath, projectId, generatePrompt, setCurrentStory, setCurrentProcessId, setStoryStatus, appendLog, updateStory, savePrd, parseAndAddFromOutput, registerProcess, unregisterProcess])
+
+  const runStoryParallel = useCallback(async (story: typeof stories[0]): Promise<boolean> => {
+    if (!projectPath || !projectId) return false
+
+    setStoryStatus(projectId, story.id, 'in-progress')
+    appendLog(projectId, 'system', `[Parallel] Starting story ${story.id}: ${story.title}`)
+
+    try {
+      const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
+      const agentId = settings?.agent || 'amp'
+
+      const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
+      const prompt = generatePrompt(story)
+      const args = plugin.argsTemplate.map((arg) =>
+        arg.replace('{{prompt}}', prompt)
+      )
+
+      const startTime = Date.now()
+
+      const result = await invoke<SpawnAgentResult>('spawn_agent', {
+        executable: plugin.command,
+        args,
+        workingDirectory: projectPath,
+      })
+
+      activeProcessesRef.current.set(story.id, result.process_id)
+      appendLog(projectId, 'system', `[Parallel] Agent started for ${story.id} (PID: ${result.process_id})`)
+
+      registerProcess({
+        processId: result.process_id,
+        projectId,
+        type: 'build',
+        label: `[P] ${story.title}`,
+      })
+
+      const waitResult = await invoke<WaitAgentResult>('wait_agent', {
+        processId: result.process_id,
+      })
+
+      const durationMs = Date.now() - startTime
+
+      unregisterProcess(result.process_id)
+      activeProcessesRef.current.delete(story.id)
+
+      const logs = useBuildStore.getState().getProjectState(projectId).logs
+      const recentLogs = logs.slice(-50).map(l => l.content).join('\n')
+      parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
+
+      if (waitResult.success) {
+        appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed successfully`)
+        setStoryStatus(projectId, story.id, 'complete')
+        updateStory(story.id, { passes: true })
+        await savePrd(projectPath)
+        return true
+      } else {
+        appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exit_code})`)
+        setStoryStatus(projectId, story.id, 'failed')
+        return false
+      }
+    } catch (error) {
+      appendLog(projectId, 'system', `✗ [Parallel] Error running story ${story.id}: ${error}`)
+      setStoryStatus(projectId, story.id, 'failed')
+      activeProcessesRef.current.delete(story.id)
+      return false
+    }
+  }, [projectPath, projectId, generatePrompt, setStoryStatus, appendLog, updateStory, savePrd, parseAndAddFromOutput, registerProcess, unregisterProcess])
+
+  const runParallelBuildLoop = useCallback(async () => {
+    if (!projectPath || !projectId || isRunningRef.current) return
+
+    isRunningRef.current = true
+    clearLogs(projectId)
+    resetStoryStatuses(projectId)
+    startBuild(projectId)
+    appendLog(projectId, 'system', '🚀 Parallel build started')
+
+    const incompleteStories = stories
+      .filter((s) => !s.passes)
+      .sort((a, b) => a.priority - b.priority)
+
+    if (incompleteStories.length === 0) {
+      appendLog(projectId, 'system', 'No stories to build')
+      cancelBuild(projectId)
+      isRunningRef.current = false
+      return
+    }
+
+    appendLog(projectId, 'system', `Running ${incompleteStories.length} stories with up to ${DEFAULT_PARALLEL_LIMIT} concurrent agents`)
+
+    const runBatch = async (storiesToRun: typeof stories) => {
+      const promises = storiesToRun.map(story => runStoryParallel(story))
+      const results = await Promise.all(promises)
+      return results
+    }
+
+    let storyQueue = [...incompleteStories]
+    let hasFailures = false
+
+    while (storyQueue.length > 0) {
+      const buildStatus = useBuildStore.getState().getProjectState(projectId).status
+      if (buildStatus === 'idle') {
+        appendLog(projectId, 'system', 'Build cancelled')
+        break
+      }
+
+      if (buildStatus === 'paused') {
+        appendLog(projectId, 'system', 'Build paused - waiting to resume...')
+        while (useBuildStore.getState().getProjectState(projectId).status === 'paused') {
+          await new Promise(resolve => setTimeout(resolve, 500))
+          if (useBuildStore.getState().getProjectState(projectId).status === 'idle') {
+            appendLog(projectId, 'system', 'Build cancelled while paused')
+            isRunningRef.current = false
+            return
+          }
+        }
+        appendLog(projectId, 'system', 'Build resumed')
+      }
+
+      const batch = storyQueue.splice(0, DEFAULT_PARALLEL_LIMIT)
+      appendLog(projectId, 'system', `Starting batch of ${batch.length} stories`)
+      
+      const results = await runBatch(batch)
+      const failures = results.filter(r => !r).length
+      
+      if (failures > 0) {
+        hasFailures = true
+        appendLog(projectId, 'system', `Batch completed with ${failures} failure(s)`)
+      }
+    }
+
+    if (hasFailures) {
+      appendLog(projectId, 'system', '⚠️ Build completed with some failures')
+    }
+
+    const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    if (allComplete) {
+      appendLog(projectId, 'system', '🎉 All stories completed successfully!')
+    }
+
+    setCurrentStory(projectId, null)
+    cancelBuild(projectId)
+    isRunningRef.current = false
+  }, [projectPath, projectId, stories, runStoryParallel, startBuild, cancelBuild, appendLog, clearLogs, resetStoryStatuses, setCurrentStory])
 
   const waitWhilePaused = useCallback(async (): Promise<boolean> => {
-    while (useBuildStore.getState().status === 'paused') {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      if (useBuildStore.getState().status === 'idle') {
+    if (!projectId) return false
+    
+    while (useBuildStore.getState().getProjectState(projectId).status === 'paused') {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      if (useBuildStore.getState().getProjectState(projectId).status === 'idle') {
         return false
       }
     }
-    return true
-  }, [])
+    return useBuildStore.getState().getProjectState(projectId).status === 'running'
+  }, [projectId])
 
-  const shouldPauseForAutonomy = useCallback((autonomy: AutonomyLevel, context: 'before' | 'after', hasMoreStories: boolean): boolean => {
-    if (autonomy === 'manual') {
-      return true
-    }
-    if (autonomy === 'pause-between' && context === 'after' && hasMoreStories) {
-      return true
-    }
+  const shouldPauseForAutonomy = useCallback((autonomy: AutonomyLevel, timing: 'before' | 'after', hasMoreStories: boolean): boolean => {
+    if (autonomy === 'autonomous') return false
+    if (autonomy === 'manual') return timing === 'before' && hasMoreStories
+    if (autonomy === 'pause-between') return timing === 'after' && hasMoreStories
     return false
   }, [])
 
+  const runFromStory = useCallback(async (storyId: string) => {
+    if (!projectPath || !projectId || isRunningRef.current) return
+
+    const storyIndex = stories.findIndex(s => s.id === storyId)
+    if (storyIndex === -1) return
+
+    isRunningRef.current = true
+    storyIndexRef.current = storyIndex
+    clearLogs(projectId)
+    resetStoryStatuses(projectId)
+    startBuild(projectId)
+    appendLog(projectId, 'system', `Starting from story ${storyId}`)
+
+    const remainingStories = stories.slice(storyIndex).filter(s => !s.passes)
+
+    for (let i = 0; i < remainingStories.length; i++) {
+      const story = remainingStories[i]
+      storyIndexRef.current = storyIndex + i
+
+      const buildStatus = useBuildStore.getState().getProjectState(projectId).status
+      if (buildStatus === 'idle') {
+        appendLog(projectId, 'system', 'Build cancelled')
+        break
+      }
+
+      const shouldContinue = await waitWhilePaused()
+      if (!shouldContinue) {
+        appendLog(projectId, 'system', 'Build cancelled while paused')
+        isRunningRef.current = false
+        return
+      }
+
+      const success = await runStory(story)
+
+      if (!success) {
+        appendLog(projectId, 'system', 'Build paused due to story failure')
+        pauseBuild(projectId)
+        isRunningRef.current = false
+        return
+      }
+
+      const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
+      const autonomy = settings?.autonomy || 'autonomous'
+
+      const moreStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+      if (moreStories.length > 0) {
+        if (autonomy === 'manual' || autonomy === 'pause-between') {
+          const nextStory = moreStories[0]
+          setCurrentStory(projectId, nextStory.id, nextStory.title)
+          setStoryStatus(projectId, nextStory.id, 'pending')
+          appendLog(projectId, 'system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)
+          pauseBuild(projectId)
+          isRunningRef.current = false
+          return
+        }
+      }
+    }
+
+    const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    if (allComplete) {
+      appendLog(projectId, 'system', '🎉 All stories completed successfully!')
+    }
+
+    setCurrentStory(projectId, null)
+    cancelBuild(projectId)
+    isRunningRef.current = false
+  }, [projectPath, projectId, runStory, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus, stories, clearLogs, resetStoryStatuses])
+
   const runBuildLoop = useCallback(async () => {
-    if (!projectPath || isRunningRef.current) return
+    if (!projectPath || !projectId || isRunningRef.current) return
+
+    const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
+    const buildMode = settings?.build_mode || 'ralph'
+
+    if (buildMode === 'none') {
+      appendLog(projectId, 'system', 'Build mode is set to "None" - no automatic building')
+      return
+    }
+
+    if (buildMode === 'parallel') {
+      return runParallelBuildLoop()
+    }
 
     isRunningRef.current = true
     storyIndexRef.current = 0
-    clearLogs()
-    resetStoryStatuses()
-    startBuild()
-    appendLog('system', 'Build loop started')
+    clearLogs(projectId)
+    resetStoryStatuses(projectId)
+    startBuild(projectId)
+    appendLog(projectId, 'system', 'Build loop started (Ralph mode)')
 
     const incompleteStories = stories
       .filter((s) => !s.passes)
@@ -148,27 +399,27 @@ Please implement this user story following the acceptance criteria. When done, e
       const story = incompleteStories[i]
       storyIndexRef.current = i
 
-      const buildStatus = useBuildStore.getState().status
+      const buildStatus = useBuildStore.getState().getProjectState(projectId).status
       if (buildStatus === 'idle') {
-        appendLog('system', 'Build cancelled')
+        appendLog(projectId, 'system', 'Build cancelled')
         break
       }
 
-      const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
-      const autonomy = settings?.autonomy || 'autonomous'
+      const currentSettings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
+      const autonomy = currentSettings?.autonomy || 'autonomous'
 
       if (i > 0 && shouldPauseForAutonomy(autonomy, 'before', true)) {
-        setCurrentStoryId(story.id)
-        setStoryStatus(story.id, 'pending')
-        appendLog('system', `Pausing before story ${story.id} (${autonomy} mode) - Resume to continue`)
-        pauseBuild()
+        setCurrentStory(projectId, story.id, story.title)
+        setStoryStatus(projectId, story.id, 'pending')
+        appendLog(projectId, 'system', `Pausing before story ${story.id} (${autonomy} mode) - Resume to continue`)
+        pauseBuild(projectId)
         isRunningRef.current = false
         return
       }
 
       const shouldContinue = await waitWhilePaused()
       if (!shouldContinue) {
-        appendLog('system', 'Build cancelled while paused')
+        appendLog(projectId, 'system', 'Build cancelled while paused')
         isRunningRef.current = false
         return
       }
@@ -176,8 +427,8 @@ Please implement this user story following the acceptance criteria. When done, e
       const success = await runStory(story)
 
       if (!success) {
-        appendLog('system', 'Build paused due to story failure')
-        pauseBuild()
+        appendLog(projectId, 'system', 'Build paused due to story failure')
+        pauseBuild(projectId)
         isRunningRef.current = false
         return
       }
@@ -185,8 +436,8 @@ Please implement this user story following the acceptance criteria. When done, e
       const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
       if (shouldPauseForAutonomy(autonomy, 'after', remainingStories.length > 0)) {
         if (autonomy === 'pause-between') {
-          appendLog('system', 'Pausing for review (pause-between mode)')
-          pauseBuild()
+          appendLog(projectId, 'system', 'Pausing for review (pause-between mode)')
+          pauseBuild(projectId)
           isRunningRef.current = false
           return
         }
@@ -195,24 +446,24 @@ Please implement this user story following the acceptance criteria. When done, e
 
     const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
     if (allComplete) {
-      appendLog('system', '🎉 All stories completed successfully!')
+      appendLog(projectId, 'system', '🎉 All stories completed successfully!')
     }
 
-    setCurrentStoryId(null)
-    cancelBuild()
+    setCurrentStory(projectId, null)
+    cancelBuild(projectId)
     isRunningRef.current = false
-  }, [projectPath, stories, runStory, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStoryId, setStoryStatus])
+  }, [projectPath, projectId, stories, runStory, runParallelBuildLoop, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStory, setStoryStatus])
 
   const handleStart = useCallback(() => {
     runBuildLoop()
   }, [runBuildLoop])
 
   const handleResume = useCallback(() => {
-    if (!projectPath || isRunningRef.current) return
+    if (!projectPath || !projectId || isRunningRef.current) return
 
     isRunningRef.current = true
-    useBuildStore.getState().resumeBuild()
-    appendLog('system', 'Build resumed')
+    useBuildStore.getState().resumeBuild(projectId)
+    appendLog(projectId, 'system', 'Build resumed')
 
     const runRemaining = async () => {
       const incompleteStories = usePrdStore.getState().stories
@@ -223,15 +474,15 @@ Please implement this user story following the acceptance criteria. When done, e
         const story = incompleteStories[i]
         storyIndexRef.current = i
 
-        const buildStatus = useBuildStore.getState().status
+        const buildStatus = useBuildStore.getState().getProjectState(projectId).status
         if (buildStatus === 'idle') {
-          appendLog('system', 'Build cancelled')
+          appendLog(projectId, 'system', 'Build cancelled')
           break
         }
 
         const shouldContinue = await waitWhilePaused()
         if (!shouldContinue) {
-          appendLog('system', 'Build cancelled while paused')
+          appendLog(projectId, 'system', 'Build cancelled while paused')
           isRunningRef.current = false
           return
         }
@@ -239,8 +490,8 @@ Please implement this user story following the acceptance criteria. When done, e
         const success = await runStory(story)
 
         if (!success) {
-          appendLog('system', 'Build paused due to story failure')
-          pauseBuild()
+          appendLog(projectId, 'system', 'Build paused due to story failure')
+          pauseBuild(projectId)
           isRunningRef.current = false
           return
         }
@@ -252,10 +503,10 @@ Please implement this user story following the acceptance criteria. When done, e
         if (remainingStories.length > 0) {
           if (autonomy === 'manual' || autonomy === 'pause-between') {
             const nextStory = remainingStories[0]
-            setCurrentStoryId(nextStory.id)
-            setStoryStatus(nextStory.id, 'pending')
-            appendLog('system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)
-            pauseBuild()
+            setCurrentStory(projectId, nextStory.id, nextStory.title)
+            setStoryStatus(projectId, nextStory.id, 'pending')
+            appendLog(projectId, 'system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)
+            pauseBuild(projectId)
             isRunningRef.current = false
             return
           }
@@ -264,32 +515,75 @@ Please implement this user story following the acceptance criteria. When done, e
 
       const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
       if (allComplete) {
-        appendLog('system', '🎉 All stories completed successfully!')
+        appendLog(projectId, 'system', '🎉 All stories completed successfully!')
       }
 
-      setCurrentStoryId(null)
-      cancelBuild()
+      setCurrentStory(projectId, null)
+      cancelBuild(projectId)
       isRunningRef.current = false
     }
 
     runRemaining()
-  }, [projectPath, runStory, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStoryId, setStoryStatus])
+  }, [projectPath, projectId, runStory, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus])
 
   const handleCancel = useCallback(async () => {
-    const processId = useBuildStore.getState().currentProcessId
+    if (!projectId) return
+    
+    const processId = useBuildStore.getState().getProjectState(projectId).currentProcessId
     if (processId) {
       try {
         await invoke('kill_agent', { processId })
-        appendLog('system', 'Agent process terminated')
+        unregisterProcess(processId)
+        appendLog(projectId, 'system', 'Agent process terminated')
       } catch (error) {
-        appendLog('system', `Failed to kill agent: ${error}`)
+        appendLog(projectId, 'system', `Failed to kill agent: ${error}`)
       }
     }
-    setCurrentStoryId(null)
-    cancelBuild()
+
+    for (const [storyId, pid] of activeProcessesRef.current.entries()) {
+      try {
+        await invoke('kill_agent', { processId: pid })
+        unregisterProcess(pid)
+        appendLog(projectId, 'system', `Terminated parallel agent for story ${storyId}`)
+      } catch (error) {
+        appendLog(projectId, 'system', `Failed to kill parallel agent: ${error}`)
+      }
+    }
+    activeProcessesRef.current.clear()
+
+    setCurrentStory(projectId, null)
+    cancelBuild(projectId)
     isRunningRef.current = false
-    appendLog('system', 'Build cancelled by user')
-  }, [cancelBuild, appendLog, setCurrentStoryId])
+    appendLog(projectId, 'system', 'Build cancelled by user')
+  }, [projectId, cancelBuild, appendLog, setCurrentStory, unregisterProcess])
+
+  useEffect(() => {
+    const handleSidebarStart = (event: Event) => {
+      const customEvent = event as CustomEvent<{ projectId: string }>
+      if (customEvent.detail.projectId === projectId && status === 'idle' && stories.length > 0 && stories.some(s => !s.passes)) {
+        handleStart()
+      }
+    }
+
+    window.addEventListener('sidebar-start-build', handleSidebarStart)
+    return () => {
+      window.removeEventListener('sidebar-start-build', handleSidebarStart)
+    }
+  }, [projectId, status, stories, handleStart])
+
+  useEffect(() => {
+    const handleStoryPlay = (event: Event) => {
+      const customEvent = event as CustomEvent<{ projectId: string; storyId: string }>
+      if (customEvent.detail.projectId === projectId && status === 'idle') {
+        runFromStory(customEvent.detail.storyId)
+      }
+    }
+
+    window.addEventListener('story-play', handleStoryPlay)
+    return () => {
+      window.removeEventListener('story-play', handleStoryPlay)
+    }
+  }, [projectId, status, runFromStory])
 
   useEffect(() => {
     return () => {

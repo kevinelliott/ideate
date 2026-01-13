@@ -4,13 +4,18 @@ import { usePrdStore } from "../stores/prdStore";
 import type { Story } from "../stores/prdStore";
 import { usePrdGeneration } from "../hooks/usePrdGeneration";
 import { useProjectState } from "../hooks/useProjectState";
+import { useBuildLoop } from "../hooks/useBuildLoop";
+import { useBuildStore } from "../stores/buildStore";
 import { StoryList } from "./StoryList";
-import { AgentSettings } from "./AgentSettings";
+import { ProjectTopBar } from "./ProjectTopBar";
 import { BuildControls } from "./BuildControls";
 import { LogPanel } from "./LogPanel";
+import { AgentPanel } from "./AgentPanel";
 import { StoryDetailPanel } from "./StoryDetailPanel";
 import { EditStoryModal } from "./EditStoryModal";
 import { IdeaInputView } from "./IdeaInputView";
+import { PreviewPanel } from "./PreviewPanel";
+import { TerminalPanel } from "./TerminalPanel";
 
 interface ProjectViewProps {
   project: Project;
@@ -26,12 +31,17 @@ export function ProjectView({ project }: ProjectViewProps) {
   const setStatus = usePrdStore((state) => state.setStatus);
   const hasStories = stories.length > 0;
   
+  const getProjectState = useBuildStore((state) => state.getProjectState);
+  const buildState = getProjectState(project.id);
+  const buildHasStarted = buildState.status !== 'idle' || Object.keys(buildState.storyStatuses).length > 0 || stories.some(s => s.passes);
+  
   const selectedStory = stories.find((s) => s.id === selectedStoryId);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   const { generatePrd } = usePrdGeneration();
 
+  useBuildLoop(project.id, project.path);
   useProjectState(project.path);
 
   const handleCloseInspector = () => {
@@ -53,9 +63,9 @@ export function ProjectView({ project }: ProjectViewProps) {
     }
   };
 
-  const handleGeneratePrd = async (idea: string) => {
+  const handleGeneratePrd = async (idea: string, agentId: string) => {
     setGenerationError(null);
-    const success = await generatePrd(idea, project.name, project.path);
+    const success = await generatePrd(idea, project.name, project.path, agentId);
     if (!success) {
       setGenerationError("PRD generation failed. Check the logs for details.");
     }
@@ -67,31 +77,35 @@ export function ProjectView({ project }: ProjectViewProps) {
   };
 
   return (
-    <div className="flex flex-1 h-screen">
-      <main className="flex-1 h-screen overflow-auto p-8 bg-background">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-2xl font-semibold text-foreground mb-2">
-            {project.name}
-          </h1>
-          <p className="text-secondary mb-8">{project.description}</p>
-
-          {hasStories ? (
-            <>
-              <AgentSettings projectPath={project.path} />
-              <BuildControls projectPath={project.path} />
-              <LogPanel />
-              <StoryList projectPath={project.path} />
-            </>
-          ) : (
-            <>
-              <AgentSettings projectPath={project.path} />
-              <LogPanel />
-              
+    <div className="flex flex-1 h-screen min-w-0 overflow-hidden">
+      <main className="flex-1 h-screen flex flex-col bg-background-secondary min-w-0 overflow-hidden border-t border-border">
+        <ProjectTopBar
+          key={project.id}
+          projectId={project.id}
+          projectPath={project.path}
+          projectName={project.name}
+          projectDescription={project.description}
+        />
+        
+        {hasStories ? (
+          /* Stories view - scrollable content area */
+          <div className="flex-1 overflow-auto p-6 min-h-0 scrollbar-auto-hide">
+            <div className="max-w-4xl mx-auto">
+              <div className="space-y-4">
+                <BuildControls projectId={project.id} projectPath={project.path} />
+                <StoryList projectId={project.id} projectPath={project.path} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Idea input view - centered */
+          <div className="flex-1 flex items-center justify-center p-6 min-h-0 overflow-auto scrollbar-auto-hide">
+            <div className="w-full max-w-xl">
               {status === "error" && generationError && (
-                <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
                   <div className="flex items-start gap-3">
                     <svg
-                      className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5"
+                      className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -104,15 +118,15 @@ export function ProjectView({ project }: ProjectViewProps) {
                       />
                     </svg>
                     <div className="flex-1">
-                      <p className="text-red-400 text-sm font-medium mb-2">
+                      <p className="text-destructive text-sm font-medium mb-3">
                         {generationError}
                       </p>
                       <button
                         onClick={handleRetryGeneration}
-                        className="btn btn-sm"
+                        className="btn btn-sm btn-secondary"
                       >
                         <svg
-                          className="w-4 h-4 mr-1.5"
+                          className="w-4 h-4"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -132,13 +146,21 @@ export function ProjectView({ project }: ProjectViewProps) {
               )}
               
               <IdeaInputView
+                projectId={project.id}
                 projectName={project.name}
                 projectDescription={project.description}
                 projectPath={project.path}
                 onGeneratePrd={handleGeneratePrd}
               />
-            </>
-          )}
+            </div>
+          </div>
+        )}
+
+        {/* Bottom panels */}
+        <div className="flex-shrink-0 overflow-hidden">
+          <LogPanel projectId={project.id} />
+          <AgentPanel projectId={project.id} projectPath={project.path} />
+          <TerminalPanel projectId={project.id} projectPath={project.path} />
         </div>
       </main>
       
@@ -148,6 +170,11 @@ export function ProjectView({ project }: ProjectViewProps) {
           onClose={handleCloseInspector}
           onEdit={handleEditFromInspector}
         />
+      )}
+
+      {/* Preview panel - show once build has started */}
+      {hasStories && buildHasStarted && (
+        <PreviewPanel projectId={project.id} projectPath={project.path} />
       )}
 
       <EditStoryModal

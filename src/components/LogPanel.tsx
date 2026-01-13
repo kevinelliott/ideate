@@ -1,58 +1,109 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useBuildStore } from "../stores/buildStore";
+import { useTheme } from "../hooks/useTheme";
+import { getTerminalTheme } from "../utils/terminalThemes";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
-export function LogPanel() {
-  const logs = useBuildStore((state) => state.logs);
-  const status = useBuildStore((state) => state.status);
+interface LogPanelProps {
+  projectId: string;
+}
+
+const MIN_HEIGHT = 80;
+const MAX_HEIGHT = 400;
+const DEFAULT_HEIGHT = 150;
+const COLLAPSED_HEIGHT = 36;
+
+export function LogPanel({ projectId }: LogPanelProps) {
+  const getProjectState = useBuildStore((state) => state.getProjectState);
+  const projectState = getProjectState(projectId);
+  const logs = projectState.logs;
+  const status = projectState.status;
+  
+  const { resolvedTheme } = useTheme();
+  
+  const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const lastLogCountRef = useRef(0);
+  const lastProjectIdRef = useRef<string | null>(null);
+  
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(0);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isCollapsed) return;
+    e.preventDefault();
+    setIsResizing(true);
+    startYRef.current = e.clientY;
+    startHeightRef.current = height;
+  }, [height, isCollapsed]);
 
   useEffect(() => {
-    if (!terminalRef.current) return;
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = startYRef.current - e.clientY;
+      const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeightRef.current + deltaY));
+      setHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
+  // Update terminal theme when resolved theme changes
+  useEffect(() => {
+    if (xtermRef.current) {
+      const theme = getTerminalTheme(resolvedTheme);
+      xtermRef.current.options.theme = theme;
+      // Force a full refresh of all visible rows to apply new colors
+      const rows = xtermRef.current.rows;
+      xtermRef.current.refresh(0, rows - 1);
+      if (fitAddonRef.current) {
+        fitAddonRef.current.fit();
+      }
+    }
+  }, [resolvedTheme]);
+
+  // Initialize terminal - depends on resolvedTheme to recreate when theme changes
+  useEffect(() => {
+    if (isCollapsed || !terminalRef.current) return;
 
     const terminal = new Terminal({
-      theme: {
-        background: "#1e1e1e",
-        foreground: "#d4d4d4",
-        cursor: "#d4d4d4",
-        cursorAccent: "#1e1e1e",
-        selectionBackground: "#264f78",
-        black: "#1e1e1e",
-        red: "#f44747",
-        green: "#6a9955",
-        yellow: "#dcdcaa",
-        blue: "#569cd6",
-        magenta: "#c586c0",
-        cyan: "#4ec9b0",
-        white: "#d4d4d4",
-        brightBlack: "#808080",
-        brightRed: "#f44747",
-        brightGreen: "#6a9955",
-        brightYellow: "#dcdcaa",
-        brightBlue: "#569cd6",
-        brightMagenta: "#c586c0",
-        brightCyan: "#4ec9b0",
-        brightWhite: "#ffffff",
-      },
-      fontSize: 13,
-      fontFamily: '"SF Mono", "Monaco", "Menlo", "Ubuntu Mono", monospace',
+      theme: getTerminalTheme(resolvedTheme),
+      fontSize: 12,
+      fontFamily: '"SF Mono", "JetBrains Mono", "Monaco", "Menlo", monospace',
       cursorBlink: false,
       disableStdin: true,
       convertEol: true,
       scrollback: 5000,
+      lineHeight: 1.4,
     });
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
 
     terminal.open(terminalRef.current);
-    fitAddon.fit();
+    
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+    });
 
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
@@ -60,15 +111,46 @@ export function LogPanel() {
     terminal.onScroll(() => {
       if (!xtermRef.current) return;
       const buffer = xtermRef.current.buffer.active;
-      const isAtBottom =
-        buffer.viewportY >= buffer.baseY;
+      const isAtBottom = buffer.viewportY >= buffer.baseY;
       setAutoScroll(isAtBottom);
     });
 
     const resizeObserver = new ResizeObserver(() => {
-      fitAddonRef.current?.fit();
+      requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+      });
     });
-    resizeObserver.observe(terminalRef.current);
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Restore logs after terminal is created
+    lastLogCountRef.current = 0;
+    for (const log of logs) {
+      let prefix = "";
+      const timestamp = log.timestamp.toLocaleTimeString();
+
+      switch (log.type) {
+        case "stdout":
+          prefix = `\x1b[90m[${timestamp}]\x1b[0m `;
+          break;
+        case "stderr":
+          prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[31m`;
+          break;
+        case "system":
+          prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[32m`;
+          break;
+      }
+
+      const suffix = log.type === "stdout" ? "" : "\x1b[0m";
+      terminal.writeln(`${prefix}${log.content}${suffix}`);
+    }
+    lastLogCountRef.current = logs.length;
+    if (autoScroll) {
+      terminal.scrollToBottom();
+    }
+    lastProjectIdRef.current = projectId;
 
     return () => {
       resizeObserver.disconnect();
@@ -76,10 +158,56 @@ export function LogPanel() {
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, []);
+  }, [isCollapsed, resolvedTheme]);
 
   useEffect(() => {
-    if (!xtermRef.current) return;
+    if (!isCollapsed && fitAddonRef.current) {
+      requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+      });
+    }
+  }, [height, isCollapsed]);
+
+  useEffect(() => {
+    if (isCollapsed) return;
+    
+    if (lastProjectIdRef.current !== projectId) {
+      if (xtermRef.current) {
+        xtermRef.current.clear();
+        lastLogCountRef.current = 0;
+        
+        for (const log of logs) {
+          let prefix = "";
+          const timestamp = log.timestamp.toLocaleTimeString();
+
+          switch (log.type) {
+            case "stdout":
+              prefix = `\x1b[90m[${timestamp}]\x1b[0m `;
+              break;
+            case "stderr":
+              prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[31m`;
+              break;
+            case "system":
+              prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[32m`;
+              break;
+          }
+
+          const suffix = log.type === "stdout" ? "" : "\x1b[0m";
+          xtermRef.current.writeln(`${prefix}${log.content}${suffix}`);
+        }
+        
+        lastLogCountRef.current = logs.length;
+        if (autoScroll) {
+          xtermRef.current.scrollToBottom();
+        }
+      }
+      lastProjectIdRef.current = projectId;
+    }
+  }, [projectId, logs, autoScroll, isCollapsed]);
+
+  useEffect(() => {
+    if (isCollapsed) return;
+    if (!xtermRef.current || lastProjectIdRef.current !== projectId) return;
 
     const newLogs = logs.slice(lastLogCountRef.current);
     lastLogCountRef.current = logs.length;
@@ -96,7 +224,7 @@ export function LogPanel() {
           prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[31m`;
           break;
         case "system":
-          prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[34m`;
+          prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[32m`;
           break;
       }
 
@@ -107,7 +235,7 @@ export function LogPanel() {
     if (autoScroll) {
       xtermRef.current.scrollToBottom();
     }
-  }, [logs, autoScroll]);
+  }, [logs, autoScroll, projectId, isCollapsed]);
 
   const isEmpty = logs.length === 0;
 
@@ -116,33 +244,74 @@ export function LogPanel() {
     xtermRef.current?.scrollToBottom();
   };
 
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+  };
+
+  const panelHeight = isCollapsed ? COLLAPSED_HEIGHT : height + COLLAPSED_HEIGHT;
+
   return (
-    <div className="border border-border rounded-xl overflow-hidden bg-[#1e1e1e] mt-6">
-      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#3c3c3c]">
-        <span className="text-xs font-medium text-gray-400">Terminal</span>
-        {!isEmpty && !autoScroll && (
+    <div 
+      ref={containerRef} 
+      className="bg-background overflow-hidden flex flex-col border-t border-border"
+      style={{ height: panelHeight }}
+    >
+      {/* Top resize handle - only show when expanded */}
+      <div
+        onMouseDown={handleMouseDown}
+        className={`w-full flex-shrink-0 ${isCollapsed ? 'h-0' : 'h-1'} ${
+          isCollapsed 
+            ? 'cursor-default' 
+            : 'cursor-ns-resize hover:bg-accent/30 active:bg-accent/50'
+        } ${isResizing ? 'bg-accent/50' : ''}`}
+      />
+      
+      {/* Header */}
+      <div className={`flex items-center justify-between px-4 h-8 flex-shrink-0 ${isCollapsed ? "" : "border-b border-border"}`}>
+        <button
+          onClick={toggleCollapse}
+          className="flex items-center gap-2 hover:text-foreground transition-colors"
+        >
+          <svg
+            className={`w-3 h-3 text-muted transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          </svg>
+          <span className="text-xs font-medium text-muted uppercase tracking-wider">Log</span>
+          {logs.length > 0 && (
+            <span className="text-xs text-muted">({logs.length})</span>
+          )}
+        </button>
+        {!isCollapsed && !isEmpty && !autoScroll && (
           <button
             onClick={handleScrollToBottom}
-            className="text-xs text-blue-400 hover:text-blue-300"
+            className="text-xs text-accent hover:text-accent/80 transition-colors"
           >
             Scroll to bottom
           </button>
         )}
       </div>
-      <div className="relative h-64">
-        {isEmpty && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500 z-10 pointer-events-none">
-            {status === "idle"
-              ? "Waiting for build to start..."
-              : "No output yet..."}
-          </div>
-        )}
-        <div
-          ref={terminalRef}
-          className="h-full w-full"
-          style={{ padding: "8px" }}
-        />
-      </div>
+      
+      {/* Log content */}
+      {!isCollapsed && (
+        <div className="relative flex-1 overflow-hidden">
+          {isEmpty && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted z-10 pointer-events-none text-sm">
+              {status === "idle"
+                ? "Waiting for build to start..."
+                : "No output yet..."}
+            </div>
+          )}
+          <div
+            ref={terminalRef}
+            className="h-full w-full overflow-hidden"
+            style={{ padding: "8px 12px" }}
+          />
+        </div>
+      )}
     </div>
   );
 }

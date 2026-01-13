@@ -7,12 +7,20 @@ import { EditStoryModal } from "./EditStoryModal";
 import { CreateStoryModal } from "./CreateStoryModal";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 import { PreviousLogsPanel } from "./PreviousLogsPanel";
+import { GenerateStoriesModal } from "./GenerateStoriesModal";
+import { RegeneratePrdModal } from "./RegeneratePrdModal";
+import { usePrdGeneration } from "../hooks/usePrdGeneration";
+import { useProjectStore } from "../stores/projectStore";
 
 interface StoryListProps {
+  projectId: string;
   projectPath: string;
 }
 
-export function StoryList({ projectPath }: StoryListProps) {
+type SortField = "priority" | "id" | "title";
+type SortDirection = "asc" | "desc";
+
+export function StoryList({ projectId, projectPath }: StoryListProps) {
   const stories = usePrdStore((state) => state.stories);
   const updateStory = usePrdStore((state) => state.updateStory);
   const addStory = usePrdStore((state) => state.addStory);
@@ -20,14 +28,26 @@ export function StoryList({ projectPath }: StoryListProps) {
   const savePrd = usePrdStore((state) => state.savePrd);
   const selectStory = usePrdStore((state) => state.selectStory);
   const selectedStoryId = usePrdStore((state) => state.selectedStoryId);
+  const prdStatus = usePrdStore((state) => state.status);
   
   const retryStory = useBuildStore((state) => state.retryStory);
-  const storyRetries = useBuildStore((state) => state.storyRetries);
+  const pauseBuild = useBuildStore((state) => state.pauseBuild);
+  const projectState = useBuildStore((state) => state.projectStates[projectId]);
+  const storyRetries = projectState?.storyRetries ?? {};
+  
+  const projects = useProjectStore((state) => state.projects);
+  const project = projects.find(p => p.id === projectId);
+  
+  const { generateAdditionalStories, generatePrdFromCodebase } = usePrdGeneration();
   
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [deletingStory, setDeletingStory] = useState<Story | null>(null);
   const [viewingLogsStoryId, setViewingLogsStoryId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField>("priority");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
 
   const handleStoryClick = (storyId: string) => {
     selectStory(storyId === selectedStoryId ? null : storyId);
@@ -78,11 +98,79 @@ export function StoryList({ projectPath }: StoryListProps) {
   };
 
   const handleRetryStory = (story: Story) => {
-    retryStory(story.id);
+    retryStory(projectId, story.id);
+  };
+
+  const handlePlayStory = (story: Story) => {
+    window.dispatchEvent(new CustomEvent('story-play', { 
+      detail: { projectId, storyId: story.id } 
+    }));
+  };
+
+  const handlePauseBuild = () => {
+    pauseBuild(projectId);
   };
 
   const handleViewPreviousLogs = (storyId: string) => {
     setViewingLogsStoryId(viewingLogsStoryId === storyId ? null : storyId);
+  };
+
+  const handleSortChange = (field: SortField) => {
+    if (field === sortField) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const handleOpenGenerateModal = () => {
+    setIsGenerateModalOpen(true);
+  };
+
+  const handleCloseGenerateModal = () => {
+    if (prdStatus !== 'generating') {
+      setIsGenerateModalOpen(false);
+    }
+  };
+
+  const handleDismissGenerateModal = () => {
+    setIsGenerateModalOpen(false);
+  };
+
+  const handleGenerateStories = (request: string) => {
+    if (!project) return;
+    
+    generateAdditionalStories(
+      projectId,
+      project.name,
+      projectPath,
+      request
+    );
+  };
+
+  const handleOpenRegenerateModal = () => {
+    setIsRegenerateModalOpen(true);
+  };
+
+  const handleCloseRegenerateModal = () => {
+    if (prdStatus !== 'generating') {
+      setIsRegenerateModalOpen(false);
+    }
+  };
+
+  const handleDismissRegenerateModal = () => {
+    setIsRegenerateModalOpen(false);
+  };
+
+  const handleRegeneratePrd = () => {
+    if (!project) return;
+    
+    generatePrdFromCodebase(
+      projectId,
+      project.name,
+      projectPath
+    );
   };
 
   const getNextPriority = (): number => {
@@ -91,11 +179,113 @@ export function StoryList({ projectPath }: StoryListProps) {
     return maxPriority + 1;
   };
 
-  const sortedStories = [...stories].sort((a, b) => a.priority - b.priority);
+  const sortedStories = [...stories].sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortField) {
+      case "priority":
+        comparison = a.priority - b.priority;
+        break;
+      case "id":
+        comparison = a.id.localeCompare(b.id, undefined, { numeric: true });
+        break;
+      case "title":
+        comparison = a.title.localeCompare(b.title);
+        break;
+    }
+    
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+
+  const SortButton = ({ field, label }: { field: SortField; label: string }) => {
+    const isActive = sortField === field;
+    return (
+      <button
+        onClick={() => handleSortChange(field)}
+        className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+          isActive
+            ? "text-accent bg-accent/10"
+            : "text-muted hover:text-foreground hover:bg-card"
+        }`}
+      >
+        {label}
+        {isActive && (
+          <svg
+            className={`w-3 h-3 transition-transform ${sortDirection === "desc" ? "rotate-180" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          </svg>
+        )}
+      </button>
+    );
+  };
+
+  const isGenerating = prdStatus === 'generating';
 
   return (
     <>
-      <div className="space-y-3 mt-6">
+      {/* Sort controls and action buttons */}
+      <div className="flex items-center justify-between mt-4 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted">Sort by:</span>
+          <SortButton field="priority" label="Priority" />
+          <SortButton field="id" label="ID" />
+          <SortButton field="title" label="Title" />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {/* Regenerate PRD button */}
+          <button
+            onClick={handleOpenRegenerateModal}
+            disabled={isGenerating}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-muted hover:text-foreground hover:bg-card transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Regenerate PRD from codebase"
+          >
+            <svg
+              className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <span className="text-xs font-medium">Regenerate</span>
+          </button>
+
+          {/* AI Generate button */}
+          <button
+            onClick={handleOpenGenerateModal}
+            disabled={isGenerating}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 text-purple-400 hover:from-purple-500/20 hover:to-pink-500/20 hover:border-purple-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Generate additional stories with AI"
+          >
+            <svg
+              className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"
+              />
+            </svg>
+            <span className="text-xs font-medium">AI Generate</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
         {sortedStories.map((story) => {
           const retryInfo = storyRetries[story.id];
           const hasPreviousLogs = retryInfo && retryInfo.previousLogs.length > 0;
@@ -103,12 +293,15 @@ export function StoryList({ projectPath }: StoryListProps) {
           return (
             <div key={story.id}>
               <StoryCard
+                projectId={projectId}
                 story={story}
                 isSelected={story.id === selectedStoryId}
                 onClick={handleStoryClick}
                 onEdit={handleEditStory}
                 onDelete={handleDeleteStory}
                 onRetry={handleRetryStory}
+                onPlay={handlePlayStory}
+                onPause={handlePauseBuild}
               />
               {hasPreviousLogs && (
                 <div className="mt-1 ml-4">
@@ -142,12 +335,12 @@ export function StoryList({ projectPath }: StoryListProps) {
         })}
         <button
           onClick={handleOpenCreate}
-          className="w-full py-3 px-4 rounded-xl border border-dashed border-border hover:border-accent hover:bg-accent/5 text-secondary hover:text-accent transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 px-4 rounded-lg border border-dashed border-border hover:border-accent hover:bg-accent/5 text-secondary hover:text-accent transition-colors flex items-center justify-center gap-2"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -158,7 +351,7 @@ export function StoryList({ projectPath }: StoryListProps) {
             <path d="M12 5v14" />
             <path d="M5 12h14" />
           </svg>
-          <span className="font-medium">Add Story</span>
+          <span className="text-sm font-medium">Add Story</span>
         </button>
       </div>
       <EditStoryModal
@@ -178,6 +371,21 @@ export function StoryList({ projectPath }: StoryListProps) {
         storyId={deletingStory?.id ?? ""}
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+      />
+      <GenerateStoriesModal
+        isOpen={isGenerateModalOpen}
+        isGenerating={isGenerating}
+        onClose={handleCloseGenerateModal}
+        onGenerate={handleGenerateStories}
+        onDismiss={handleDismissGenerateModal}
+      />
+      <RegeneratePrdModal
+        isOpen={isRegenerateModalOpen}
+        isRegenerating={isGenerating}
+        storyCount={stories.length}
+        onClose={handleCloseRegenerateModal}
+        onConfirm={handleRegeneratePrd}
+        onDismiss={handleDismissRegenerateModal}
       />
     </>
   );

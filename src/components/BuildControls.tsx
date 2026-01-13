@@ -3,28 +3,29 @@ import { usePrdStore } from "../stores/prdStore";
 import { useBuildLoop } from "../hooks/useBuildLoop";
 
 interface BuildControlsProps {
+  projectId: string;
   projectPath: string;
 }
 
-export function BuildControls({ projectPath }: BuildControlsProps) {
-  const status = useBuildStore((state) => state.status);
+export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
+  const getProjectState = useBuildStore((state) => state.getProjectState);
   const pauseBuild = useBuildStore((state) => state.pauseBuild);
-  const currentStoryId = useBuildStore((state) => state.currentStoryId);
+  
+  const projectState = getProjectState(projectId);
+  const status = projectState.status;
+  const currentStoryId = projectState.currentStoryId;
 
   const stories = usePrdStore((state) => state.stories);
 
-  const { handleStart, handleResume, handleCancel } = useBuildLoop(projectPath);
+  const { handleStart, handleResume, handleCancel } = useBuildLoop(projectId, projectPath);
 
   const hasIncompleteStories = stories.some((s) => !s.passes);
   const hasStories = stories.length > 0;
   const canStart = hasStories && hasIncompleteStories && status === "idle";
 
-  const buttonBaseClasses =
-    "px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed";
-
   const PlayIcon = () => (
     <svg
-      className="w-4 h-4 mr-2"
+      className="w-4 h-4"
       fill="currentColor"
       viewBox="0 0 24 24"
     >
@@ -34,7 +35,7 @@ export function BuildControls({ projectPath }: BuildControlsProps) {
 
   const PauseIcon = () => (
     <svg
-      className="w-4 h-4 mr-2"
+      className="w-4 h-4"
       fill="currentColor"
       viewBox="0 0 24 24"
     >
@@ -44,7 +45,7 @@ export function BuildControls({ projectPath }: BuildControlsProps) {
 
   const StopIcon = () => (
     <svg
-      className="w-4 h-4 mr-2"
+      className="w-4 h-4"
       fill="currentColor"
       viewBox="0 0 24 24"
     >
@@ -58,20 +59,25 @@ export function BuildControls({ projectPath }: BuildControlsProps) {
 
   if (status === "idle") {
     return (
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2">
         <button
           onClick={handleStart}
           disabled={!canStart}
-          className={`${buttonBaseClasses} bg-accent text-white hover:opacity-90 flex items-center`}
+          className="btn btn-primary"
         >
           <PlayIcon />
           Start Build
         </button>
         {!hasStories && (
-          <span className="text-sm text-secondary">No stories to build</span>
+          <span className="text-sm text-muted">No stories to build</span>
         )}
         {hasStories && !hasIncompleteStories && (
-          <span className="text-sm text-green-500">All stories complete</span>
+          <span className="text-sm text-success flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            All stories complete
+          </span>
         )}
       </div>
     );
@@ -79,24 +85,24 @@ export function BuildControls({ projectPath }: BuildControlsProps) {
 
   if (status === "running") {
     return (
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2">
         <button
-          onClick={pauseBuild}
-          className={`${buttonBaseClasses} bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30 flex items-center`}
+          onClick={() => pauseBuild(projectId)}
+          className="btn btn-secondary"
         >
           <PauseIcon />
           Pause
         </button>
         <button
           onClick={handleCancel}
-          className={`${buttonBaseClasses} bg-red-500/20 text-red-500 hover:bg-red-500/30 flex items-center`}
+          className="btn btn-ghost text-destructive hover:bg-destructive/10"
         >
           <StopIcon />
           Cancel
         </button>
         <span className="text-sm text-secondary">
           {currentStory 
-            ? `Building: ${currentStory.id} - ${currentStory.title}`
+            ? <><span className="pill mr-1.5">{currentStory.id}</span>{currentStory.title}</>
             : 'Build in progress...'}
         </span>
       </div>
@@ -105,22 +111,22 @@ export function BuildControls({ projectPath }: BuildControlsProps) {
 
   if (status === "paused") {
     return (
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-2">
         <button
           onClick={handleResume}
-          className={`${buttonBaseClasses} bg-accent text-white hover:opacity-90 flex items-center`}
+          className="btn btn-primary"
         >
           <PlayIcon />
           Resume
         </button>
         <button
           onClick={handleCancel}
-          className={`${buttonBaseClasses} bg-red-500/20 text-red-500 hover:bg-red-500/30 flex items-center`}
+          className="btn btn-ghost text-destructive hover:bg-destructive/10"
         >
           <StopIcon />
           Cancel
         </button>
-        <span className="text-sm text-secondary">Build paused</span>
+        <span className="text-sm text-muted">Build paused</span>
       </div>
     );
   }

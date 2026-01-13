@@ -4,10 +4,15 @@ import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/Sidebar";
 import { MainContent } from "./components/MainContent";
 import { NewProjectModal } from "./components/NewProjectModal";
+import { ImportProjectModal } from "./components/ImportProjectModal";
 import { PreferencesWindow } from "./components/PreferencesWindow";
+import { PermissionsModal } from "./components/PermissionsModal";
 import { useProjectStore } from "./stores/projectStore";
 import { useBuildStore } from "./stores/buildStore";
 import { useThemeStore } from "./stores/themeStore";
+import { useAgentStore } from "./stores/agentStore";
+import { usePromptStore } from "./stores/promptStore";
+import { useIdeasStore } from "./stores/ideasStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 
 interface CreateProjectResult {
@@ -27,18 +32,36 @@ interface AgentExitPayload {
   success: boolean;
 }
 
+interface Preferences {
+  defaultAgent: string | null;
+  defaultAutonomy: string;
+  logBufferSize: number;
+  agentPaths: Array<{ agentId: string; path: string }>;
+  theme: string;
+}
+
 function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showImportProjectModal, setShowImportProjectModal] = useState(false);
   const [showPreferencesWindow, setShowPreferencesWindow] = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  const [pendingPrdGeneration, setPendingPrdGeneration] = useState<{projectId: string, projectPath: string, projectName: string} | null>(null);
+  
   const addProject = useProjectStore((state) => state.addProject);
+  const setActiveProject = useProjectStore((state) => state.setActiveProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const isLoaded = useProjectStore((state) => state.isLoaded);
   const appendLog = useBuildStore((state) => state.appendLog);
   const handleProcessExit = useBuildStore((state) => state.handleProcessExit);
+  const projectStates = useBuildStore((state) => state.projectStates);
   const loadTheme = useThemeStore((state) => state.loadTheme);
   const isThemeLoaded = useThemeStore((state) => state.isLoaded);
+  const setDefaultAgentId = useAgentStore((state) => state.setDefaultAgentId);
+  const initSession = useAgentStore((state) => state.initSession);
+  const loadPromptOverrides = usePromptStore((state) => state.loadOverrides);
 
-  const isAnyModalOpen = showNewProjectModal || showPreferencesWindow;
+  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPreferencesWindow || showPermissionsModal;
 
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
@@ -46,42 +69,97 @@ function App() {
     isModalOpen: isAnyModalOpen,
     onCloseModal: () => {
       setShowNewProjectModal(false);
+      setShowImportProjectModal(false);
       setShowPreferencesWindow(false);
+      setShowPermissionsModal(false);
     },
   });
+
+  const loadIdeas = useIdeasStore((state) => state.loadIdeas);
 
   useEffect(() => {
     loadProjects();
     loadTheme();
-  }, [loadProjects, loadTheme]);
+    loadPromptOverrides();
+    loadIdeas();
+    
+    // Load preferences to set default agent
+    invoke<Preferences | null>("load_preferences")
+      .then((prefs) => {
+        if (prefs?.defaultAgent) {
+          setDefaultAgentId(prefs.defaultAgent);
+        }
+        setPreferencesLoaded(true);
+      })
+      .catch((error) => {
+        console.error("Failed to load preferences:", error);
+        setPreferencesLoaded(true);
+      });
+  }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas]);
 
   useEffect(() => {
+    // Helper to find which project a process belongs to
+    const findProjectByProcessId = (processId: string): string | null => {
+      for (const [projectId, state] of Object.entries(projectStates)) {
+        if (state.currentProcessId === processId) {
+          return projectId;
+        }
+      }
+      return null;
+    };
+
     const unlistenOutputPromise = listen<AgentOutputPayload>("agent-output", (event) => {
       const { process_id, stream_type, content } = event.payload;
-      appendLog(stream_type, content, process_id);
+      const projectId = findProjectByProcessId(process_id);
+      if (projectId) {
+        appendLog(projectId, stream_type, content, process_id);
+      }
     });
 
     const unlistenExitPromise = listen<AgentExitPayload>("agent-exit", (event) => {
       const { process_id, exit_code, success } = event.payload;
-      handleProcessExit({
-        processId: process_id,
-        exitCode: exit_code,
-        success,
-      });
+      const projectId = findProjectByProcessId(process_id);
+      if (projectId) {
+        handleProcessExit(projectId, {
+          processId: process_id,
+          exitCode: exit_code,
+          success,
+        });
+      }
     });
 
     return () => {
       unlistenOutputPromise.then((unlisten) => unlisten());
       unlistenExitPromise.then((unlisten) => unlisten());
     };
-  }, [appendLog, handleProcessExit]);
+  }, [appendLog, handleProcessExit, projectStates]);
+
+  // Trigger PRD generation after import if needed
+  useEffect(() => {
+    if (pendingPrdGeneration) {
+      const { projectId, projectPath, projectName } = pendingPrdGeneration;
+      // Dispatch event for PRD generation from codebase
+      window.dispatchEvent(new CustomEvent('generate-prd-from-codebase', {
+        detail: { projectId, projectPath, projectName }
+      }));
+      setPendingPrdGeneration(null);
+    }
+  }, [pendingPrdGeneration]);
 
   const handleNewProject = () => {
     setShowNewProjectModal(true);
   };
 
+  const handleImportProject = () => {
+    setShowImportProjectModal(true);
+  };
+
   const handleCloseNewProjectModal = () => {
     setShowNewProjectModal(false);
+  };
+
+  const handleCloseImportProjectModal = () => {
+    setShowImportProjectModal(false);
   };
 
   const handleClosePreferencesWindow = () => {
@@ -98,23 +176,78 @@ function App() {
       const result = await invoke<CreateProjectResult>("create_project", {
         name,
         description,
-        directory,
+        parentPath: directory,
       });
 
-      addProject({
+      const newProject = addProject({
         name,
         description,
         path: result.path,
         status: "idle",
       });
 
+      // Set the new project as active
+      setActiveProject(newProject.id);
+
+      // Initialize the agent session with the default agent
+      initSession(newProject.id);
+
       setShowNewProjectModal(false);
     } catch (error) {
-      console.error("Failed to create project:", error);
+      const errorMessage = String(error);
+      if (errorMessage.includes("Operation not permitted") || errorMessage.includes("os error 1")) {
+        setShowPermissionsModal(true);
+      } else {
+        console.error("Failed to create project:", error);
+      }
     }
   };
 
-  if (!isLoaded || !isThemeLoaded) {
+  const handleImportExistingProject = async (name: string, directory: string, generatePrd: boolean) => {
+    try {
+      const result = await invoke<CreateProjectResult>("import_project", {
+        name,
+        projectPath: directory,
+      });
+
+      const newProject = addProject({
+        name,
+        description: "Imported existing project",
+        path: result.path,
+        status: "idle",
+      });
+
+      // Set the imported project as active BEFORE triggering PRD generation
+      // This ensures the PRD is associated with the correct project
+      setActiveProject(newProject.id);
+
+      // Initialize the agent session with the default agent
+      initSession(newProject.id);
+
+      setShowImportProjectModal(false);
+
+      // If PRD generation is requested, trigger it after import
+      // Use setTimeout to ensure the active project state has propagated
+      if (generatePrd) {
+        setTimeout(() => {
+          setPendingPrdGeneration({
+            projectId: newProject.id,
+            projectPath: result.path,
+            projectName: name,
+          });
+        }, 100);
+      }
+    } catch (error) {
+      const errorMessage = String(error);
+      if (errorMessage.includes("Operation not permitted") || errorMessage.includes("os error 1")) {
+        setShowPermissionsModal(true);
+      } else {
+        console.error("Failed to import project:", error);
+      }
+    }
+  };
+
+  if (!isLoaded || !isThemeLoaded || !preferencesLoaded) {
     return (
       <div className="flex h-screen bg-background text-foreground items-center justify-center">
         <div className="text-secondary">Loading...</div>
@@ -124,16 +257,25 @@ function App() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar onNewProject={handleNewProject} />
+      <Sidebar onNewProject={handleNewProject} onImportProject={handleImportProject} />
       <MainContent />
       <NewProjectModal
         isOpen={showNewProjectModal}
         onClose={handleCloseNewProjectModal}
         onCreate={handleCreateProject}
       />
+      <ImportProjectModal
+        isOpen={showImportProjectModal}
+        onClose={handleCloseImportProjectModal}
+        onImport={handleImportExistingProject}
+      />
       <PreferencesWindow
         isOpen={showPreferencesWindow}
         onClose={handleClosePreferencesWindow}
+      />
+      <PermissionsModal
+        isOpen={showPermissionsModal}
+        onClose={() => setShowPermissionsModal(false)}
       />
     </div>
   );

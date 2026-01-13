@@ -1,32 +1,46 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePrdStore } from "../stores/prdStore";
+import { useAgentStore } from "../stores/agentStore";
+import { defaultPlugins, type AgentPlugin } from "../types";
 
 interface IdeaInputViewProps {
   projectName: string;
   projectDescription: string;
   projectPath: string;
-  onGeneratePrd: (idea: string) => void;
+  projectId: string;
+  onGeneratePrd: (idea: string, agentId: string) => void;
 }
 
 export function IdeaInputView({
   projectDescription,
+  projectPath,
+  projectId,
   onGeneratePrd,
 }: IdeaInputViewProps) {
   const [idea, setIdea] = useState(projectDescription);
   const status = usePrdStore((state) => state.status);
   const isGenerating = status === "generating";
+  
+  const defaultAgentId = useAgentStore((state) => state.defaultAgentId);
+  const [selectedAgentId, setSelectedAgentId] = useState(defaultAgentId);
+
+  // Reset idea and agent when project changes
+  useEffect(() => {
+    setIdea(projectDescription);
+    setSelectedAgentId(defaultAgentId);
+  }, [projectPath, projectDescription, projectId, defaultAgentId]);
 
   const handleGenerate = () => {
     if (!idea.trim()) return;
-    onGeneratePrd(idea.trim());
+    onGeneratePrd(idea.trim(), selectedAgentId);
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="text-center mb-8">
-        <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-accent/20 to-accent/5 border border-accent/20 flex items-center justify-center">
+    <div className="max-w-xl">
+      <div className="mb-6">
+        <div className="w-12 h-12 mb-4 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center">
           <svg
-            className="w-10 h-10 text-accent"
+            className="w-6 h-6 text-accent"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -39,11 +53,11 @@ export function IdeaInputView({
             />
           </svg>
         </div>
-        <h2 className="text-2xl font-semibold text-foreground mb-2">
+        <h2 className="text-lg font-semibold text-foreground mb-1">
           Describe Your Idea
         </h2>
-        <p className="text-secondary">
-          Tell us about the app you want to build. Be as detailed as possible — the more context you provide, the better the PRD will be.
+        <p className="text-sm text-secondary">
+          Tell us about the app you want to build. The more context you provide, the better the PRD will be.
         </p>
       </div>
 
@@ -57,14 +71,33 @@ export function IdeaInputView({
             value={idea}
             onChange={(e) => setIdea(e.target.value)}
             placeholder="Describe your app idea here. What problem does it solve? Who is it for? What are the main features?"
-            className="input textarea min-h-[200px] resize-y"
+            className="input textarea min-h-[160px] resize-y"
             disabled={isGenerating}
           />
         </div>
 
-        <div className="flex items-center gap-2 text-sm text-secondary">
+        <div>
+          <label htmlFor="agent-select" className="label">
+            Agent
+          </label>
+          <select
+            id="agent-select"
+            value={selectedAgentId}
+            onChange={(e) => setSelectedAgentId(e.target.value)}
+            disabled={isGenerating}
+            className="input"
+          >
+            {defaultPlugins.map((plugin: AgentPlugin) => (
+              <option key={plugin.id} value={plugin.id}>
+                {plugin.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-start gap-2 text-xs text-muted">
           <svg
-            className="w-4 h-4"
+            className="w-4 h-4 shrink-0 mt-0.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -84,12 +117,12 @@ export function IdeaInputView({
         <button
           onClick={handleGenerate}
           disabled={!idea.trim() || isGenerating}
-          className="btn btn-primary btn-lg w-full"
+          className="btn btn-primary w-full"
         >
           {isGenerating ? (
             <>
               <svg
-                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                className="animate-spin h-4 w-4"
                 fill="none"
                 viewBox="0 0 24 24"
               >
@@ -112,7 +145,7 @@ export function IdeaInputView({
           ) : (
             <>
               <svg
-                className="w-5 h-5 mr-2"
+                className="w-4 h-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

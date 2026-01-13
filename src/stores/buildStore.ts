@@ -23,75 +23,167 @@ export interface StoryRetryInfo {
   previousLogs: LogEntry[][]
 }
 
-interface BuildState {
+export interface ProjectBuildState {
   status: BuildStatus
   currentStoryId: string | null
+  currentStoryTitle: string | null
   currentProcessId: string | null
   storyStatuses: Record<string, StoryBuildStatus>
   storyRetries: Record<string, StoryRetryInfo>
   logs: LogEntry[]
   lastExitInfo: ProcessExitInfo | null
-  startBuild: () => void
-  pauseBuild: () => void
-  resumeBuild: () => void
-  cancelBuild: () => void
-  setCurrentStoryId: (storyId: string | null) => void
-  setCurrentProcessId: (processId: string | null) => void
-  setStoryStatus: (storyId: string, status: StoryBuildStatus) => void
-  resetStoryStatuses: () => void
-  appendLog: (type: LogEntry['type'], content: string, processId?: string) => void
-  clearLogs: () => void
-  handleProcessExit: (exitInfo: ProcessExitInfo) => void
-  retryStory: (storyId: string) => void
-  getStoryRetryInfo: (storyId: string) => StoryRetryInfo | undefined
-  restoreRetryInfo: (storyId: string, retryCount: number) => void
-  resetBuildState: () => void
 }
 
-export const useBuildStore = create<BuildState>((set, get) => ({
+const createEmptyProjectState = (): ProjectBuildState => ({
   status: 'idle',
   currentStoryId: null,
+  currentStoryTitle: null,
   currentProcessId: null,
   storyStatuses: {},
   storyRetries: {},
   logs: [],
   lastExitInfo: null,
+})
 
-  startBuild: () => {
-    set({ status: 'running' })
+interface BuildStore {
+  // Per-project state
+  projectStates: Record<string, ProjectBuildState>
+  
+  // Get state for a specific project
+  getProjectState: (projectId: string) => ProjectBuildState
+  
+  // Per-project actions
+  startBuild: (projectId: string) => void
+  pauseBuild: (projectId: string) => void
+  resumeBuild: (projectId: string) => void
+  cancelBuild: (projectId: string) => void
+  setCurrentStory: (projectId: string, storyId: string | null, storyTitle?: string | null) => void
+  setCurrentProcessId: (projectId: string, processId: string | null) => void
+  setStoryStatus: (projectId: string, storyId: string, status: StoryBuildStatus) => void
+  resetStoryStatuses: (projectId: string) => void
+  appendLog: (projectId: string, type: LogEntry['type'], content: string, processId?: string) => void
+  clearLogs: (projectId: string) => void
+  handleProcessExit: (projectId: string, exitInfo: ProcessExitInfo) => void
+  retryStory: (projectId: string, storyId: string) => void
+  getStoryRetryInfo: (projectId: string, storyId: string) => StoryRetryInfo | undefined
+  restoreRetryInfo: (projectId: string, storyId: string, retryCount: number) => void
+  resetBuildState: (projectId: string) => void
+  
+  // Get all running projects
+  getRunningProjects: () => string[]
+}
+
+export const useBuildStore = create<BuildStore>((set, get) => ({
+  projectStates: {},
+
+  getProjectState: (projectId) => {
+    return get().projectStates[projectId] || createEmptyProjectState()
   },
 
-  pauseBuild: () => {
-    set({ status: 'paused' })
-  },
-
-  resumeBuild: () => {
-    set({ status: 'running' })
-  },
-
-  cancelBuild: () => {
-    set({ status: 'idle', currentStoryId: null, currentProcessId: null })
-  },
-
-  setCurrentStoryId: (storyId) => {
-    set({ currentStoryId: storyId })
-  },
-
-  setCurrentProcessId: (processId) => {
-    set({ currentProcessId: processId })
-  },
-
-  setStoryStatus: (storyId, status) => {
+  startBuild: (projectId) => {
     set((state) => ({
-      storyStatuses: { ...state.storyStatuses, [storyId]: status },
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          status: 'running',
+        },
+      },
     }))
   },
 
-  resetStoryStatuses: () => {
-    set({ storyStatuses: {} })
+  pauseBuild: (projectId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          status: 'paused',
+        },
+      },
+    }))
   },
 
-  appendLog: (type, content, processId) => {
+  resumeBuild: (projectId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          status: 'running',
+        },
+      },
+    }))
+  },
+
+  cancelBuild: (projectId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          status: 'idle',
+          currentStoryId: null,
+          currentStoryTitle: null,
+          currentProcessId: null,
+        },
+      },
+    }))
+  },
+
+  setCurrentStory: (projectId, storyId, storyTitle) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          currentStoryId: storyId,
+          currentStoryTitle: storyTitle ?? null,
+        },
+      },
+    }))
+  },
+
+  setCurrentProcessId: (projectId, processId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          currentProcessId: processId,
+        },
+      },
+    }))
+  },
+
+  setStoryStatus: (projectId, storyId, status) => {
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            storyStatuses: { ...projectState.storyStatuses, [storyId]: status },
+          },
+        },
+      }
+    })
+  },
+
+  resetStoryStatuses: (projectId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          storyStatuses: {},
+        },
+      },
+    }))
+  },
+
+  appendLog: (projectId, type, content, processId) => {
     const entry: LogEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
@@ -99,30 +191,46 @@ export const useBuildStore = create<BuildState>((set, get) => ({
       content,
       processId,
     }
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            logs: [...projectState.logs, entry],
+          },
+        },
+      }
+    })
+  },
+
+  clearLogs: (projectId) => {
     set((state) => ({
-      logs: [...state.logs, entry],
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          logs: [],
+        },
+      },
     }))
   },
 
-  clearLogs: () => {
-    set({ logs: [] })
-  },
-
-  handleProcessExit: (exitInfo) => {
-    const { currentStoryId, currentProcessId, logs } = get()
-    
-    set({ lastExitInfo: exitInfo })
+  handleProcessExit: (projectId, exitInfo) => {
+    const projectState = get().projectStates[projectId] || createEmptyProjectState()
+    const { currentStoryId, currentProcessId, logs } = projectState
     
     if (exitInfo.processId === currentProcessId) {
       const exitMessage = exitInfo.success 
         ? `Process completed successfully (exit code: ${exitInfo.exitCode ?? 0})`
         : `Process failed (exit code: ${exitInfo.exitCode ?? 'unknown'})`
       
-      get().appendLog('system', exitMessage, exitInfo.processId)
+      get().appendLog(projectId, 'system', exitMessage, exitInfo.processId)
       
       if (currentStoryId) {
         const newStatus = exitInfo.success ? 'complete' : 'failed'
-        get().setStoryStatus(currentStoryId, newStatus)
+        get().setStoryStatus(projectId, currentStoryId, newStatus)
         
         if (!exitInfo.success) {
           const storyLogs = [...logs, {
@@ -134,71 +242,111 @@ export const useBuildStore = create<BuildState>((set, get) => ({
           }]
           
           set((state) => {
-            const existingRetryInfo = state.storyRetries[currentStoryId] || {
+            const ps = state.projectStates[projectId] || createEmptyProjectState()
+            const existingRetryInfo = ps.storyRetries[currentStoryId] || {
               retryCount: 0,
               previousLogs: [],
             }
             return {
-              storyRetries: {
-                ...state.storyRetries,
-                [currentStoryId]: {
-                  retryCount: existingRetryInfo.retryCount,
-                  previousLogs: [...existingRetryInfo.previousLogs, storyLogs],
+              projectStates: {
+                ...state.projectStates,
+                [projectId]: {
+                  ...ps,
+                  storyRetries: {
+                    ...ps.storyRetries,
+                    [currentStoryId]: {
+                      retryCount: existingRetryInfo.retryCount,
+                      previousLogs: [...existingRetryInfo.previousLogs, storyLogs],
+                    },
+                  },
+                  lastExitInfo: exitInfo,
+                  currentProcessId: null,
                 },
               },
             }
           })
+          return
         }
       }
       
-      set({ currentProcessId: null })
+      set((state) => ({
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...(state.projectStates[projectId] || createEmptyProjectState()),
+            lastExitInfo: exitInfo,
+            currentProcessId: null,
+          },
+        },
+      }))
     }
   },
 
-  retryStory: (storyId) => {
+  retryStory: (projectId, storyId) => {
     set((state) => {
-      const existingRetryInfo = state.storyRetries[storyId] || {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      const existingRetryInfo = projectState.storyRetries[storyId] || {
         retryCount: 0,
         previousLogs: [],
       }
       return {
-        storyStatuses: { ...state.storyStatuses, [storyId]: 'pending' },
-        storyRetries: {
-          ...state.storyRetries,
-          [storyId]: {
-            ...existingRetryInfo,
-            retryCount: existingRetryInfo.retryCount + 1,
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            storyStatuses: { ...projectState.storyStatuses, [storyId]: 'pending' },
+            storyRetries: {
+              ...projectState.storyRetries,
+              [storyId]: {
+                ...existingRetryInfo,
+                retryCount: existingRetryInfo.retryCount + 1,
+              },
+            },
           },
         },
       }
     })
   },
 
-  getStoryRetryInfo: (storyId) => {
-    return get().storyRetries[storyId]
+  getStoryRetryInfo: (projectId, storyId) => {
+    const projectState = get().projectStates[projectId]
+    return projectState?.storyRetries[storyId]
   },
 
-  restoreRetryInfo: (storyId, retryCount) => {
-    set((state) => ({
-      storyRetries: {
-        ...state.storyRetries,
-        [storyId]: {
-          retryCount,
-          previousLogs: state.storyRetries[storyId]?.previousLogs || [],
+  restoreRetryInfo: (projectId, storyId, retryCount) => {
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            storyRetries: {
+              ...projectState.storyRetries,
+              [storyId]: {
+                retryCount,
+                previousLogs: projectState.storyRetries[storyId]?.previousLogs || [],
+              },
+            },
+          },
         },
+      }
+    })
+  },
+
+  resetBuildState: (projectId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: createEmptyProjectState(),
       },
     }))
   },
 
-  resetBuildState: () => {
-    set({
-      status: 'idle',
-      currentStoryId: null,
-      currentProcessId: null,
-      storyStatuses: {},
-      storyRetries: {},
-      logs: [],
-      lastExitInfo: null,
-    })
+  getRunningProjects: () => {
+    const { projectStates } = get()
+    return Object.entries(projectStates)
+      .filter(([_, state]) => state.status === 'running')
+      .map(([projectId]) => projectId)
   },
 }))

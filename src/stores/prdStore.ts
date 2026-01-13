@@ -24,15 +24,18 @@ interface PrdState {
   metadata: PrdMetadata
   status: PrdStatus
   selectedStoryId: string | null
+  loadedProjectId: string | null
   setStories: (stories: Story[]) => void
   setMetadata: (metadata: PrdMetadata) => void
-  setPrd: (stories: Story[], metadata: PrdMetadata) => void
+  setPrd: (stories: Story[], metadata: PrdMetadata, projectId?: string) => void
+  clearPrd: () => void
   updateStory: (id: string, updates: Partial<Story>) => void
   addStory: (story: Omit<Story, 'id'>) => Story
   removeStory: (id: string) => void
   setStatus: (status: PrdStatus) => void
   selectStory: (id: string | null) => void
   savePrd: (projectPath: string) => Promise<void>
+  getLoadedProjectId: () => string | null
 }
 
 export const usePrdStore = create<PrdState>((set, get) => ({
@@ -40,6 +43,7 @@ export const usePrdStore = create<PrdState>((set, get) => ({
   metadata: {},
   status: 'idle',
   selectedStoryId: null,
+  loadedProjectId: null,
 
   setStories: (stories) => {
     set({ stories })
@@ -49,8 +53,18 @@ export const usePrdStore = create<PrdState>((set, get) => ({
     set({ metadata })
   },
 
-  setPrd: (stories, metadata) => {
-    set({ stories, metadata })
+  setPrd: (stories, metadata, projectId) => {
+    set({ stories, metadata, loadedProjectId: projectId ?? null })
+  },
+
+  clearPrd: () => {
+    set({
+      stories: [],
+      metadata: {},
+      status: 'idle',
+      selectedStoryId: null,
+      loadedProjectId: null,
+    })
   },
 
   updateStory: (id, updates) => {
@@ -102,4 +116,6 @@ export const usePrdStore = create<PrdState>((set, get) => ({
       console.error('Failed to save PRD:', error)
     }
   },
+
+  getLoadedProjectId: () => get().loadedProjectId,
 }))

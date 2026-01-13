@@ -52,68 +52,61 @@ export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalPr
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
       onClick={handleOverlayClick}
     >
-      <div className="bg-card rounded-xl shadow-2xl w-full max-w-md p-6 no-drag">
-        <h2 className="text-lg font-semibold mb-4">New Project</h2>
+      <div className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md no-drag">
+        <div className="px-5 py-4 border-b border-border">
+          <h2 className="text-base font-semibold text-foreground">New Project</h2>
+        </div>
 
-        <div className="space-y-4">
+        <div className="p-5 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-secondary mb-1">
-              Project Name
-            </label>
+            <label className="label">Project Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Awesome App"
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent"
+              className="input"
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-secondary mb-1">
-              Idea Description
-            </label>
+            <label className="label">Idea Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe your app idea..."
               rows={4}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+              className="input textarea"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-secondary mb-1">
-              Project Directory
-            </label>
+            <label className="label">Project Directory</label>
             <button
               onClick={handleDirectoryPick}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-left hover:bg-border/30 transition-colors"
+              className="w-full px-3 py-2 rounded-md border border-border bg-card text-left hover:bg-border/30 transition-colors text-sm"
             >
-              <span className={directory ? "text-foreground" : "text-secondary/60"}>
+              <span className={directory ? "text-foreground" : "text-muted"}>
                 {directory || "Choose Directory..."}
               </span>
             </button>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-secondary hover:bg-border/50 transition-colors"
-          >
+        <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+          <button onClick={onClose} className="btn btn-ghost">
             Cancel
           </button>
           <button
             onClick={handleCreate}
-            disabled={!name.trim()}
-            className="px-4 py-2 rounded-lg bg-accent text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!name.trim() || !directory}
+            className="btn btn-primary"
           >
-            Create
+            Create Project
           </button>
         </div>
       </div>

@@ -13,7 +13,7 @@ export const defaultPlugins: AgentPlugin[] = [
     id: 'amp',
     name: 'Amp',
     command: 'amp',
-    argsTemplate: ['-p', '{{prompt}}'],
+    argsTemplate: ['--execute', '{{prompt}}'],
     workingDir: 'project',
   },
   {

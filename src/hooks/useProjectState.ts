@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useBuildStore, type StoryBuildStatus } from '../stores/buildStore'
+import { useProjectStore } from '../stores/projectStore'
 
 export interface ProjectState {
   currentStoryId: string | null
@@ -10,22 +11,18 @@ export interface ProjectState {
 }
 
 export function useProjectState(projectPath: string | undefined) {
-  const status = useBuildStore((state) => state.status)
-  const currentStoryId = useBuildStore((state) => state.currentStoryId)
-  const storyStatuses = useBuildStore((state) => state.storyStatuses)
-  const storyRetries = useBuildStore((state) => state.storyRetries)
-  const setCurrentStoryId = useBuildStore((state) => state.setCurrentStoryId)
+  const activeProjectId = useProjectStore((state) => state.activeProjectId)
+  const getProjectState = useBuildStore((state) => state.getProjectState)
+  const setCurrentStory = useBuildStore((state) => state.setCurrentStory)
   const setStoryStatus = useBuildStore((state) => state.setStoryStatus)
   const restoreRetryInfo = useBuildStore((state) => state.restoreRetryInfo)
-  const resetBuildState = useBuildStore((state) => state.resetBuildState)
 
   const lastSavedRef = useRef<string>('')
   const hasLoadedRef = useRef<string>('')
 
   useEffect(() => {
     async function loadState() {
-      if (!projectPath) {
-        resetBuildState()
+      if (!projectPath || !activeProjectId) {
         return
       }
 
@@ -40,15 +37,15 @@ export function useProjectState(projectPath: string | undefined) {
 
         if (state) {
           if (state.currentStoryId) {
-            setCurrentStoryId(state.currentStoryId)
+            setCurrentStory(activeProjectId, state.currentStoryId)
           }
 
           Object.entries(state.storyStatuses).forEach(([storyId, status]) => {
-            setStoryStatus(storyId, status as StoryBuildStatus)
+            setStoryStatus(activeProjectId, storyId, status as StoryBuildStatus)
           })
 
           Object.entries(state.storyRetries).forEach(([storyId, info]) => {
-            restoreRetryInfo(storyId, info.retryCount)
+            restoreRetryInfo(activeProjectId, storyId, info.retryCount)
           })
         }
 
@@ -60,24 +57,36 @@ export function useProjectState(projectPath: string | undefined) {
     }
 
     loadState()
-  }, [projectPath, setCurrentStoryId, setStoryStatus, restoreRetryInfo, resetBuildState])
+  }, [projectPath, activeProjectId, setCurrentStory, setStoryStatus, restoreRetryInfo])
+
+  // Subscribe to the actual project state to trigger saves on changes
+  const projectState = activeProjectId ? getProjectState(activeProjectId) : null
+  const storyStatuses = projectState?.storyStatuses
+  const currentStoryId = projectState?.currentStoryId
+  const buildStatus = projectState?.status
+  const storyRetries = projectState?.storyRetries
 
   useEffect(() => {
     async function saveState() {
-      if (!projectPath || status === 'running') {
+      if (!projectPath || !activeProjectId || !projectState) {
+        return
+      }
+
+      // Don't save while running to avoid constant saves
+      if (projectState.status === 'running') {
         return
       }
 
       const stateToSave: ProjectState = {
-        currentStoryId,
-        storyStatuses,
+        currentStoryId: projectState.currentStoryId,
+        storyStatuses: projectState.storyStatuses,
         storyRetries: Object.fromEntries(
-          Object.entries(storyRetries).map(([id, info]) => [
+          Object.entries(projectState.storyRetries).map(([id, info]) => [
             id,
             { retryCount: info.retryCount },
           ])
         ),
-        buildPhase: status,
+        buildPhase: projectState.status,
       }
 
       const stateKey = JSON.stringify(stateToSave)
@@ -97,5 +106,5 @@ export function useProjectState(projectPath: string | undefined) {
     }
 
     saveState()
-  }, [projectPath, status, currentStoryId, storyStatuses, storyRetries])
+  }, [projectPath, activeProjectId, projectState, storyStatuses, currentStoryId, buildStatus, storyRetries])
 }
