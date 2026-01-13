@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useProcessStore, type RunningProcess } from "../stores/processStore";
+import { useProcessStore, type RunningProcess, type ProcessLogEntry } from "../stores/processStore";
 import { useBuildStore, type LogEntry } from "../stores/buildStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useTheme } from "../hooks/useTheme";
@@ -39,9 +39,18 @@ export function AgentRunView({ process }: AgentRunViewProps) {
   const projects = useProjectStore((state) => state.projects);
   const project = projects.find((p) => p.id === process.projectId);
   
+  // Get logs from buildStore for build processes
   const getProjectState = useBuildStore((state) => state.getProjectState);
   const projectState = getProjectState(process.projectId);
-  const logs = projectState.logs;
+  const buildLogs = projectState.logs;
+  
+  // Get logs from processStore for non-build processes
+  const getProcessLogs = useProcessStore((state) => state.getProcessLogs);
+  const processLogs = getProcessLogs(process.processId);
+  
+  // Use build logs for build/chat/prd processes, process logs for detection/dev-server
+  const useBuildLogs = process.type === 'build' || process.type === 'chat' || process.type === 'prd';
+  const logs: (LogEntry | ProcessLogEntry)[] = useBuildLogs ? buildLogs : processLogs;
   
   const selectProcess = useProcessStore((state) => state.selectProcess);
   const processes = useProcessStore((state) => state.processes);
@@ -163,7 +172,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     }
   }, [logs, autoScroll]);
 
-  const writeLogEntry = (terminal: Terminal, log: LogEntry) => {
+  const writeLogEntry = (terminal: Terminal, log: LogEntry | ProcessLogEntry) => {
     let prefix = "";
     const timestamp = log.timestamp.toLocaleTimeString();
 
@@ -270,7 +279,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
             <span className="ml-2 text-foreground capitalize">{process.agentId}</span>
           </div>
         )}
-        {projectState.currentStoryId && (
+        {projectState.currentStoryId && useBuildLogs && (
           <div>
             <span className="text-muted">Story:</span>
             <span className="ml-2 text-foreground">{projectState.currentStoryTitle || projectState.currentStoryId}</span>

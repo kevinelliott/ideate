@@ -7,6 +7,7 @@ import { NewProjectModal } from "./components/NewProjectModal";
 import { ImportProjectModal } from "./components/ImportProjectModal";
 import { PreferencesWindow } from "./components/PreferencesWindow";
 import { PermissionsModal } from "./components/PermissionsModal";
+import { WelcomeGuideModal } from "./components/WelcomeGuideModal";
 import { useProjectStore } from "./stores/projectStore";
 import { useBuildStore } from "./stores/buildStore";
 import { useThemeStore } from "./stores/themeStore";
@@ -38,6 +39,7 @@ interface Preferences {
   logBufferSize: number;
   agentPaths: Array<{ agentId: string; path: string }>;
   theme: string;
+  hasSeenWelcomeGuide?: boolean;
 }
 
 function App() {
@@ -45,6 +47,7 @@ function App() {
   const [showImportProjectModal, setShowImportProjectModal] = useState(false);
   const [showPreferencesWindow, setShowPreferencesWindow] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [pendingPrdGeneration, setPendingPrdGeneration] = useState<{projectId: string, projectPath: string, projectName: string} | null>(null);
   
@@ -61,7 +64,7 @@ function App() {
   const initSession = useAgentStore((state) => state.initSession);
   const loadPromptOverrides = usePromptStore((state) => state.loadOverrides);
 
-  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPreferencesWindow || showPermissionsModal;
+  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPreferencesWindow || showPermissionsModal || showWelcomeGuide;
 
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
@@ -72,6 +75,7 @@ function App() {
       setShowImportProjectModal(false);
       setShowPreferencesWindow(false);
       setShowPermissionsModal(false);
+      setShowWelcomeGuide(false);
     },
   });
 
@@ -83,19 +87,36 @@ function App() {
     loadPromptOverrides();
     loadIdeas();
     
-    // Load preferences to set default agent
+    // Load preferences to set default agent and check first-run
     invoke<Preferences | null>("load_preferences")
       .then((prefs) => {
         if (prefs?.defaultAgent) {
           setDefaultAgentId(prefs.defaultAgent);
         }
+        // Show welcome guide on first run
+        if (!prefs?.hasSeenWelcomeGuide) {
+          setShowWelcomeGuide(true);
+        }
         setPreferencesLoaded(true);
       })
       .catch((error) => {
         console.error("Failed to load preferences:", error);
+        // Show welcome guide if we can't load preferences (first run)
+        setShowWelcomeGuide(true);
         setPreferencesLoaded(true);
       });
   }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas]);
+
+  // Listen for native menu event to show welcome guide
+  useEffect(() => {
+    const unlistenPromise = listen("show-welcome-guide", () => {
+      setShowWelcomeGuide(true);
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     // Helper to find which project a process belongs to
@@ -276,6 +297,10 @@ function App() {
       <PermissionsModal
         isOpen={showPermissionsModal}
         onClose={() => setShowPermissionsModal(false)}
+      />
+      <WelcomeGuideModal
+        isOpen={showWelcomeGuide}
+        onClose={() => setShowWelcomeGuide(false)}
       />
     </div>
   );

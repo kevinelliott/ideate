@@ -15,19 +15,43 @@ interface Preferences {
   promptOverrides: Record<string, string>;
 }
 
+interface AgentModel {
+  id: string;
+  name: string;
+  provider?: string;
+}
+
+
+interface AgentPluginStatus {
+  id: string;
+  name: string;
+  command: string;
+  versionCommand: string[];
+  printArgs: string[];
+  interactiveArgs: string[];
+  defaultModel?: string;
+  supportedModels: AgentModel[];
+  capabilities: string[];
+  website: string;
+  description: string;
+  status: "available" | "not-installed" | "unknown";
+  installedVersion?: string;
+  cliPath?: string;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type SettingsTab = "general" | "prompts";
+type SettingsTab = "general" | "agents" | "prompts";
 type AppIconVariant = "transparent" | "light" | "dark";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-  const [defaultAgent, setDefaultAgent] = useState<string>("amp");
+  const [defaultAgent, setDefaultAgent] = useState<string>("claude-code");
   const [defaultAutonomy, setDefaultAutonomy] = useState<string>("autonomous");
   const [defaultBuildMode, setDefaultBuildMode] = useState<string>("ralph");
   const [logBufferSize, setLogBufferSize] = useState<number>(1000);
@@ -38,6 +62,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [_isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [iconChanged, setIconChanged] = useState(false);
+  
+  // Agent detection state
+  const [agentStatuses, setAgentStatuses] = useState<AgentPluginStatus[]>([]);
+  const [isDetectingAgents, setIsDetectingAgents] = useState(false);
 
   useModalKeyboard(isOpen, onClose);
 
@@ -50,11 +78,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && activeTab === "agents" && agentStatuses.length === 0) {
+      detectAgents();
+    }
+  }, [isOpen, activeTab]);
+
   const loadPreferences = async () => {
     try {
       const prefs = await invoke<Preferences | null>("load_preferences");
       if (prefs) {
-        setDefaultAgent(prefs.defaultAgent || "amp");
+        setDefaultAgent(prefs.defaultAgent || "claude-code");
         setDefaultAutonomy(prefs.defaultAutonomy || "autonomous");
         setDefaultBuildMode(prefs.defaultBuildMode || "ralph");
         setLogBufferSize(prefs.logBufferSize || 1000);
@@ -64,6 +98,18 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setIsDirty(false);
     } catch (error) {
       console.error("Failed to load preferences:", error);
+    }
+  };
+
+  const detectAgents = async () => {
+    setIsDetectingAgents(true);
+    try {
+      const statuses = await invoke<AgentPluginStatus[]>("detect_agents");
+      setAgentStatuses(statuses);
+    } catch (error) {
+      console.error("Failed to detect agents:", error);
+    } finally {
+      setIsDetectingAgents(false);
     }
   };
 
@@ -156,9 +202,54 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return promptId in promptOverrides;
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "available":
+        return (
+          <span className="px-2 py-0.5 text-xs rounded-full bg-success/20 text-success">
+            Installed
+          </span>
+        );
+      case "not-installed":
+        return (
+          <span className="px-2 py-0.5 text-xs rounded-full bg-muted/50 text-muted">
+            Not Installed
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning">
+            Unknown
+          </span>
+        );
+    }
+  };
+
+  const getCapabilityIcon = (capability: string) => {
+    switch (capability) {
+      case "code-editing":
+        return "✏️";
+      case "code-review":
+        return "👁️";
+      case "chat":
+        return "💬";
+      case "autonomous":
+        return "🤖";
+      case "multi-model":
+        return "🔀";
+      case "mcp":
+        return "🔌";
+      case "web-search":
+        return "🔍";
+      default:
+        return "•";
+    }
+  };
+
   if (!isOpen) return null;
 
   const promptsByCategory = getPromptsByCategory();
+  const availableAgents = agentStatuses.filter(a => a.status === "available");
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -176,6 +267,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               }`}
             >
               General
+            </button>
+            <button
+              onClick={() => setActiveTab("agents")}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                activeTab === "agents"
+                  ? "bg-accent/10 text-accent"
+                  : "text-secondary hover:text-foreground"
+              }`}
+            >
+              Agents
             </button>
             <button
               onClick={() => setActiveTab("prompts")}
@@ -256,7 +357,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             : "border-border hover:border-secondary"
                         }`}
                       >
-                        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-gray-100 to-gray-300 dark:from-gray-700 dark:to-gray-900 border border-border flex items-center justify-center overflow-hidden">
+                        <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-card to-background border border-border flex items-center justify-center overflow-hidden">
                           <img 
                             src="/icons/icon-transparent.png" 
                             alt="Transparent icon" 
@@ -275,7 +376,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             : "border-border hover:border-secondary"
                         }`}
                       >
-                        <div className="w-16 h-16 rounded-xl bg-white border border-border flex items-center justify-center overflow-hidden">
+                        <div className="w-16 h-16 rounded-xl bg-[#f5f5f5] border border-border flex items-center justify-center overflow-hidden">
                           <img 
                             src="/icons/icon-light.png" 
                             alt="Light icon" 
@@ -331,9 +432,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       }}
                       className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <option value="amp">Amp</option>
-                      <option value="claude-code">Claude Code</option>
+                      {availableAgents.length > 0 ? (
+                        availableAgents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="claude-code">Claude Code</option>
+                          <option value="amp">Amp</option>
+                        </>
+                      )}
                     </select>
+                    <p className="text-xs text-muted mt-1">
+                      See the Agents tab to detect and configure available agents.
+                    </p>
                   </div>
 
                   <div>
@@ -399,6 +513,127 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
               </section>
             </>
+          )}
+
+          {activeTab === "agents" && (
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">AI Coding Agents</h3>
+                  <p className="text-xs text-muted mt-1">
+                    Detected CLI agents on your system. Install agents to use them in builds.
+                  </p>
+                </div>
+                <button
+                  onClick={detectAgents}
+                  disabled={isDetectingAgents}
+                  className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-card transition-colors disabled:opacity-50"
+                >
+                  {isDetectingAgents ? "Detecting..." : "Refresh"}
+                </button>
+              </div>
+
+              {isDetectingAgents && agentStatuses.length === 0 ? (
+                <div className="text-center py-8 text-secondary">
+                  <svg className="w-6 h-6 mx-auto mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Detecting installed agents...
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {agentStatuses.map((agent) => (
+                    <div
+                      key={agent.id}
+                      className={`p-4 rounded-lg border transition-colors ${
+                        agent.status === "available"
+                          ? "border-success/30 bg-success/5"
+                          : "border-border bg-background"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-sm font-medium text-foreground">
+                              {agent.name}
+                            </h4>
+                            {getStatusBadge(agent.status)}
+                            {agent.id === defaultAgent && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-accent/20 text-accent">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted mb-2">
+                            {agent.description}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {agent.capabilities.slice(0, 5).map((cap) => (
+                              <span
+                                key={cap}
+                                className="px-1.5 py-0.5 text-[10px] rounded bg-card text-secondary"
+                                title={cap}
+                              >
+                                {getCapabilityIcon(cap)} {cap}
+                              </span>
+                            ))}
+                          </div>
+                          {agent.status === "available" && (
+                            <div className="text-xs text-secondary space-y-0.5">
+                              {agent.installedVersion && (
+                                <div>Version: <span className="text-foreground">{agent.installedVersion}</span></div>
+                              )}
+                              {agent.cliPath && (
+                                <div className="truncate">Path: <span className="text-foreground font-mono">{agent.cliPath}</span></div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0">
+                          {agent.status === "available" ? (
+                            <button
+                              onClick={() => {
+                                setDefaultAgent(agent.id);
+                                setIsDirty(true);
+                              }}
+                              disabled={agent.id === defaultAgent}
+                              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                                agent.id === defaultAgent
+                                  ? "bg-accent/20 text-accent cursor-default"
+                                  : "bg-card hover:bg-accent/10 text-secondary hover:text-accent"
+                              }`}
+                            >
+                              {agent.id === defaultAgent ? "Default" : "Set Default"}
+                            </button>
+                          ) : (
+                            <a
+                              href={agent.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 text-xs rounded-md bg-card hover:bg-accent/10 text-secondary hover:text-accent transition-colors inline-flex items-center gap-1"
+                            >
+                              Install
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-6 p-4 rounded-lg bg-card/50 border border-border">
+                <h4 className="text-sm font-medium text-foreground mb-2">About Agent CLIs</h4>
+                <p className="text-xs text-muted leading-relaxed">
+                  Ideate works with AI coding agent CLIs installed on your system. Each agent has its own 
+                  capabilities, supported models, and pricing. Install the agents you want to use, then 
+                  set your preferred default agent above.
+                </p>
+              </div>
+            </section>
           )}
 
           {activeTab === "prompts" && (

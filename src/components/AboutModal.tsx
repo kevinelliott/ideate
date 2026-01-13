@@ -30,8 +30,8 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
           {/* Description */}
           <p className="text-sm text-secondary mb-6 leading-relaxed">
-            A desktop app for managing AI coding agent workflows. 
-            Build software faster with intelligent PRD generation, 
+            A desktop app for managing AI coding agent workflows.
+            Build software faster with intelligent PRD generation,
             user story management, and seamless agent integration.
           </p>
 

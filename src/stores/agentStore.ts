@@ -14,7 +14,7 @@ export interface AgentSession {
   agentId: string
 }
 
-const DEFAULT_AGENT_ID = 'amp'
+const DEFAULT_AGENT_ID = 'claude-code'
 
 const createEmptySession = (agentId: string = DEFAULT_AGENT_ID): AgentSession => ({
   processId: null,

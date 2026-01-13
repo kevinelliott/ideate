@@ -35,65 +35,17 @@ export function useDevServer(projectPath: string, projectId?: string) {
   const unlistenOutputRef = useRef<UnlistenFn | null>(null)
   const unlistenExitRef = useRef<UnlistenFn | null>(null)
   const detectOutputRef = useRef<string>('')
+  const isDetectingRef = useRef(false)
+  const statusRef = useRef<DevServerStatus>('idle')
 
   const registerProcess = useProcessStore((state) => state.registerProcess)
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
+  const appendProcessLog = useProcessStore((state) => state.appendProcessLog)
 
+  // Keep statusRef in sync
   useEffect(() => {
-    let mounted = true
-
-    const setupListeners = async () => {
-      unlistenOutputRef.current = await listen<AgentOutputEvent>('agent-output', (event) => {
-        if (!mounted) return
-        
-        if (event.payload.process_id === detectProcessIdRef.current) {
-          detectOutputRef.current += event.payload.content + '\n'
-        }
-        
-        if (event.payload.process_id === serverProcessIdRef.current) {
-          setLogs(prev => [...prev.slice(-100), event.payload.content])
-          
-          const urlMatch = event.payload.content.match(/https?:\/\/localhost[:\d]*/i) ||
-                          event.payload.content.match(/https?:\/\/127\.0\.0\.1[:\d]*/i) ||
-                          event.payload.content.match(/https?:\/\/0\.0\.0\.0[:\d]*/i)
-          if (urlMatch && status === 'starting') {
-            const detectedUrl = urlMatch[0].replace('0.0.0.0', 'localhost')
-            setUrl(detectedUrl)
-            setStatus('running')
-          }
-        }
-      })
-
-      unlistenExitRef.current = await listen<AgentExitEvent>('agent-exit', (event) => {
-        if (!mounted) return
-        
-        if (event.payload.process_id === detectProcessIdRef.current) {
-          if (projectId) {
-            unregisterProcess(event.payload.process_id)
-          }
-          detectProcessIdRef.current = null
-          parseDetectionOutput(detectOutputRef.current)
-        }
-        
-        if (event.payload.process_id === serverProcessIdRef.current) {
-          if (projectId) {
-            unregisterProcess(event.payload.process_id)
-          }
-          serverProcessIdRef.current = null
-          setStatus('idle')
-          setUrl(null)
-        }
-      })
-    }
-
-    setupListeners()
-
-    return () => {
-      mounted = false
-      unlistenOutputRef.current?.()
-      unlistenExitRef.current?.()
-    }
-  }, [status, projectId, unregisterProcess])
+    statusRef.current = status
+  }, [status])
 
   const parseDetectionOutput = useCallback((output: string) => {
     try {
@@ -138,7 +90,99 @@ export function useDevServer(projectPath: string, projectId?: string) {
     }
   }, [])
 
+  // Set up event listeners once on mount
+  useEffect(() => {
+    let mounted = true
+
+    const setupListeners = async () => {
+      unlistenOutputRef.current = await listen<AgentOutputEvent>('agent-output', (event) => {
+        if (!mounted) return
+        
+        if (event.payload.process_id === detectProcessIdRef.current) {
+          detectOutputRef.current += event.payload.content + '\n'
+          // Write to process store for visibility in AgentRunView
+          appendProcessLog(
+            event.payload.process_id,
+            event.payload.stream_type,
+            event.payload.content
+          )
+        }
+        
+        if (event.payload.process_id === serverProcessIdRef.current) {
+          setLogs(prev => [...prev.slice(-100), event.payload.content])
+          // Write to process store for visibility in AgentRunView
+          appendProcessLog(
+            event.payload.process_id,
+            event.payload.stream_type,
+            event.payload.content
+          )
+          
+          const urlMatch = event.payload.content.match(/https?:\/\/localhost[:\d]*/i) ||
+                          event.payload.content.match(/https?:\/\/127\.0\.0\.1[:\d]*/i) ||
+                          event.payload.content.match(/https?:\/\/0\.0\.0\.0[:\d]*/i)
+          if (urlMatch && statusRef.current === 'starting') {
+            const detectedUrl = urlMatch[0].replace('0.0.0.0', 'localhost')
+            setUrl(detectedUrl)
+            setStatus('running')
+          }
+        }
+      })
+
+      unlistenExitRef.current = await listen<AgentExitEvent>('agent-exit', (event) => {
+        if (!mounted) return
+        
+        if (event.payload.process_id === detectProcessIdRef.current) {
+          if (projectId) {
+            unregisterProcess(event.payload.process_id)
+          }
+          // Add system log for exit
+          appendProcessLog(
+            event.payload.process_id,
+            'system',
+            event.payload.success 
+              ? `Detection completed (exit code: ${event.payload.exit_code ?? 0})`
+              : `Detection failed (exit code: ${event.payload.exit_code ?? 'unknown'})`
+          )
+          detectProcessIdRef.current = null
+          isDetectingRef.current = false
+          parseDetectionOutput(detectOutputRef.current)
+        }
+        
+        if (event.payload.process_id === serverProcessIdRef.current) {
+          if (projectId) {
+            unregisterProcess(event.payload.process_id)
+          }
+          // Add system log for exit
+          appendProcessLog(
+            event.payload.process_id,
+            'system',
+            event.payload.success 
+              ? `Server stopped (exit code: ${event.payload.exit_code ?? 0})`
+              : `Server crashed (exit code: ${event.payload.exit_code ?? 'unknown'})`
+          )
+          serverProcessIdRef.current = null
+          setStatus('idle')
+          setUrl(null)
+        }
+      })
+    }
+
+    setupListeners()
+
+    return () => {
+      mounted = false
+      unlistenOutputRef.current?.()
+      unlistenExitRef.current?.()
+    }
+  }, [projectId, unregisterProcess, parseDetectionOutput, appendProcessLog])
+
   const detectWithAmp = useCallback(async (): Promise<DevServerConfig | null> => {
+    // Prevent multiple concurrent detections
+    if (isDetectingRef.current || detectProcessIdRef.current) {
+      return null
+    }
+    
+    isDetectingRef.current = true
     detectOutputRef.current = ''
     
     const prompt = usePromptStore.getState().getPrompt('devServerDetection')
@@ -165,12 +209,14 @@ export function useDevServer(projectPath: string, projectId?: string) {
       
       return null
     } catch (e) {
+      isDetectingRef.current = false
       throw new Error(`Failed to detect dev server: ${e}`)
     }
   }, [projectPath, projectId, registerProcess])
 
   const detectDevServer = useCallback(async () => {
-    if (status === 'detecting') return
+    // Use ref to prevent race conditions with React state updates
+    if (statusRef.current === 'detecting' || isDetectingRef.current) return
     
     setStatus('detecting')
     setError(null)
@@ -188,8 +234,9 @@ export function useDevServer(projectPath: string, projectId?: string) {
     } catch (e) {
       setError(`Failed to detect dev server: ${e}`)
       setStatus('error')
+      isDetectingRef.current = false
     }
-  }, [projectPath, status, detectWithAmp])
+  }, [projectPath, detectWithAmp])
 
   const startServer = useCallback(async () => {
     if (!config || status === 'running' || status === 'starting') return

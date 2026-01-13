@@ -7,9 +7,9 @@ import { useTheme } from '../hooks/useTheme'
 import { ProjectContextMenu } from './ProjectContextMenu'
 import { DeleteProjectModal } from './DeleteProjectModal'
 import { SettingsModal } from './SettingsModal'
-import { AboutModal } from './AboutModal'
 import { useIdeasStore } from '../stores/ideasStore'
 import { CreateIdeaModal } from './CreateIdeaModal'
+import { AboutModal } from './AboutModal'
 
 interface SidebarProps {
   onNewProject: () => void;
@@ -94,8 +94,8 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isCreateIdeaOpen, setIsCreateIdeaOpen] = useState(false)
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
@@ -707,11 +707,6 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
         onCancel={() => setDeleteModal({ isOpen: false, projectId: '', projectName: '' })}
       />
 
-      <AboutModal
-        isOpen={isAboutOpen}
-        onClose={() => setIsAboutOpen(false)}
-      />
-
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -725,6 +720,11 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
           selectIdea(newIdea.id)
           setActiveProject(null)
         }}
+      />
+
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
       />
     </>
   );
