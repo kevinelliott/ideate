@@ -1,7 +1,29 @@
+export type PromptCategory = 'prd' | 'stories' | 'ideas' | 'development';
+
+export const PROMPT_CATEGORIES: Record<PromptCategory, { name: string; description: string }> = {
+  prd: {
+    name: 'PRD Generation',
+    description: 'Prompts for creating and managing Product Requirements Documents',
+  },
+  stories: {
+    name: 'User Stories',
+    description: 'Prompts for generating, breaking down, and implementing user stories',
+  },
+  ideas: {
+    name: 'Idea Development',
+    description: 'Prompts for developing and refining project ideas',
+  },
+  development: {
+    name: 'Development Tools',
+    description: 'Prompts for development-related tasks like server detection',
+  },
+};
+
 export interface PromptTemplate {
   id: string;
   name: string;
   description: string;
+  category: PromptCategory;
   defaultPrompt: string;
   variables: string[];
 }
@@ -11,6 +33,7 @@ export const DEFAULT_PROMPTS: Record<string, PromptTemplate> = {
     id: "prdGeneration",
     name: "PRD Generation",
     description: "Generates a Product Requirements Document with user stories from an idea",
+    category: "prd",
     variables: ["{{projectName}}", "{{idea}}"],
     defaultPrompt: `You are a product manager. Generate a PRD (Product Requirements Document) for the following app idea.
 
@@ -53,6 +76,7 @@ IMPORTANT: Only create the prd.json file. Do not implement any features.`,
     id: "prdFromCodebase",
     name: "PRD from Existing Codebase",
     description: "Analyzes an existing codebase and generates a PRD that could recreate it",
+    category: "prd",
     variables: ["{{projectName}}"],
     defaultPrompt: `You are a product manager and software architect. Analyze the existing codebase in this project directory and generate a comprehensive PRD (Product Requirements Document) that accurately describes what the project does and how it could be recreated.
 
@@ -109,157 +133,11 @@ Requirements:
 IMPORTANT: Only analyze and create the prd.json file. Do not modify any existing code.`,
   },
 
-  additionalStories: {
-    id: "additionalStories",
-    name: "Generate Additional Stories",
-    description: "Generates additional user stories based on a request",
-    variables: ["{{projectName}}", "{{existingStories}}", "{{request}}", "{{nextPriority}}"],
-    defaultPrompt: `You are a product manager. Based on the user's request, generate additional user stories for an existing project.
-
-PROJECT NAME: {{projectName}}
-
-EXISTING USER STORIES:
-{{existingStories}}
-
-USER REQUEST:
-{{request}}
-
-Read the existing .ideate/prd.json file and ADD new user stories to it based on the user's request. Keep all existing stories intact.
-
-Requirements for new stories:
-1. Analyze the request and break it down into appropriate user stories
-2. Each story should be small enough to implement in a single iteration
-3. Start new story IDs after the existing ones (use format US-XXX where XXX continues from existing)
-4. Set priorities starting from {{nextPriority}} (higher number = lower priority)
-5. Each story should have 3-5 clear acceptance criteria
-6. Set passes: false and status: "pending" for all new stories
-7. Consider dependencies - foundational changes should have lower priority numbers
-8. Add helpful implementation notes where appropriate
-
-Update the .ideate/prd.json file by appending the new stories to the existing userStories array.
-
-IMPORTANT: 
-- Do NOT remove or modify existing stories
-- Only ADD new stories to the userStories array
-- Do NOT implement any features, only update the prd.json`,
-  },
-
-  storyImplementation: {
-    id: "storyImplementation",
-    name: "Story Implementation",
-    description: "Implements a user story following its acceptance criteria",
-    variables: ["{{storyId}}", "{{storyTitle}}", "{{storyDescription}}", "{{acceptanceCriteria}}", "{{notes}}"],
-    defaultPrompt: `Implement the following user story:
-
-## {{storyId}}: {{storyTitle}}
-
-{{storyDescription}}
-
-### Acceptance Criteria:
-{{acceptanceCriteria}}
-
-{{notes}}
-
-Please implement this user story following the acceptance criteria. When done, ensure all quality checks pass (typecheck, lint, build).`,
-  },
-
-  devServerDetection: {
-    id: "devServerDetection",
-    name: "Dev Server Detection",
-    description: "Detects how to start the development server for preview",
-    variables: [],
-    defaultPrompt: `Look at this project and tell me how to start the development server for preview. 
-Respond with ONLY a JSON object in this exact format, no other text:
-{"command": "the full command to run", "url": "http://localhost:PORT"}
-
-For example:
-{"command": "npm run dev", "url": "http://localhost:5173"}
-{"command": "pnpm dev", "url": "http://localhost:3000"}
-
-Check package.json for the dev/start script and the framework being used to determine the correct port.`,
-  },
-
-  ideaDescriptionGenerate: {
-    id: "ideaDescriptionGenerate",
-    name: "Generate Idea Description",
-    description: "Generates a detailed description for an idea from its title and summary",
-    variables: ["{{title}}", "{{summary}}"],
-    defaultPrompt: `Generate a detailed description for the following idea. Write in Markdown format with appropriate headers, bullet points, and formatting.
-
-IDEA TITLE: {{title}}
-
-SUMMARY: {{summary}}
-
-Write a comprehensive description that:
-1. Expands on the core concept
-2. Identifies key features or components
-3. Describes the target audience or use case
-4. Notes any technical considerations
-5. Suggests potential challenges and solutions
-
-Output ONLY the description content in Markdown format. Do not include any preamble or explanation - just the description itself.`,
-  },
-
-  ideaDescriptionShorten: {
-    id: "ideaDescriptionShorten",
-    name: "Shorten Idea Description",
-    description: "Makes an idea description more concise while preserving key points",
-    variables: ["{{description}}"],
-    defaultPrompt: `Shorten the following description while preserving the key points. Make it more concise and scannable. Keep the Markdown formatting.
-
-CURRENT DESCRIPTION:
-{{description}}
-
-Output ONLY the shortened description in Markdown format. Do not include any preamble or explanation - just the shortened description itself.`,
-  },
-
-  ideaDescriptionLengthen: {
-    id: "ideaDescriptionLengthen",
-    name: "Lengthen Idea Description",
-    description: "Expands an idea description with more detail and context",
-    variables: ["{{title}}", "{{summary}}", "{{description}}"],
-    defaultPrompt: `Expand the following description with more detail, examples, and context. Keep the Markdown formatting and enhance it with better structure.
-
-IDEA TITLE: {{title}}
-SUMMARY: {{summary}}
-
-CURRENT DESCRIPTION:
-{{description}}
-
-Add more detail about:
-1. Implementation specifics
-2. User benefits
-3. Technical architecture considerations
-4. Potential integrations
-5. Success metrics
-
-Output ONLY the expanded description in Markdown format. Do not include any preamble or explanation - just the expanded description itself.`,
-  },
-
-  ideaDescriptionSimplify: {
-    id: "ideaDescriptionSimplify",
-    name: "Simplify Idea Description",
-    description: "Rewrites an idea description to be easier to read",
-    variables: ["{{description}}"],
-    defaultPrompt: `Rewrite the following description to be easier to read. Use simpler language, shorter sentences, and clearer structure. Keep the Markdown formatting.
-
-CURRENT DESCRIPTION:
-{{description}}
-
-Make it:
-1. Use plain language (avoid jargon)
-2. Break up long paragraphs
-3. Use bullet points for lists
-4. Add clear headers for sections
-5. Be accessible to non-technical readers
-
-Output ONLY the simplified description in Markdown format. Do not include any preamble or explanation - just the simplified description itself.`,
-  },
-
   prdFromIdea: {
     id: "prdFromIdea",
     name: "PRD from Detailed Idea",
     description: "Generates a comprehensive PRD with 8-15 user stories from a detailed idea with title, summary, and description",
+    category: "prd",
     variables: ["{{projectName}}", "{{title}}", "{{summary}}", "{{description}}"],
     defaultPrompt: `You are an experienced product manager. Generate a comprehensive PRD (Product Requirements Document) for the following detailed idea.
 
@@ -332,10 +210,47 @@ Write the prd.json to .ideate/prd.json
 IMPORTANT: Only create the prd.json file. Do not implement any features.`,
   },
 
+  additionalStories: {
+    id: "additionalStories",
+    name: "Generate Additional Stories",
+    description: "Generates additional user stories based on a request",
+    category: "stories",
+    variables: ["{{projectName}}", "{{existingStories}}", "{{request}}", "{{nextPriority}}"],
+    defaultPrompt: `You are a product manager. Based on the user's request, generate additional user stories for an existing project.
+
+PROJECT NAME: {{projectName}}
+
+EXISTING USER STORIES:
+{{existingStories}}
+
+USER REQUEST:
+{{request}}
+
+Read the existing .ideate/prd.json file and ADD new user stories to it based on the user's request. Keep all existing stories intact.
+
+Requirements for new stories:
+1. Analyze the request and break it down into appropriate user stories
+2. Each story should be small enough to implement in a single iteration
+3. Start new story IDs after the existing ones (use format US-XXX where XXX continues from existing)
+4. Set priorities starting from {{nextPriority}} (higher number = lower priority)
+5. Each story should have 3-5 clear acceptance criteria
+6. Set passes: false and status: "pending" for all new stories
+7. Consider dependencies - foundational changes should have lower priority numbers
+8. Add helpful implementation notes where appropriate
+
+Update the .ideate/prd.json file by appending the new stories to the existing userStories array.
+
+IMPORTANT: 
+- Do NOT remove or modify existing stories
+- Only ADD new stories to the userStories array
+- Do NOT implement any features, only update the prd.json`,
+  },
+
   storyBreakdown: {
     id: "storyBreakdown",
     name: "Story Breakdown",
     description: "Evaluates each user story and breaks down complex ones into smaller, single-iteration stories",
+    category: "stories",
     variables: ["{{projectName}}"],
     defaultPrompt: `You are an experienced product manager and agile coach. Your task is to review the existing PRD and break down any user stories that are too complex to complete in a single iteration.
 
@@ -390,6 +305,124 @@ IMPORTANT:
 - Preserve all metadata (project, description, branchName)
 - Do NOT implement any features, only refine the PRD`,
   },
+
+  storyImplementation: {
+    id: "storyImplementation",
+    name: "Story Implementation",
+    description: "Implements a user story following its acceptance criteria",
+    category: "stories",
+    variables: ["{{storyId}}", "{{storyTitle}}", "{{storyDescription}}", "{{acceptanceCriteria}}", "{{notes}}"],
+    defaultPrompt: `Implement the following user story:
+
+## {{storyId}}: {{storyTitle}}
+
+{{storyDescription}}
+
+### Acceptance Criteria:
+{{acceptanceCriteria}}
+
+{{notes}}
+
+Please implement this user story following the acceptance criteria. When done, ensure all quality checks pass (typecheck, lint, build).`,
+  },
+
+  ideaDescriptionGenerate: {
+    id: "ideaDescriptionGenerate",
+    name: "Generate Idea Description",
+    description: "Generates a detailed description for an idea from its title and summary",
+    category: "ideas",
+    variables: ["{{title}}", "{{summary}}"],
+    defaultPrompt: `Generate a detailed description for the following idea. Write in Markdown format with appropriate headers, bullet points, and formatting.
+
+IDEA TITLE: {{title}}
+
+SUMMARY: {{summary}}
+
+Write a comprehensive description that:
+1. Expands on the core concept
+2. Identifies key features or components
+3. Describes the target audience or use case
+4. Notes any technical considerations
+5. Suggests potential challenges and solutions
+
+Output ONLY the description content in Markdown format. Do not include any preamble or explanation - just the description itself.`,
+  },
+
+  ideaDescriptionShorten: {
+    id: "ideaDescriptionShorten",
+    name: "Shorten Idea Description",
+    description: "Makes an idea description more concise while preserving key points",
+    category: "ideas",
+    variables: ["{{description}}"],
+    defaultPrompt: `Shorten the following description while preserving the key points. Make it more concise and scannable. Keep the Markdown formatting.
+
+CURRENT DESCRIPTION:
+{{description}}
+
+Output ONLY the shortened description in Markdown format. Do not include any preamble or explanation - just the shortened description itself.`,
+  },
+
+  ideaDescriptionLengthen: {
+    id: "ideaDescriptionLengthen",
+    name: "Lengthen Idea Description",
+    description: "Expands an idea description with more detail and context",
+    category: "ideas",
+    variables: ["{{title}}", "{{summary}}", "{{description}}"],
+    defaultPrompt: `Expand the following description with more detail, examples, and context. Keep the Markdown formatting and enhance it with better structure.
+
+IDEA TITLE: {{title}}
+SUMMARY: {{summary}}
+
+CURRENT DESCRIPTION:
+{{description}}
+
+Add more detail about:
+1. Implementation specifics
+2. User benefits
+3. Technical architecture considerations
+4. Potential integrations
+5. Success metrics
+
+Output ONLY the expanded description in Markdown format. Do not include any preamble or explanation - just the expanded description itself.`,
+  },
+
+  ideaDescriptionSimplify: {
+    id: "ideaDescriptionSimplify",
+    name: "Simplify Idea Description",
+    description: "Rewrites an idea description to be easier to read",
+    category: "ideas",
+    variables: ["{{description}}"],
+    defaultPrompt: `Rewrite the following description to be easier to read. Use simpler language, shorter sentences, and clearer structure. Keep the Markdown formatting.
+
+CURRENT DESCRIPTION:
+{{description}}
+
+Make it:
+1. Use plain language (avoid jargon)
+2. Break up long paragraphs
+3. Use bullet points for lists
+4. Add clear headers for sections
+5. Be accessible to non-technical readers
+
+Output ONLY the simplified description in Markdown format. Do not include any preamble or explanation - just the simplified description itself.`,
+  },
+
+  devServerDetection: {
+    id: "devServerDetection",
+    name: "Dev Server Detection",
+    description: "Detects how to start the development server for preview",
+    category: "development",
+    variables: [],
+    defaultPrompt: `Look at this project and tell me how to start the development server for preview. 
+Respond with ONLY a JSON object in this exact format, no other text:
+{"command": "the full command to run", "url": "http://localhost:PORT"}
+
+For example:
+{"command": "npm run dev", "url": "http://localhost:5173"}
+{"command": "pnpm dev", "url": "http://localhost:3000"}
+
+Check package.json for the dev/start script and the framework being used to determine the correct port.`,
+  },
 };
 
 export type PromptOverrides = Record<string, string>;
@@ -412,5 +445,20 @@ export function applyVariables(prompt: string, variables: Record<string, string>
   for (const [key, value] of Object.entries(variables)) {
     result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
   }
+  return result;
+}
+
+export function getPromptsByCategory(): Record<PromptCategory, PromptTemplate[]> {
+  const result: Record<PromptCategory, PromptTemplate[]> = {
+    prd: [],
+    stories: [],
+    ideas: [],
+    development: [],
+  };
+  
+  for (const template of Object.values(DEFAULT_PROMPTS)) {
+    result[template.category].push(template);
+  }
+  
   return result;
 }

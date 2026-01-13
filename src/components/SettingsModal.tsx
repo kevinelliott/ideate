@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTheme, type Theme } from "../hooks/useTheme";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
-import { DEFAULT_PROMPTS, type PromptTemplate } from "../utils/prompts";
+import { DEFAULT_PROMPTS, PROMPT_CATEGORIES, getPromptsByCategory, type PromptCategory } from "../utils/prompts";
 
 interface Preferences {
   defaultAgent: string | null;
@@ -158,7 +158,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   if (!isOpen) return null;
 
-  const promptTemplates = Object.values(DEFAULT_PROMPTS) as PromptTemplate[];
+  const promptsByCategory = getPromptsByCategory();
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -457,44 +457,58 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {promptTemplates.map((template) => (
-                    <div
-                      key={template.id}
-                      className="p-4 rounded-lg border border-border bg-background hover:border-secondary transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-medium text-foreground">
-                              {template.name}
-                            </h4>
-                            {isPromptModified(template.id) && (
-                              <span className="px-1.5 py-0.5 text-xs bg-accent/10 text-accent rounded">
-                                Modified
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted mt-1">
-                            {template.description}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {isPromptModified(template.id) && (
-                            <button
-                              onClick={() => handleResetPrompt(template.id)}
-                              className="px-2 py-1 text-xs text-muted hover:text-foreground transition-colors"
-                            >
-                              Reset
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleEditPrompt(template.id)}
-                            className="px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded transition-colors"
+                <div className="space-y-6">
+                  {(Object.keys(PROMPT_CATEGORIES) as PromptCategory[]).map((category) => (
+                    <div key={category}>
+                      <div className="mb-3">
+                        <h4 className="text-sm font-medium text-foreground">
+                          {PROMPT_CATEGORIES[category].name}
+                        </h4>
+                        <p className="text-xs text-muted">
+                          {PROMPT_CATEGORIES[category].description}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {promptsByCategory[category].map((template) => (
+                          <div
+                            key={template.id}
+                            className="p-3 rounded-lg border border-border bg-background hover:border-secondary transition-colors"
                           >
-                            Edit
-                          </button>
-                        </div>
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h5 className="text-sm font-medium text-foreground">
+                                    {template.name}
+                                  </h5>
+                                  {isPromptModified(template.id) && (
+                                    <span className="px-1.5 py-0.5 text-xs bg-accent/10 text-accent rounded">
+                                      Modified
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted mt-0.5">
+                                  {template.description}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {isPromptModified(template.id) && (
+                                  <button
+                                    onClick={() => handleResetPrompt(template.id)}
+                                    className="px-2 py-1 text-xs text-muted hover:text-foreground transition-colors"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleEditPrompt(template.id)}
+                                  className="px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded transition-colors"
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
