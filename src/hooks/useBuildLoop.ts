@@ -105,6 +105,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         projectId,
         type: 'build',
         label: story.title,
+        agentId,
+        command: {
+          executable: plugin.command,
+          args,
+          workingDirectory: projectPath,
+        },
       })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
@@ -171,6 +177,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         projectId,
         type: 'build',
         label: `[P] ${story.title}`,
+        agentId,
+        command: {
+          executable: plugin.command,
+          args,
+          workingDirectory: projectPath,
+        },
       })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
@@ -258,13 +270,13 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
       const batch = storyQueue.splice(0, DEFAULT_PARALLEL_LIMIT)
       appendLog(projectId, 'system', `Starting batch of ${batch.length} stories`)
-      
+
       const results = await runBatch(batch)
-      const failures = results.filter(r => !r).length
-      
-      if (failures > 0) {
+      const failedCount = results.filter(r => !r).length
+
+      if (failedCount > 0) {
         hasFailures = true
-        appendLog(projectId, 'system', `Batch completed with ${failures} failure(s)`)
+        appendLog(projectId, 'system', `${failedCount} stories failed in this batch`)
       }
     }
 
@@ -280,45 +292,51 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
     isRunningRef.current = false
-  }, [projectPath, projectId, stories, runStoryParallel, startBuild, cancelBuild, appendLog, clearLogs, resetStoryStatuses, setCurrentStory])
+  }, [projectPath, projectId, stories, runStoryParallel, clearLogs, resetStoryStatuses, startBuild, cancelBuild, appendLog, setCurrentStory])
 
   const waitWhilePaused = useCallback(async (): Promise<boolean> => {
     if (!projectId) return false
     
-    while (useBuildStore.getState().getProjectState(projectId).status === 'paused') {
+    while (true) {
+      const buildStatus = useBuildStore.getState().getProjectState(projectId).status
+      if (buildStatus === 'idle') return false
+      if (buildStatus === 'running') return true
       await new Promise(resolve => setTimeout(resolve, 500))
-      if (useBuildStore.getState().getProjectState(projectId).status === 'idle') {
-        return false
-      }
     }
-    return useBuildStore.getState().getProjectState(projectId).status === 'running'
   }, [projectId])
 
-  const shouldPauseForAutonomy = useCallback((autonomy: AutonomyLevel, timing: 'before' | 'after', hasMoreStories: boolean): boolean => {
+  const shouldPauseForAutonomy = useCallback((autonomy: AutonomyLevel, timing: 'before' | 'after', hasRemaining: boolean): boolean => {
     if (autonomy === 'autonomous') return false
-    if (autonomy === 'manual') return timing === 'before' && hasMoreStories
-    if (autonomy === 'pause-between') return timing === 'after' && hasMoreStories
+    if (autonomy === 'manual' && timing === 'before') return true
+    if (autonomy === 'pause-between' && timing === 'after' && hasRemaining) return true
     return false
   }, [])
 
   const runFromStory = useCallback(async (storyId: string) => {
     if (!projectPath || !projectId || isRunningRef.current) return
 
-    const storyIndex = stories.findIndex(s => s.id === storyId)
-    if (storyIndex === -1) return
-
     isRunningRef.current = true
-    storyIndexRef.current = storyIndex
     clearLogs(projectId)
     resetStoryStatuses(projectId)
     startBuild(projectId)
-    appendLog(projectId, 'system', `Starting from story ${storyId}`)
+    appendLog(projectId, 'system', `Build started from story ${storyId}`)
 
-    const remainingStories = stories.slice(storyIndex).filter(s => !s.passes)
+    const allStories = usePrdStore.getState().stories
+      .sort((a, b) => a.priority - b.priority)
+    
+    const startIndex = allStories.findIndex(s => s.id === storyId)
+    if (startIndex === -1) {
+      appendLog(projectId, 'system', `Story ${storyId} not found`)
+      cancelBuild(projectId)
+      isRunningRef.current = false
+      return
+    }
 
-    for (let i = 0; i < remainingStories.length; i++) {
-      const story = remainingStories[i]
-      storyIndexRef.current = storyIndex + i
+    const storiesToRun = allStories.slice(startIndex).filter(s => !s.passes)
+
+    for (let i = 0; i < storiesToRun.length; i++) {
+      const story = storiesToRun[i]
+      storyIndexRef.current = i
 
       const buildStatus = useBuildStore.getState().getProjectState(projectId).status
       if (buildStatus === 'idle') {
@@ -345,10 +363,10 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
       const autonomy = settings?.autonomy || 'autonomous'
 
-      const moreStories = usePrdStore.getState().stories.filter((s) => !s.passes)
-      if (moreStories.length > 0) {
+      const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+      if (remainingStories.length > 0) {
         if (autonomy === 'manual' || autonomy === 'pause-between') {
-          const nextStory = moreStories[0]
+          const nextStory = remainingStories[0]
           setCurrentStory(projectId, nextStory.id, nextStory.title)
           setStoryStatus(projectId, nextStory.id, 'pending')
           appendLog(projectId, 'system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)

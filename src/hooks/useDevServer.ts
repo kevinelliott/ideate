@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { detectDevServer as detectDevServerFromPackage, type DevServerConfig } from '../utils/devServerDetection'
+import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { usePromptStore } from '../stores/promptStore'
 import { useProcessStore } from '../stores/processStore'
+
+interface DevServerConfig {
+  command: string
+  args: string[]
+  url: string
+  framework?: string
+}
 
 interface SpawnAgentResult {
   process_id: string
@@ -11,7 +17,7 @@ interface SpawnAgentResult {
 
 interface AgentOutputEvent {
   process_id: string
-  stream_type: 'stdout' | 'stderr'
+  stream_type: string
   content: string
 }
 
@@ -21,102 +27,135 @@ interface AgentExitEvent {
   success: boolean
 }
 
-export type DevServerStatus = 'idle' | 'detecting' | 'starting' | 'running' | 'stopping' | 'error'
+export type DevServerStatus = 'idle' | 'detecting' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error'
+
+async function detectDevServerFromPackage(projectPath: string): Promise<DevServerConfig | null> {
+  try {
+    const packageJsonPath = `${projectPath}/package.json`
+    const content = await invoke<string>('read_file', { path: packageJsonPath })
+    const packageJson = JSON.parse(content)
+    
+    const scripts = packageJson.scripts || {}
+    
+    const devScripts = ['dev', 'start', 'serve', 'develop']
+    let devScript: string | null = null
+    let devCommand: string | null = null
+    
+    for (const script of devScripts) {
+      if (scripts[script]) {
+        devScript = script
+        devCommand = scripts[script]
+        break
+      }
+    }
+    
+    if (!devScript || !devCommand) {
+      return null
+    }
+    
+    let framework: string | undefined
+    let port = 3000
+    
+    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies }
+    
+    if (deps['next']) {
+      framework = 'Next.js'
+      port = 3000
+    } else if (deps['vite']) {
+      framework = 'Vite'
+      port = 5173
+    } else if (deps['@angular/core']) {
+      framework = 'Angular'
+      port = 4200
+    } else if (deps['vue']) {
+      framework = 'Vue'
+      port = 5173
+    } else if (deps['svelte'] || deps['@sveltejs/kit']) {
+      framework = 'Svelte'
+      port = 5173
+    } else if (deps['react-scripts']) {
+      framework = 'Create React App'
+      port = 3000
+    } else if (deps['gatsby']) {
+      framework = 'Gatsby'
+      port = 8000
+    } else if (deps['nuxt']) {
+      framework = 'Nuxt'
+      port = 3000
+    } else if (deps['astro']) {
+      framework = 'Astro'
+      port = 4321
+    }
+    
+    const portMatch = devCommand.match(/(?:--port|PORT=|:)(\d+)/)
+    if (portMatch) {
+      port = parseInt(portMatch[1], 10)
+    }
+    
+    let packageManager = 'npm'
+    try {
+      await invoke<string>('read_file', { path: `${projectPath}/pnpm-lock.yaml` })
+      packageManager = 'pnpm'
+    } catch {
+      try {
+        await invoke<string>('read_file', { path: `${projectPath}/yarn.lock` })
+        packageManager = 'yarn'
+      } catch {
+        try {
+          await invoke<string>('read_file', { path: `${projectPath}/bun.lockb` })
+          packageManager = 'bun'
+        } catch {
+          // Default to npm
+        }
+      }
+    }
+    
+    return {
+      command: packageManager,
+      args: packageManager === 'npm' ? ['run', devScript] : [devScript],
+      url: `http://localhost:${port}`,
+      framework,
+    }
+  } catch {
+    return null
+  }
+}
 
 export function useDevServer(projectPath: string, projectId?: string) {
   const [status, setStatus] = useState<DevServerStatus>('idle')
   const [config, setConfig] = useState<DevServerConfig | null>(null)
-  const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logs, setLogs] = useState<string[]>([])
+  const [url, setUrl] = useState<string | null>(null)
   
   const serverProcessIdRef = useRef<string | null>(null)
   const detectProcessIdRef = useRef<string | null>(null)
+  const detectOutputRef = useRef<string>('')
+  const statusRef = useRef<DevServerStatus>('idle')
+  const isDetectingRef = useRef(false)
   const unlistenOutputRef = useRef<UnlistenFn | null>(null)
   const unlistenExitRef = useRef<UnlistenFn | null>(null)
-  const detectOutputRef = useRef<string>('')
-  const isDetectingRef = useRef(false)
-  const statusRef = useRef<DevServerStatus>('idle')
-
+  
   const registerProcess = useProcessStore((state) => state.registerProcess)
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
   const appendProcessLog = useProcessStore((state) => state.appendProcessLog)
-
-  // Keep statusRef in sync
+  
   useEffect(() => {
     statusRef.current = status
   }, [status])
 
-  const parseDetectionOutput = useCallback((output: string) => {
-    try {
-      const jsonMatch = output.match(/\{[\s\S]*"command"[\s\S]*\}/m)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0])
-        if (parsed.command && parsed.url) {
-          const parts = parsed.command.split(' ')
-          const command = parts[0]
-          const args = parts.slice(1)
-          
-          setConfig({
-            command,
-            args,
-            url: parsed.url
-          })
-          setStatus('idle')
-          return
-        }
-      }
-      
-      const commandMatch = output.match(/(?:npm run|pnpm|yarn|bun)\s+(?:dev|start|serve)/i)
-      const portMatch = output.match(/(?:localhost|127\.0\.0\.1):(\d+)/i)
-      
-      if (commandMatch) {
-        const fullCommand = commandMatch[0]
-        const parts = fullCommand.split(' ')
-        setConfig({
-          command: parts[0],
-          args: parts.slice(1),
-          url: portMatch ? `http://localhost:${portMatch[1]}` : 'http://localhost:3000'
-        })
-        setStatus('idle')
-        return
-      }
-      
-      setError('Could not detect dev server configuration')
-      setStatus('error')
-    } catch (e) {
-      setError('Failed to parse dev server configuration')
-      setStatus('error')
-    }
-  }, [])
-
-  // Set up event listeners once on mount
   useEffect(() => {
     let mounted = true
-
+    
     const setupListeners = async () => {
       unlistenOutputRef.current = await listen<AgentOutputEvent>('agent-output', (event) => {
         if (!mounted) return
         
-        if (event.payload.process_id === detectProcessIdRef.current) {
-          detectOutputRef.current += event.payload.content + '\n'
-          // Write to process store for visibility in AgentRunView
-          appendProcessLog(
-            event.payload.process_id,
-            event.payload.stream_type,
-            event.payload.content
-          )
-        }
-        
         if (event.payload.process_id === serverProcessIdRef.current) {
-          setLogs(prev => [...prev.slice(-100), event.payload.content])
-          // Write to process store for visibility in AgentRunView
-          appendProcessLog(
-            event.payload.process_id,
-            event.payload.stream_type,
-            event.payload.content
-          )
+          setLogs((prev) => [...prev.slice(-100), event.payload.content])
+          appendProcessLog(event.payload.process_id, event.payload.stream_type as 'stdout' | 'stderr', event.payload.content)
           
+          // Detect URL from output
           const urlMatch = event.payload.content.match(/https?:\/\/localhost[:\d]*/i) ||
                           event.payload.content.match(/https?:\/\/127\.0\.0\.1[:\d]*/i) ||
                           event.payload.content.match(/https?:\/\/0\.0\.0\.0[:\d]*/i)
@@ -125,59 +164,72 @@ export function useDevServer(projectPath: string, projectId?: string) {
             setUrl(detectedUrl)
             setStatus('running')
           }
+        } else if (event.payload.process_id === detectProcessIdRef.current) {
+          detectOutputRef.current += event.payload.content + '\n'
+          appendProcessLog(event.payload.process_id, event.payload.stream_type as 'stdout' | 'stderr', event.payload.content)
         }
       })
-
+      
       unlistenExitRef.current = await listen<AgentExitEvent>('agent-exit', (event) => {
         if (!mounted) return
-        
-        if (event.payload.process_id === detectProcessIdRef.current) {
-          if (projectId) {
-            unregisterProcess(event.payload.process_id)
-          }
-          // Add system log for exit
-          appendProcessLog(
-            event.payload.process_id,
-            'system',
-            event.payload.success 
-              ? `Detection completed (exit code: ${event.payload.exit_code ?? 0})`
-              : `Detection failed (exit code: ${event.payload.exit_code ?? 'unknown'})`
-          )
-          detectProcessIdRef.current = null
-          isDetectingRef.current = false
-          parseDetectionOutput(detectOutputRef.current)
-        }
         
         if (event.payload.process_id === serverProcessIdRef.current) {
           if (projectId) {
             unregisterProcess(event.payload.process_id)
           }
-          // Add system log for exit
-          appendProcessLog(
-            event.payload.process_id,
-            'system',
-            event.payload.success 
-              ? `Server stopped (exit code: ${event.payload.exit_code ?? 0})`
-              : `Server crashed (exit code: ${event.payload.exit_code ?? 'unknown'})`
-          )
           serverProcessIdRef.current = null
-          setStatus('idle')
+          setStatus('stopped')
           setUrl(null)
+        } else if (event.payload.process_id === detectProcessIdRef.current) {
+          if (projectId) {
+            unregisterProcess(event.payload.process_id)
+          }
+          
+          const output = detectOutputRef.current
+          detectProcessIdRef.current = null
+          isDetectingRef.current = false
+          
+          // Try to parse JSON from output
+          const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/) ||
+                           output.match(/\{[\s\S]*"command"[\s\S]*\}/)
+          if (jsonMatch) {
+            try {
+              const jsonStr = jsonMatch[1] || jsonMatch[0]
+              const detected = JSON.parse(jsonStr) as DevServerConfig
+              if (detected.command) {
+                // Handle command that might be a full string like "pnpm dev"
+                if (detected.command.includes(' ') && !detected.args?.length) {
+                  const parts = detected.command.split(' ')
+                  detected.command = parts[0]
+                  detected.args = parts.slice(1)
+                }
+                setConfig(detected)
+                setStatus('idle')
+                return
+              }
+            } catch {
+              // Fall through to error
+            }
+          }
+          
+          setError('Could not detect dev server configuration')
+          setStatus('error')
         }
       })
     }
-
+    
     setupListeners()
-
+    
     return () => {
       mounted = false
       unlistenOutputRef.current?.()
       unlistenExitRef.current?.()
     }
-  }, [projectId, unregisterProcess, parseDetectionOutput, appendProcessLog])
+  }, [projectId, unregisterProcess, appendProcessLog])
 
-  const detectWithAmp = useCallback(async (): Promise<DevServerConfig | null> => {
-    // Prevent multiple concurrent detections
+  const detectWithAmp = useCallback(async () => {
+    if (!projectPath) return null
+    
     if (isDetectingRef.current || detectProcessIdRef.current) {
       return null
     }
@@ -202,6 +254,11 @@ export function useDevServer(projectPath: string, projectId?: string) {
           projectId,
           type: 'detection',
           label: 'Detecting dev server',
+          command: {
+            executable: 'amp',
+            args: ['--execute', prompt],
+            workingDirectory: projectPath,
+          },
         })
       }
       
@@ -215,7 +272,6 @@ export function useDevServer(projectPath: string, projectId?: string) {
   }, [projectPath, projectId, registerProcess])
 
   const detectDevServer = useCallback(async () => {
-    // Use ref to prevent race conditions with React state updates
     if (statusRef.current === 'detecting' || isDetectingRef.current) return
     
     setStatus('detecting')
@@ -262,11 +318,16 @@ export function useDevServer(projectPath: string, projectId?: string) {
           projectId,
           type: 'dev-server',
           label: config.framework ? `Dev Server (${config.framework})` : 'Dev Server',
+          command: {
+            executable: config.command,
+            args: config.args,
+            workingDirectory: projectPath,
+          },
         })
       }
       
       setTimeout(() => {
-        if (serverProcessIdRef.current) {
+        if (serverProcessIdRef.current && statusRef.current === 'starting') {
           setStatus('running')
         }
       }, 3000)
@@ -289,7 +350,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
         unregisterProcess(processId)
       }
       serverProcessIdRef.current = null
-      setStatus('idle')
+      setStatus('stopped')
       setUrl(null)
     } catch (e) {
       setError(`Failed to stop dev server: ${e}`)
@@ -315,6 +376,9 @@ export function useDevServer(projectPath: string, projectId?: string) {
         if (projectId) {
           unregisterProcess(processId)
         }
+      }
+      if (detectProcessIdRef.current) {
+        invoke('kill_agent', { processId: detectProcessIdRef.current }).catch(() => {})
       }
     }
   }, [projectId, unregisterProcess])

@@ -122,7 +122,13 @@ export function useAgentSession(
         processId: result.process_id,
         projectId,
         type: 'chat',
-        label: `Chat (${plugin.name})`,
+        label: `Chat with ${plugin.name}`,
+        agentId: plugin.id,
+        command: {
+          executable: plugin.command,
+          args,
+          workingDirectory: projectPath,
+        },
       })
 
       invoke<WaitAgentResult>('wait_agent', {

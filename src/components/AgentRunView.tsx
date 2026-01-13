@@ -45,8 +45,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
   const buildLogs = projectState.logs;
   
   // Get logs from processStore for non-build processes
-  const getProcessLogs = useProcessStore((state) => state.getProcessLogs);
-  const processLogs = getProcessLogs(process.processId);
+  const processLogs = useProcessStore((state) => state.getProcessLogs(process.processId));
   
   // Use build logs for build/chat/prd processes, process logs for detection/dev-server
   const useBuildLogs = process.type === 'build' || process.type === 'chat' || process.type === 'prd';
@@ -209,6 +208,11 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     }
   };
 
+  // Format command for display
+  const commandString = process.command 
+    ? `${process.command.executable} ${process.command.args.join(' ')}`
+    : null;
+
   return (
     <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border">
       {/* Drag region */}
@@ -264,25 +268,45 @@ export function AgentRunView({ process }: AgentRunViewProps) {
       </div>
 
       {/* Process details */}
-      <div className="px-6 py-3 border-b border-border bg-background flex items-center gap-6 text-sm">
-        <div>
-          <span className="text-muted">Process ID:</span>
-          <span className="ml-2 font-mono text-xs text-foreground">{process.processId.substring(0, 8)}</span>
-        </div>
-        <div>
-          <span className="text-muted">Started:</span>
-          <span className="ml-2 text-foreground">{process.startedAt.toLocaleTimeString()}</span>
-        </div>
-        {process.agentId && (
+      <div className="px-6 py-3 border-b border-border bg-background">
+        <div className="flex items-center gap-6 text-sm">
           <div>
-            <span className="text-muted">Agent:</span>
-            <span className="ml-2 text-foreground capitalize">{process.agentId}</span>
+            <span className="text-muted">Process ID:</span>
+            <span className="ml-2 font-mono text-xs text-foreground">{process.processId.substring(0, 8)}</span>
+          </div>
+          <div>
+            <span className="text-muted">Started:</span>
+            <span className="ml-2 text-foreground">{process.startedAt.toLocaleTimeString()}</span>
+          </div>
+          {process.agentId && (
+            <div>
+              <span className="text-muted">Agent:</span>
+              <span className="ml-2 text-foreground capitalize">{process.agentId}</span>
+            </div>
+          )}
+          {projectState.currentStoryId && useBuildLogs && (
+            <div>
+              <span className="text-muted">Story:</span>
+              <span className="ml-2 text-foreground">{projectState.currentStoryTitle || projectState.currentStoryId}</span>
+            </div>
+          )}
+        </div>
+        
+        {/* Command display */}
+        {commandString && (
+          <div className="mt-2 flex items-start gap-2">
+            <span className="text-muted text-sm flex-shrink-0">Command:</span>
+            <code className="text-xs font-mono text-foreground bg-card px-2 py-1 rounded border border-border break-all">
+              {commandString}
+            </code>
           </div>
         )}
-        {projectState.currentStoryId && useBuildLogs && (
-          <div>
-            <span className="text-muted">Story:</span>
-            <span className="ml-2 text-foreground">{projectState.currentStoryTitle || projectState.currentStoryId}</span>
+        
+        {/* Working directory */}
+        {process.command?.workingDirectory && (
+          <div className="mt-1 flex items-center gap-2 text-sm">
+            <span className="text-muted">Directory:</span>
+            <span className="text-xs font-mono text-muted truncate">{process.command.workingDirectory}</span>
           </div>
         )}
       </div>

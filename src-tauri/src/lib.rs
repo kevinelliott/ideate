@@ -14,10 +14,6 @@ mod terminal;
 mod usage;
 mod utils;
 
-#[cfg(target_os = "macos")]
-#[macro_use]
-extern crate objc;
-
 use tauri::Emitter;
 
 // Re-export models for use by other modules

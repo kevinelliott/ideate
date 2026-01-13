@@ -10,6 +10,12 @@ export interface ProcessLogEntry {
   content: string
 }
 
+export interface ProcessCommand {
+  executable: string
+  args: string[]
+  workingDirectory: string
+}
+
 export interface RunningProcess {
   processId: string
   projectId: string
@@ -17,6 +23,7 @@ export interface RunningProcess {
   label: string
   startedAt: Date
   agentId?: string
+  command?: ProcessCommand
 }
 
 export interface CompletedProcessInfo {
@@ -25,6 +32,7 @@ export interface CompletedProcessInfo {
   type: ProcessType
   label: string
   agentId?: string
+  command?: ProcessCommand
 }
 
 interface ProcessStore {
@@ -57,17 +65,88 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
   selectedProcessId: null,
 
   registerProcess: (process) => {
+    const startedAt = new Date()
+    
+    // Create initial log entries with process info
+    const initialLogs: ProcessLogEntry[] = []
+    
+    // Add process start header
+    initialLogs.push({
+      id: crypto.randomUUID(),
+      timestamp: startedAt,
+      type: 'system',
+      content: `═══════════════════════════════════════════════════════════════`,
+    })
+    initialLogs.push({
+      id: crypto.randomUUID(),
+      timestamp: startedAt,
+      type: 'system',
+      content: `Process Started: ${process.label}`,
+    })
+    initialLogs.push({
+      id: crypto.randomUUID(),
+      timestamp: startedAt,
+      type: 'system',
+      content: `═══════════════════════════════════════════════════════════════`,
+    })
+    
+    // Add process details
+    initialLogs.push({
+      id: crypto.randomUUID(),
+      timestamp: startedAt,
+      type: 'system',
+      content: `Process ID: ${process.processId}`,
+    })
+    initialLogs.push({
+      id: crypto.randomUUID(),
+      timestamp: startedAt,
+      type: 'system',
+      content: `Type: ${process.type}`,
+    })
+    if (process.agentId) {
+      initialLogs.push({
+        id: crypto.randomUUID(),
+        timestamp: startedAt,
+        type: 'system',
+        content: `Agent: ${process.agentId}`,
+      })
+    }
+    
+    // Add command details if provided
+    if (process.command) {
+      const fullCommand = `${process.command.executable} ${process.command.args.join(' ')}`
+      initialLogs.push({
+        id: crypto.randomUUID(),
+        timestamp: startedAt,
+        type: 'system',
+        content: `Command: ${fullCommand}`,
+      })
+      initialLogs.push({
+        id: crypto.randomUUID(),
+        timestamp: startedAt,
+        type: 'system',
+        content: `Working Directory: ${process.command.workingDirectory}`,
+      })
+    }
+    
+    initialLogs.push({
+      id: crypto.randomUUID(),
+      timestamp: startedAt,
+      type: 'system',
+      content: `───────────────────────────────────────────────────────────────`,
+    })
+    
     set((state) => ({
       processes: {
         ...state.processes,
         [process.processId]: {
           ...process,
-          startedAt: new Date(),
+          startedAt,
         },
       },
       processLogs: {
         ...state.processLogs,
-        [process.processId]: [],
+        [process.processId]: initialLogs,
       },
     }))
   },
@@ -76,8 +155,16 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
     const state = get()
     const process = state.processes[processId]
     
-    // Save process info for later reference
+    // Add completion log entry
     if (process) {
+      const now = new Date()
+      const duration = now.getTime() - process.startedAt.getTime()
+      const durationStr = formatDuration(duration)
+      
+      get().appendProcessLog(processId, 'system', `───────────────────────────────────────────────────────────────`)
+      get().appendProcessLog(processId, 'system', `Process completed after ${durationStr}`)
+      
+      // Save process info for later reference
       set((s) => ({
         completedProcesses: {
           ...s.completedProcesses,
@@ -87,6 +174,7 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
             type: process.type,
             label: process.label,
             agentId: process.agentId,
+            command: process.command,
           },
         },
       }))
@@ -221,3 +309,14 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
     }
   },
 }))
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `${hours}h ${remainingMinutes}m`
+}
