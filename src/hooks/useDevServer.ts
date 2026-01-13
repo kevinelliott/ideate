@@ -133,26 +133,57 @@ export function useDevServer(projectPath: string, projectId?: string) {
   const detectOutputRef = useRef<string>('')
   const statusRef = useRef<DevServerStatus>('idle')
   const isDetectingRef = useRef(false)
+  const isStartingRef = useRef(false)
   const unlistenOutputRef = useRef<UnlistenFn | null>(null)
   const unlistenExitRef = useRef<UnlistenFn | null>(null)
+  
+  // Log batching to reduce UI pressure
+  const logBufferRef = useRef<string[]>([])
+  const logFlushTimeoutRef = useRef<number | null>(null)
   
   const registerProcess = useProcessStore((state) => state.registerProcess)
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
   const appendProcessLog = useProcessStore((state) => state.appendProcessLog)
-  
+  const getProcessesByType = useProcessStore((state) => state.getProcessesByType)
+
+  // Check for existing dev-server process on mount
   useEffect(() => {
-    statusRef.current = status
-  }, [status])
+    if (!projectId) return
+    
+    const existingDevServers = getProcessesByType('dev-server')
+    const existingForProject = existingDevServers.find(p => p.projectId === projectId)
+    
+    if (existingForProject) {
+      serverProcessIdRef.current = existingForProject.processId
+      statusRef.current = 'running'
+      setStatus('running')
+    }
+  }, [projectId, getProcessesByType])
 
   useEffect(() => {
     let mounted = true
+    
+    const flushLogs = () => {
+      if (!mounted) return
+      const buffered = logBufferRef.current
+      if (buffered.length > 0) {
+        logBufferRef.current = []
+        setLogs((prev) => [...prev.slice(-100 + buffered.length), ...buffered])
+      }
+      logFlushTimeoutRef.current = null
+    }
     
     const setupListeners = async () => {
       unlistenOutputRef.current = await listen<AgentOutputEvent>('agent-output', (event) => {
         if (!mounted) return
         
         if (event.payload.process_id === serverProcessIdRef.current) {
-          setLogs((prev) => [...prev.slice(-100), event.payload.content])
+          // Batch log updates to reduce UI pressure
+          logBufferRef.current.push(event.payload.content)
+          if (logFlushTimeoutRef.current === null) {
+            logFlushTimeoutRef.current = window.setTimeout(flushLogs, 100)
+          }
+          
           appendProcessLog(event.payload.process_id, event.payload.stream_type as 'stdout' | 'stderr', event.payload.content)
           
           // Detect URL from output
@@ -162,6 +193,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
           if (urlMatch && statusRef.current === 'starting') {
             const detectedUrl = urlMatch[0].replace('0.0.0.0', 'localhost')
             setUrl(detectedUrl)
+            statusRef.current = 'running'
             setStatus('running')
           }
         } else if (event.payload.process_id === detectProcessIdRef.current) {
@@ -178,6 +210,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
             unregisterProcess(event.payload.process_id)
           }
           serverProcessIdRef.current = null
+          statusRef.current = 'stopped'
           setStatus('stopped')
           setUrl(null)
         } else if (event.payload.process_id === detectProcessIdRef.current) {
@@ -204,6 +237,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
                   detected.args = parts.slice(1)
                 }
                 setConfig(detected)
+                statusRef.current = 'idle'
                 setStatus('idle')
                 return
               }
@@ -213,6 +247,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
           }
           
           setError('Could not detect dev server configuration')
+          statusRef.current = 'error'
           setStatus('error')
         }
       })
@@ -222,6 +257,9 @@ export function useDevServer(projectPath: string, projectId?: string) {
     
     return () => {
       mounted = false
+      if (logFlushTimeoutRef.current !== null) {
+        clearTimeout(logFlushTimeoutRef.current)
+      }
       unlistenOutputRef.current?.()
       unlistenExitRef.current?.()
     }
@@ -230,11 +268,11 @@ export function useDevServer(projectPath: string, projectId?: string) {
   const detectWithAmp = useCallback(async () => {
     if (!projectPath) return null
     
-    if (isDetectingRef.current || detectProcessIdRef.current) {
+    // Guard against concurrent detection processes
+    if (detectProcessIdRef.current) {
       return null
     }
     
-    isDetectingRef.current = true
     detectOutputRef.current = ''
     
     const prompt = usePromptStore.getState().getPrompt('devServerDetection')
@@ -243,7 +281,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
       const result = await invoke<SpawnAgentResult>('spawn_agent', {
         executable: 'amp',
         args: ['--execute', prompt],
-        workingDirectory: projectPath,
+        working_directory: projectPath,
       })
       
       detectProcessIdRef.current = result.process_id
@@ -262,7 +300,10 @@ export function useDevServer(projectPath: string, projectId?: string) {
         })
       }
       
-      await invoke('wait_agent', { processId: result.process_id })
+      // Fire and forget - rely on agent-exit event for completion
+      invoke('wait_agent', { process_id: result.process_id }).catch((e) => {
+        console.error('wait_agent failed for detection:', e)
+      })
       
       return null
     } catch (e) {
@@ -272,8 +313,11 @@ export function useDevServer(projectPath: string, projectId?: string) {
   }, [projectPath, projectId, registerProcess])
 
   const detectDevServer = useCallback(async () => {
-    if (statusRef.current === 'detecting' || isDetectingRef.current) return
+    // Hard guard using ref - prevents any race conditions
+    if (isDetectingRef.current) return
     
+    isDetectingRef.current = true
+    statusRef.current = 'detecting'
     setStatus('detecting')
     setError(null)
     
@@ -282,32 +326,54 @@ export function useDevServer(projectPath: string, projectId?: string) {
       
       if (detected) {
         setConfig(detected)
+        statusRef.current = 'idle'
         setStatus('idle')
+        isDetectingRef.current = false
         return
       }
       
+      // detectWithAmp will complete via agent-exit event
       await detectWithAmp()
     } catch (e) {
       setError(`Failed to detect dev server: ${e}`)
+      statusRef.current = 'error'
       setStatus('error')
       isDetectingRef.current = false
     }
   }, [projectPath, detectWithAmp])
 
   const startServer = useCallback(async () => {
-    if (!config || status === 'running' || status === 'starting') return
+    if (!config) return
     
+    // Hard guards using refs - prevents any race conditions
+    if (isStartingRef.current) return
+    if (serverProcessIdRef.current) return
+    if (statusRef.current === 'running' || statusRef.current === 'starting') return
+    
+    // Also check if there's already a dev-server for this project in the store
+    if (projectId) {
+      const existingDevServers = useProcessStore.getState().getProcessesByType('dev-server')
+      const existingForProject = existingDevServers.find(p => p.projectId === projectId)
+      if (existingForProject) {
+        serverProcessIdRef.current = existingForProject.processId
+        statusRef.current = 'running'
+        setStatus('running')
+        return
+      }
+    }
+    
+    isStartingRef.current = true
+    statusRef.current = 'starting'
     setStatus('starting')
     setError(null)
     setLogs([])
-    
     setUrl(config.url)
     
     try {
       const result = await invoke<SpawnAgentResult>('spawn_agent', {
         executable: config.command,
         args: config.args,
-        workingDirectory: projectPath,
+        working_directory: projectPath,
       })
       
       serverProcessIdRef.current = result.process_id
@@ -326,59 +392,67 @@ export function useDevServer(projectPath: string, projectId?: string) {
         })
       }
       
+      // Fallback transition to running if URL detection doesn't fire
       setTimeout(() => {
         if (serverProcessIdRef.current && statusRef.current === 'starting') {
+          statusRef.current = 'running'
           setStatus('running')
         }
       }, 3000)
       
     } catch (e) {
       setError(`Failed to start dev server: ${e}`)
+      statusRef.current = 'error'
       setStatus('error')
+    } finally {
+      isStartingRef.current = false
     }
-  }, [config, projectPath, status, projectId, registerProcess])
+  }, [config, projectPath, projectId, registerProcess])
 
   const stopServer = useCallback(async () => {
     if (!serverProcessIdRef.current) return
     
+    statusRef.current = 'stopping'
     setStatus('stopping')
     
     try {
       const processId = serverProcessIdRef.current
-      await invoke('kill_agent', { processId })
+      await invoke('kill_agent', { process_id: processId })
       if (projectId) {
         unregisterProcess(processId)
       }
       serverProcessIdRef.current = null
+      statusRef.current = 'stopped'
       setStatus('stopped')
       setUrl(null)
     } catch (e) {
       setError(`Failed to stop dev server: ${e}`)
+      statusRef.current = 'error'
       setStatus('error')
     }
   }, [projectId, unregisterProcess])
 
   const toggleServer = useCallback(async () => {
-    if (status === 'running' || status === 'starting') {
+    if (statusRef.current === 'running' || statusRef.current === 'starting') {
       await stopServer()
     } else if (config) {
       await startServer()
     } else {
       await detectDevServer()
     }
-  }, [status, config, startServer, stopServer, detectDevServer])
+  }, [config, startServer, stopServer, detectDevServer])
 
   useEffect(() => {
     return () => {
       if (serverProcessIdRef.current) {
         const processId = serverProcessIdRef.current
-        invoke('kill_agent', { processId }).catch(() => {})
+        invoke('kill_agent', { process_id: processId }).catch(() => {})
         if (projectId) {
           unregisterProcess(processId)
         }
       }
       if (detectProcessIdRef.current) {
-        invoke('kill_agent', { processId: detectProcessIdRef.current }).catch(() => {})
+        invoke('kill_agent', { process_id: detectProcessIdRef.current }).catch(() => {})
       }
     }
   }, [projectId, unregisterProcess])

@@ -202,7 +202,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
 
   const handleKillProcess = async () => {
     try {
-      await invoke('kill_agent', { processId: process.processId });
+      await invoke('kill_agent', { process_id: process.processId });
     } catch (error) {
       console.error('Failed to kill process:', error);
     }

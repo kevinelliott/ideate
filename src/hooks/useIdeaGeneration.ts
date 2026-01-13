@@ -112,7 +112,7 @@ export function useIdeaGeneration() {
       })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
-        processId: spawnResult.process_id
+        process_id: spawnResult.process_id
       })
 
       unlistenOutput()

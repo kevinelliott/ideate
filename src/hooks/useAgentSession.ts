@@ -153,7 +153,7 @@ export function useAgentSession(
     const processId = currentProcessIdRef.current
     if (processId) {
       try {
-        await invoke('kill_agent', { processId })
+        await invoke('kill_agent', { process_id: processId })
         unregisterProcess(processId)
         currentProcessIdRef.current = null
         setProcessId(projectId, null)

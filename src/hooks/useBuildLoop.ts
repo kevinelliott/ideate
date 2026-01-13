@@ -550,7 +550,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     const processId = useBuildStore.getState().getProjectState(projectId).currentProcessId
     if (processId) {
       try {
-        await invoke('kill_agent', { processId })
+        await invoke('kill_agent', { process_id: processId })
         unregisterProcess(processId)
         appendLog(projectId, 'system', 'Agent process terminated')
       } catch (error) {
@@ -560,7 +560,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     for (const [storyId, pid] of activeProcessesRef.current.entries()) {
       try {
-        await invoke('kill_agent', { processId: pid })
+        await invoke('kill_agent', { process_id: pid })
         unregisterProcess(pid)
         appendLog(projectId, 'system', `Terminated parallel agent for story ${storyId}`)
       } catch (error) {
