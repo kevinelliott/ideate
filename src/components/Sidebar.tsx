@@ -7,6 +7,7 @@ import { useTheme } from '../hooks/useTheme'
 import { ProjectContextMenu } from './ProjectContextMenu'
 import { DeleteProjectModal } from './DeleteProjectModal'
 import { SettingsModal } from './SettingsModal'
+import { AboutModal } from './AboutModal'
 import { useIdeasStore } from '../stores/ideasStore'
 import { CreateIdeaModal } from './CreateIdeaModal'
 
@@ -92,6 +93,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isCreateIdeaOpen, setIsCreateIdeaOpen] = useState(false)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const startXRef = useRef(0)
@@ -625,7 +627,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
           </div>
         </div>
 
-        {/* Bottom section with theme, feedback, and settings */}
+        {/* Bottom section with theme, feedback, about, and settings */}
         <div className="flex-shrink-0 border-t border-border px-3 py-2">
           <div className="flex items-center justify-center gap-1">
             <button
@@ -647,6 +649,16 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
             </button>
 
             <button
+              onClick={() => setIsAboutOpen(true)}
+              className="p-2 rounded-md text-secondary hover:text-foreground hover:bg-card transition-colors"
+              title="About Ideate"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+
+            <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 rounded-md text-secondary hover:text-foreground hover:bg-card transition-colors"
               title="Settings"
@@ -658,6 +670,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
             </button>
           </div>
         </div>
+        {/* Resize handle */}
         <div
           onMouseDown={handleMouseDown}
           className={`absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-accent/30 active:bg-accent/50 ${
@@ -684,6 +697,11 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
         projectName={deleteModal.projectName}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteModal({ isOpen: false, projectId: '', projectName: '' })}
+      />
+
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
       />
 
       <SettingsModal
