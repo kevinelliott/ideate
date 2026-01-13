@@ -1,13 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/Sidebar";
 import { MainContent } from "./components/MainContent";
-import { NewProjectModal } from "./components/NewProjectModal";
-import { ImportProjectModal } from "./components/ImportProjectModal";
-import { PreferencesWindow } from "./components/PreferencesWindow";
-import { PermissionsModal } from "./components/PermissionsModal";
-import { WelcomeGuideModal } from "./components/WelcomeGuideModal";
 import { useProjectStore } from "./stores/projectStore";
 import { useBuildStore } from "./stores/buildStore";
 import { useThemeStore } from "./stores/themeStore";
@@ -15,6 +10,13 @@ import { useAgentStore } from "./stores/agentStore";
 import { usePromptStore } from "./stores/promptStore";
 import { useIdeasStore } from "./stores/ideasStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+
+// Lazy load modals - they are only shown on user interaction
+const NewProjectModal = lazy(() => import("./components/NewProjectModal").then(m => ({ default: m.NewProjectModal })));
+const ImportProjectModal = lazy(() => import("./components/ImportProjectModal").then(m => ({ default: m.ImportProjectModal })));
+const PreferencesWindow = lazy(() => import("./components/PreferencesWindow").then(m => ({ default: m.PreferencesWindow })));
+const PermissionsModal = lazy(() => import("./components/PermissionsModal").then(m => ({ default: m.PermissionsModal })));
+const WelcomeGuideModal = lazy(() => import("./components/WelcomeGuideModal").then(m => ({ default: m.WelcomeGuideModal })));
 
 interface CreateProjectResult {
   path: string;
@@ -40,6 +42,17 @@ interface Preferences {
   agentPaths: Array<{ agentId: string; path: string }>;
   theme: string;
   hasSeenWelcomeGuide?: boolean;
+}
+
+// Loading fallback for modals
+function ModalFallback() {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-card rounded-lg p-6">
+        <div className="text-muted">Loading...</div>
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -280,28 +293,42 @@ function App() {
     <div className="flex h-screen bg-background text-foreground">
       <Sidebar onNewProject={handleNewProject} onImportProject={handleImportProject} />
       <MainContent />
-      <NewProjectModal
-        isOpen={showNewProjectModal}
-        onClose={handleCloseNewProjectModal}
-        onCreate={handleCreateProject}
-      />
-      <ImportProjectModal
-        isOpen={showImportProjectModal}
-        onClose={handleCloseImportProjectModal}
-        onImport={handleImportExistingProject}
-      />
-      <PreferencesWindow
-        isOpen={showPreferencesWindow}
-        onClose={handleClosePreferencesWindow}
-      />
-      <PermissionsModal
-        isOpen={showPermissionsModal}
-        onClose={() => setShowPermissionsModal(false)}
-      />
-      <WelcomeGuideModal
-        isOpen={showWelcomeGuide}
-        onClose={() => setShowWelcomeGuide(false)}
-      />
+      
+      {/* Lazy loaded modals - only render when open */}
+      <Suspense fallback={<ModalFallback />}>
+        {showNewProjectModal && (
+          <NewProjectModal
+            isOpen={showNewProjectModal}
+            onClose={handleCloseNewProjectModal}
+            onCreate={handleCreateProject}
+          />
+        )}
+        {showImportProjectModal && (
+          <ImportProjectModal
+            isOpen={showImportProjectModal}
+            onClose={handleCloseImportProjectModal}
+            onImport={handleImportExistingProject}
+          />
+        )}
+        {showPreferencesWindow && (
+          <PreferencesWindow
+            isOpen={showPreferencesWindow}
+            onClose={handleClosePreferencesWindow}
+          />
+        )}
+        {showPermissionsModal && (
+          <PermissionsModal
+            isOpen={showPermissionsModal}
+            onClose={() => setShowPermissionsModal(false)}
+          />
+        )}
+        {showWelcomeGuide && (
+          <WelcomeGuideModal
+            isOpen={showWelcomeGuide}
+            onClose={() => setShowWelcomeGuide(false)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

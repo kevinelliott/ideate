@@ -1,12 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "../stores/projectStore";
 import { usePrdStore, type Story, type PrdMetadata } from "../stores/prdStore";
 import { useIdeasStore } from "../stores/ideasStore";
 import { useProcessStore } from "../stores/processStore";
-import { ProjectView } from "./ProjectView";
-import { IdeaDetailView } from "./IdeaDetailView";
-import { AgentRunView } from "./AgentRunView";
+
+// Lazy load heavy view components
+const ProjectView = lazy(() => import("./ProjectView").then(m => ({ default: m.ProjectView })));
+const IdeaDetailView = lazy(() => import("./IdeaDetailView").then(m => ({ default: m.IdeaDetailView })));
+const AgentRunView = lazy(() => import("./AgentRunView").then(m => ({ default: m.AgentRunView })));
 
 interface Prd {
   project?: string
@@ -22,6 +24,18 @@ interface Prd {
     status?: string
     notes: string
   }>
+}
+
+// Loading fallback for views
+function ViewFallback() {
+  return (
+    <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border">
+      <div className="h-12 drag-region border-b border-border" />
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-muted">Loading...</div>
+      </div>
+    </main>
+  );
 }
 
 export function MainContent() {
@@ -110,17 +124,29 @@ export function MainContent() {
 
   // Show agent run view if a process is selected
   if (selectedProcess) {
-    return <AgentRunView process={selectedProcess} />;
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        <AgentRunView process={selectedProcess} />
+      </Suspense>
+    );
   }
 
   // Show idea detail view if an idea is selected
   if (selectedIdea) {
-    return <IdeaDetailView idea={selectedIdea} />;
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        <IdeaDetailView idea={selectedIdea} />
+      </Suspense>
+    );
   }
 
   // Show project view if a project is active
   if (activeProject) {
-    return <ProjectView project={activeProject} />;
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        <ProjectView project={activeProject} />
+      </Suspense>
+    );
   }
 
   // Show empty state

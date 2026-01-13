@@ -27,4 +27,27 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core
+          'vendor-react': ['react', 'react-dom'],
+          // Tauri APIs
+          'vendor-tauri': [
+            '@tauri-apps/api',
+            '@tauri-apps/plugin-dialog',
+            '@tauri-apps/plugin-fs',
+            '@tauri-apps/plugin-shell',
+          ],
+          // Terminal (xterm is heavy)
+          'vendor-terminal': ['@xterm/xterm', '@xterm/addon-fit'],
+          // Markdown renderer
+          'vendor-markdown': ['react-markdown'],
+          // State management
+          'vendor-state': ['zustand'],
+        },
+      },
+    },
+  },
 }));

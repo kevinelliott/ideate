@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import type { Project } from "../stores/projectStore";
 import { usePrdStore } from "../stores/prdStore";
 import type { Story } from "../stores/prdStore";
@@ -9,16 +9,23 @@ import { useBuildStore } from "../stores/buildStore";
 import { StoryList } from "./StoryList";
 import { ProjectTopBar } from "./ProjectTopBar";
 import { BuildControls } from "./BuildControls";
-import { LogPanel } from "./LogPanel";
-import { AgentPanel } from "./AgentPanel";
-import { StoryDetailPanel } from "./StoryDetailPanel";
-import { EditStoryModal } from "./EditStoryModal";
 import { IdeaInputView } from "./IdeaInputView";
-import { PreviewPanel } from "./PreviewPanel";
-import { TerminalPanel } from "./TerminalPanel";
+import { EditStoryModal } from "./EditStoryModal";
+
+// Lazy load heavy panel components
+const LogPanel = lazy(() => import("./LogPanel").then(m => ({ default: m.LogPanel })));
+const AgentPanel = lazy(() => import("./AgentPanel").then(m => ({ default: m.AgentPanel })));
+const TerminalPanel = lazy(() => import("./TerminalPanel").then(m => ({ default: m.TerminalPanel })));
+const PreviewPanel = lazy(() => import("./PreviewPanel").then(m => ({ default: m.PreviewPanel })));
+const StoryDetailPanel = lazy(() => import("./StoryDetailPanel").then(m => ({ default: m.StoryDetailPanel })));
 
 interface ProjectViewProps {
   project: Project;
+}
+
+// Minimal fallback for panels
+function PanelFallback() {
+  return <div className="h-8 bg-card/50 animate-pulse" />;
 }
 
 export function ProjectView({ project }: ProjectViewProps) {
@@ -156,25 +163,35 @@ export function ProjectView({ project }: ProjectViewProps) {
           </div>
         )}
 
-        {/* Bottom panels */}
+        {/* Bottom panels - lazy loaded */}
         <div className="flex-shrink-0 overflow-hidden">
-          <LogPanel projectId={project.id} />
-          <AgentPanel projectId={project.id} projectPath={project.path} />
-          <TerminalPanel projectId={project.id} projectPath={project.path} />
+          <Suspense fallback={<PanelFallback />}>
+            <LogPanel projectId={project.id} />
+          </Suspense>
+          <Suspense fallback={<PanelFallback />}>
+            <AgentPanel projectId={project.id} projectPath={project.path} />
+          </Suspense>
+          <Suspense fallback={<PanelFallback />}>
+            <TerminalPanel projectId={project.id} projectPath={project.path} />
+          </Suspense>
         </div>
       </main>
       
       {selectedStory && (
-        <StoryDetailPanel
-          story={selectedStory}
-          onClose={handleCloseInspector}
-          onEdit={handleEditFromInspector}
-        />
+        <Suspense fallback={null}>
+          <StoryDetailPanel
+            story={selectedStory}
+            onClose={handleCloseInspector}
+            onEdit={handleEditFromInspector}
+          />
+        </Suspense>
       )}
 
       {/* Preview panel - show once build has started */}
       {hasStories && buildHasStarted && (
-        <PreviewPanel projectId={project.id} projectPath={project.path} />
+        <Suspense fallback={null}>
+          <PreviewPanel projectId={project.id} projectPath={project.path} />
+        </Suspense>
       )}
 
       <EditStoryModal
