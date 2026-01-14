@@ -1,40 +1,114 @@
 //! Process spawning and management for agent execution.
 
 use std::collections::HashMap;
+use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use std::fs;
 
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use crate::models::{
-    AgentExitEvent, AgentOutputEvent, KillAgentResult, ProcessLogEntry, SpawnAgentResult,
-    WaitAgentResult,
+    AgentExitEvent, AgentOutputEvent, KillAgentResult, ProcessHistory, ProcessHistoryEntry,
+    ProcessLogEntry, SpawnAgentResult, WaitAgentResult,
 };
 
 lazy_static::lazy_static! {
     pub static ref PROCESSES: Mutex<HashMap<String, Child>> = Mutex::new(HashMap::new());
 }
 
+/// Kills all spawned processes. Called on app shutdown.
+pub fn kill_all_processes() {
+    let mut processes = match PROCESSES.lock() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to lock processes for cleanup: {}", e);
+            return;
+        }
+    };
+
+    let process_ids: Vec<String> = processes.keys().cloned().collect();
+    let count = process_ids.len();
+    
+    if count == 0 {
+        return;
+    }
+
+    println!("Cleaning up {} spawned process(es)...", count);
+
+    for process_id in process_ids {
+        if let Some(child) = processes.get_mut(&process_id) {
+            #[cfg(unix)]
+            {
+                let pid = child.id();
+                // Send SIGTERM first for graceful shutdown
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGTERM);
+                }
+                
+                // Give processes a short time to terminate gracefully
+                let start = std::time::Instant::now();
+                let timeout = Duration::from_millis(500);
+                
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => break,
+                        Ok(None) => {
+                            if start.elapsed() >= timeout {
+                                // Force kill if still running
+                                unsafe {
+                                    libc::kill(pid as i32, libc::SIGKILL);
+                                }
+                                let _ = child.wait();
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(50));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+
+            #[cfg(windows)]
+            {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
+    processes.clear();
+    println!("All processes cleaned up.");
+}
+
 /// Spawns an agent process and returns its ID.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn spawn_agent(
     app: AppHandle,
     executable: String,
     args: Vec<String>,
     working_directory: String,
+    env: Option<HashMap<String, String>>,
 ) -> Result<SpawnAgentResult, String> {
     let process_id = Uuid::new_v4().to_string();
 
-    let mut child = Command::new(&executable)
-        .args(&args)
+    let mut cmd = Command::new(&executable);
+    cmd.args(&args)
         .current_dir(&working_directory)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // Add custom environment variables if provided
+    if let Some(env_vars) = env {
+        for (key, value) in env_vars {
+            cmd.env(key, value);
+        }
+    }
+
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn process '{}': {}", executable, e))?;
 
@@ -86,7 +160,7 @@ pub fn spawn_agent(
 }
 
 /// Waits for an agent process to complete.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn wait_agent(app: AppHandle, process_id: String) -> Result<WaitAgentResult, String> {
     let result = tokio::task::spawn_blocking(move || {
         let mut processes = PROCESSES
@@ -135,14 +209,35 @@ pub async fn wait_agent(app: AppHandle, process_id: String) -> Result<WaitAgentR
     Ok(result)
 }
 
-/// Kills an agent process.
-#[tauri::command]
-pub fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
+/// Kills an agent process asynchronously to avoid blocking the UI.
+#[tauri::command(rename_all = "camelCase")]
+pub async fn kill_agent(app: AppHandle, process_id: String) -> Result<KillAgentResult, String> {
+    let pid = process_id.clone();
+
+    let result = tokio::task::spawn_blocking(move || kill_agent_blocking(&pid))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))??;
+
+    // Emit exit event if process was killed successfully
+    if result.success {
+        let event = AgentExitEvent {
+            process_id: process_id.clone(),
+            exit_code: None,
+            success: false, // Killed, not natural exit
+        };
+        let _ = app.emit("agent-exit", event);
+    }
+
+    Ok(result)
+}
+
+/// Blocking implementation of kill_agent for use in spawn_blocking.
+fn kill_agent_blocking(process_id: &str) -> Result<KillAgentResult, String> {
     let mut processes = PROCESSES
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
 
-    let child = match processes.get_mut(&process_id) {
+    let child = match processes.get_mut(process_id) {
         Some(child) => child,
         None => {
             return Ok(KillAgentResult {
@@ -166,7 +261,7 @@ pub fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
         loop {
             match child.try_wait() {
                 Ok(Some(_status)) => {
-                    processes.remove(&process_id);
+                    processes.remove(process_id);
                     return Ok(KillAgentResult {
                         success: true,
                         message: "Process terminated gracefully with SIGTERM".to_string(),
@@ -178,7 +273,7 @@ pub fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
                             libc::kill(pid as i32, libc::SIGKILL);
                         }
                         let _ = child.wait();
-                        processes.remove(&process_id);
+                        processes.remove(process_id);
                         return Ok(KillAgentResult {
                             success: true,
                             message: "Process killed with SIGKILL after timeout".to_string(),
@@ -187,7 +282,7 @@ pub fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
                     thread::sleep(Duration::from_millis(100));
                 }
                 Err(e) => {
-                    processes.remove(&process_id);
+                    processes.remove(process_id);
                     return Ok(KillAgentResult {
                         success: false,
                         message: format!("Error waiting for process: {}", e),
@@ -202,14 +297,14 @@ pub fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
         match child.kill() {
             Ok(()) => {
                 let _ = child.wait();
-                processes.remove(&process_id);
+                processes.remove(process_id);
                 Ok(KillAgentResult {
                     success: true,
                     message: "Process killed".to_string(),
                 })
             }
             Err(e) => {
-                processes.remove(&process_id);
+                processes.remove(process_id);
                 Ok(KillAgentResult {
                     success: false,
                     message: format!("Failed to kill process: {}", e),
@@ -220,7 +315,7 @@ pub fn kill_agent(process_id: String) -> Result<KillAgentResult, String> {
 }
 
 /// Saves process logs to a file in the app data directory.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn save_process_log(
     app: AppHandle,
     process_id: String,
@@ -289,4 +384,92 @@ pub fn save_process_log(
     }
 
     Ok(log_path.to_string_lossy().to_string())
+}
+
+/// Saves a process history entry.
+#[tauri::command(rename_all = "camelCase")]
+pub fn save_process_history_entry(
+    app: AppHandle,
+    entry: ProcessHistoryEntry,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    let history_path = app_data_dir.join("process-history.json");
+
+    // Load existing history
+    let mut history = if history_path.exists() {
+        let content = fs::read_to_string(&history_path)
+            .map_err(|e| format!("Failed to read process history: {}", e))?;
+        serde_json::from_str::<ProcessHistory>(&content).unwrap_or(ProcessHistory {
+            entries: Vec::new(),
+        })
+    } else {
+        ProcessHistory {
+            entries: Vec::new(),
+        }
+    };
+
+    // Add new entry at the beginning (most recent first)
+    history.entries.insert(0, entry);
+
+    // Keep only the last 500 entries
+    if history.entries.len() > 500 {
+        history.entries.truncate(500);
+    }
+
+    // Save back
+    let json = serde_json::to_string_pretty(&history)
+        .map_err(|e| format!("Failed to serialize process history: {}", e))?;
+
+    fs::write(&history_path, json)
+        .map_err(|e| format!("Failed to write process history: {}", e))?;
+
+    Ok(())
+}
+
+/// Loads process history for a specific project.
+#[tauri::command(rename_all = "camelCase")]
+pub fn load_process_history(
+    app: AppHandle,
+    project_id: String,
+) -> Result<ProcessHistory, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    let history_path = app_data_dir.join("process-history.json");
+
+    if !history_path.exists() {
+        return Ok(ProcessHistory {
+            entries: Vec::new(),
+        });
+    }
+
+    let content = fs::read_to_string(&history_path)
+        .map_err(|e| format!("Failed to read process history: {}", e))?;
+
+    let history: ProcessHistory = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse process history: {}", e))?;
+
+    // Filter by project ID
+    let filtered = ProcessHistory {
+        entries: history
+            .entries
+            .into_iter()
+            .filter(|e| e.project_id == project_id)
+            .collect(),
+    };
+
+    Ok(filtered)
+}
+
+/// Reads a log file's contents.
+#[tauri::command(rename_all = "camelCase")]
+pub fn read_process_log_file(log_file_path: String) -> Result<String, String> {
+    fs::read_to_string(&log_file_path)
+        .map_err(|e| format!("Failed to read log file: {}", e))
 }

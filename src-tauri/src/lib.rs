@@ -5,12 +5,14 @@
 // Module declarations
 mod agents;
 mod ideas;
+mod integrations;
 mod macos;
 mod models;
 mod preferences;
 mod process;
 mod projects;
 mod terminal;
+mod ui_state;
 mod usage;
 mod utils;
 
@@ -23,10 +25,12 @@ pub use models::*;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    use tauri::RunEvent;
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             macos::apply_icon_from_preferences(&app.handle());
@@ -144,12 +148,34 @@ pub fn run() {
             process::wait_agent,
             process::kill_agent,
             process::save_process_log,
+            process::save_process_history_entry,
+            process::load_process_history,
+            process::read_process_log_file,
+            // Integrations - OutRay
+            integrations::outray::get_sidecar_path,
+            integrations::outray::get_auth_token,
+            integrations::outray::login,
+            integrations::outray::check_auth,
+            integrations::outray::open_dashboard,
             // Terminal
             terminal::spawn_terminal,
             terminal::write_terminal,
             terminal::resize_terminal,
-            terminal::kill_terminal
+            terminal::kill_terminal,
+            // UI State
+            ui_state::load_ui_state,
+            ui_state::save_ui_state,
+            ui_state::save_panel_states,
+            ui_state::save_window_state,
+            // Utils
+            utils::write_binary_file
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let RunEvent::Exit = event {
+                // Kill all spawned processes when the app exits
+                process::kill_all_processes();
+            }
+        });
 }

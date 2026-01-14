@@ -6,18 +6,18 @@ import { defaultPlugins, type AgentPlugin } from '../types'
 import { usePromptStore } from '../stores/promptStore'
 
 interface SpawnAgentResult {
-  process_id: string
+  processId: string
 }
 
 interface WaitAgentResult {
-  process_id: string
-  exit_code: number | null
+  processId: string
+  exitCode: number | null
   success: boolean
 }
 
 interface AgentOutputPayload {
-  process_id: string
-  stream_type: 'stdout' | 'stderr'
+  processId: string
+  streamType: 'stdout' | 'stderr'
   content: string
 }
 
@@ -104,7 +104,7 @@ export function useIdeaGeneration() {
       const lines: string[] = []
       
       const unlistenOutput = await listen<AgentOutputPayload>('agent-output', (event) => {
-        if (event.payload.process_id === spawnResult.process_id) {
+        if (event.payload.processId === spawnResult.processId) {
           // Each event contains a line without its newline (stripped by BufReader.lines())
           // Collect lines separately to preserve structure
           lines.push(event.payload.content)
@@ -112,13 +112,13 @@ export function useIdeaGeneration() {
       })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
-        process_id: spawnResult.process_id
+        processId: spawnResult.processId
       })
 
       unlistenOutput()
 
       if (!waitResult.success) {
-        console.error('Agent failed with exit code:', waitResult.exit_code)
+        console.error('Agent failed with exit code:', waitResult.exitCode)
         return null
       }
 

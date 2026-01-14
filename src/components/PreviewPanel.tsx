@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDevServer } from "../hooks/useDevServer";
+import { useTunnel } from "../hooks/useTunnel";
 import { useBuildStore } from "../stores/buildStore";
 import { usePanelStore } from "../stores/panelStore";
+import { useIntegrationsStore } from "../stores/integrationsStore";
 
 interface PreviewPanelProps {
   projectId: string;
@@ -32,10 +34,11 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
   const setIsCollapsed = (c: boolean) => setPreviewPanelCollapsed(projectId, c);
 
   const [isResizing, setIsResizing] = useState(false);
-  const [userStopped, setUserStopped] = useState(false);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [showZoomPresets, setShowZoomPresets] = useState(false);
   const [isIframeLoaded, setIsIframeLoaded] = useState(false);
+  const [showTunnelSetup, setShowTunnelSetup] = useState(false);
+  const [showTunnelDisconnect, setShowTunnelDisconnect] = useState(false);
 
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
@@ -47,11 +50,26 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
     config,
     url,
     error,
+    wasManualyStopped,
     detectDevServer,
     startServer,
     stopServer,
     toggleServer,
+    clearStoppedFlag,
   } = useDevServer(projectPath, projectId);
+
+  // Extract port from URL for tunnel
+  const localPort = url ? parseInt(new URL(url).port || '80', 10) : null;
+  
+  const {
+    status: tunnelStatus,
+    publicUrl: tunnelUrl,
+    isEnabled: tunnelEnabled,
+    toggleTunnel,
+    copyUrl: copyTunnelUrl,
+  } = useTunnel(projectId, localPort);
+
+  const setOutRayConfig = useIntegrationsStore((state) => state.setOutRayConfig);
 
   // Track build state to refresh preview after story completion
   const getProjectState = useBuildStore((state) => state.getProjectState);
@@ -62,12 +80,11 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
     (s) => s === 'complete'
   ).length;
 
-  // Refresh preview when a story completes (if server is running and user hasn't stopped it)
+  // Refresh preview when a story completes (if server is running)
   useEffect(() => {
     if (
       completedCount > lastCompletedCountRef.current &&
       status === 'running' &&
-      !userStopped &&
       url &&
       iframeRef.current
     ) {
@@ -80,21 +97,21 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
       }, 1000);
     }
     lastCompletedCountRef.current = completedCount;
-  }, [completedCount, status, userStopped, url]);
+  }, [completedCount, status, url]);
 
-  // Auto-detect dev server when panel is expanded (and user hasn't stopped it)
+  // Auto-detect dev server when panel is expanded (and user hasn't manually stopped it)
   useEffect(() => {
-    if (!isCollapsed && !config && status === 'idle' && !userStopped) {
+    if (!isCollapsed && !config && status === 'idle' && !wasManualyStopped) {
       detectDevServer();
     }
-  }, [isCollapsed, config, status, userStopped, detectDevServer]);
+  }, [isCollapsed, config, status, wasManualyStopped, detectDevServer]);
 
-  // Auto-start server after detection (if user hasn't stopped it)
+  // Auto-start server after detection (if user hasn't manually stopped it)
   useEffect(() => {
-    if (config && status === 'idle' && !isCollapsed && !userStopped) {
+    if (config && status === 'idle' && !isCollapsed && !wasManualyStopped) {
       startServer();
     }
-  }, [config, status, isCollapsed, userStopped, startServer]);
+  }, [config, status, isCollapsed, wasManualyStopped, startServer]);
 
   // Reset iframe loaded state when URL changes
   useEffect(() => {
@@ -160,12 +177,10 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
     const isRunning = status === 'running' || status === 'starting';
     
     if (isRunning) {
-      // User is stopping the server manually
-      setUserStopped(true);
+      // User is stopping the server manually - stopServer marks it as manually stopped
       await stopServer();
     } else {
-      // User is starting the server
-      setUserStopped(false);
+      // User is starting the server - startServer clears the manually stopped flag
       await toggleServer();
     }
   };
@@ -200,7 +215,7 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
       case 'stopping': return 'Stopping server...';
       case 'running': return config?.command ? `${config.command} ${config.args.join(' ')}` : 'Server running';
       case 'error': return error || 'Error';
-      default: return userStopped ? 'Server stopped by user' : 'Server stopped';
+      default: return wasManualyStopped ? 'Server stopped by user' : 'Server stopped';
     }
   };
 
@@ -379,6 +394,46 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
+
+              {/* Tunnel button - always visible */}
+              <button
+                onClick={() => {
+                  if (!tunnelEnabled) {
+                    setShowTunnelSetup(true);
+                  } else if (tunnelStatus === 'running' && tunnelUrl) {
+                    setShowTunnelDisconnect(true);
+                  } else {
+                    toggleTunnel();
+                  }
+                }}
+                disabled={tunnelEnabled && (!url || tunnelStatus === 'starting' || tunnelStatus === 'stopping')}
+                className={`p-1 rounded transition-colors flex items-center justify-center ${
+                  tunnelEnabled && (!url || tunnelStatus === 'starting' || tunnelStatus === 'stopping')
+                    ? 'text-muted/50 cursor-not-allowed'
+                    : tunnelStatus === 'running'
+                    ? 'text-success hover:bg-success/10'
+                    : 'text-muted hover:text-foreground hover:bg-card'
+                }`}
+                title={
+                  !tunnelEnabled
+                    ? 'Share via public tunnel'
+                    : tunnelStatus === 'running'
+                    ? `Tunnel active: ${tunnelUrl}`
+                    : tunnelStatus === 'starting'
+                    ? 'Starting tunnel...'
+                    : 'Share via tunnel'
+                }
+              >
+                {tunnelStatus === 'starting' || tunnelStatus === 'stopping' ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 
@@ -390,16 +445,32 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
               </svg>
             )}
             <span className="truncate">{getStatusText()}</span>
-            {url && status === 'running' && (
-              <a 
-                href={url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-accent hover:underline ml-auto flex-shrink-0"
-              >
-                {url}
-              </a>
-            )}
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+              {url && status === 'running' && (
+                <div className="flex items-center gap-0">
+                  <a 
+                    href={url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-accent hover:underline"
+                  >
+                    {url}
+                  </a>
+                  {tunnelUrl && tunnelStatus === 'running' && (
+                    <>
+                      <span className="text-muted mx-2">|</span>
+                      <button
+                        onClick={copyTunnelUrl}
+                        className="flex items-center gap-1 text-success hover:underline"
+                        title="Click to copy tunnel URL"
+                      >
+                        <span className="truncate max-w-[150px]">{tunnelUrl}</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Preview content */}
@@ -413,7 +484,7 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
                   <span className="text-sm text-destructive">{error}</span>
                   <button
                     onClick={() => {
-                      setUserStopped(false);
+                      clearStoppedFlag();
                       detectDevServer();
                     }}
                     className="btn btn-sm btn-secondary"
@@ -460,7 +531,7 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
                   <span className="text-sm">No preview available</span>
                   <button
                     onClick={() => {
-                      setUserStopped(false);
+                      clearStoppedFlag();
                       toggleServer();
                     }}
                     className="btn btn-sm btn-primary"
@@ -473,6 +544,137 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* OutRay Setup Modal */}
+      {showTunnelSetup && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowTunnelSetup(false);
+          }}
+        >
+          <div className="bg-card rounded-xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Share via OutRay</h2>
+                <p className="text-sm text-muted">Expose your dev server to the internet</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <p className="text-sm text-foreground">
+                OutRay creates a secure public tunnel to your local dev server, letting you share your work with anyone.
+              </p>
+              
+              <div className="bg-background rounded-lg p-4 border border-border">
+                <h3 className="text-sm font-medium mb-2">Quick Setup</h3>
+                <ol className="text-sm text-muted space-y-2">
+                  <li className="flex gap-2">
+                    <span className="text-accent font-medium">1.</span>
+                    Install: <code className="px-1 py-0.5 bg-card rounded text-xs">npm install -g outray</code>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-accent font-medium">2.</span>
+                    Authenticate: <code className="px-1 py-0.5 bg-card rounded text-xs">outray login</code>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-accent font-medium">3.</span>
+                    Click "Enable" below
+                  </li>
+                </ol>
+              </div>
+
+              <p className="text-xs text-muted">
+                OutRay offers a free tier with unlimited tunnels.{" "}
+                <a
+                  href="https://outray.dev"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  Learn more →
+                </a>
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTunnelSetup(false)}
+                className="flex-1 px-4 py-2 rounded-lg border border-border text-foreground font-medium hover:bg-card transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await setOutRayConfig({ enabled: true });
+                  setShowTunnelSetup(false);
+                  // Auto-start tunnel if server is running
+                  if (url) {
+                    toggleTunnel();
+                  }
+                }}
+                className="flex-1 px-4 py-2 rounded-lg bg-accent text-white font-medium hover:opacity-90 transition-opacity"
+              >
+                Enable OutRay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tunnel Disconnect Confirmation Modal */}
+      {showTunnelDisconnect && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowTunnelDisconnect(false);
+          }}
+        >
+          <div className="bg-card rounded-xl shadow-2xl w-full max-w-sm p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Disconnect Tunnel?</h2>
+                <p className="text-sm text-muted">Your public URL will stop working</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-foreground mb-4">
+              The tunnel is currently sharing your dev server at:
+            </p>
+            <div className="bg-background rounded-lg p-3 border border-border mb-6">
+              <code className="text-sm text-success break-all">{tunnelUrl}</code>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTunnelDisconnect(false)}
+                className="flex-1 px-4 py-2 rounded-lg border border-border text-foreground font-medium hover:bg-card transition-colors"
+              >
+                Keep Connected
+              </button>
+              <button
+                onClick={async () => {
+                  setShowTunnelDisconnect(false);
+                  await toggleTunnel();
+                }}
+                className="flex-1 px-4 py-2 rounded-lg bg-destructive text-white font-medium hover:opacity-90 transition-opacity"
+              >
+                Disconnect
+              </button>
+            </div>
           </div>
         </div>
       )}

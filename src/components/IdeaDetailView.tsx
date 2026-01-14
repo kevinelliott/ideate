@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import Markdown from "react-markdown";
-import { open } from "@tauri-apps/plugin-dialog";
+import remarkGfm from "remark-gfm";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { documentDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
+
 import type { Idea } from "../stores/ideasStore";
 import { useIdeasStore } from "../stores/ideasStore";
 import { useIdeaGeneration } from "../hooks/useIdeaGeneration";
@@ -11,6 +13,8 @@ import { usePrdGeneration } from "../hooks/usePrdGeneration";
 import { useAgentStore } from "../stores/agentStore";
 import { usePrdStore } from "../stores/prdStore";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
+import { exportIdeaToPdf } from "../utils/exportPdf";
+import { notify } from "../utils/notify";
 
 interface CreateProjectResult {
   path: string;
@@ -46,6 +50,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showGeneratingModal, setShowGeneratingModal] = useState(false);
   const [, setCreatedProjectId] = useState<string | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const { generateDescription, isGenerating, generationType } = useIdeaGeneration();
 
@@ -203,6 +208,37 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
     setSelectedDirectory(null);
   };
 
+  const handleExportPdf = async () => {
+    if (isExportingPdf) return;
+    
+    setIsExportingPdf(true);
+    
+    try {
+      const defaultPath = await documentDir();
+      const fileName = `${idea.title.trim().replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "-").toLowerCase()}.pdf`;
+      
+      const filePath = await save({
+        defaultPath: `${defaultPath}/${fileName}`,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+        title: "Export Idea as PDF",
+      });
+      
+      if (filePath) {
+        const pdfBlob = exportIdeaToPdf({ idea });
+        const arrayBuffer = await pdfBlob.arrayBuffer();
+        const data = Array.from(new Uint8Array(arrayBuffer));
+        
+        await invoke("write_binary_file", { path: filePath, data });
+        notify.success("PDF exported", `Saved to ${filePath.split("/").pop()}`);
+      }
+    } catch (error) {
+      console.error("Failed to export PDF:", error);
+      notify.error("Export failed", "Could not save PDF file");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString(undefined, {
       year: "numeric",
@@ -256,10 +292,10 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
   );
 
   return (
-    <div className="flex flex-col h-full">
+    <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 h-14 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center justify-between px-6 h-14 border-b border-border flex-shrink-0 bg-background drag-region">
+        <div className="flex items-center gap-3 min-w-0 flex-1 no-drag">
           <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
             <svg
               className="w-4 h-4 text-accent"
@@ -289,7 +325,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 no-drag">
           {isEditing ? (
             <>
               <button
@@ -318,6 +354,42 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                 </svg>
                 Create Project
+              </button>
+              <button
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                className="p-1.5 rounded-lg text-secondary hover:text-foreground hover:bg-card transition-colors disabled:opacity-50"
+                title="Export as PDF"
+              >
+                {isExportingPdf ? (
+                  <svg
+                    className="w-5 h-5 animate-spin"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                    />
+                  </svg>
+                )}
               </button>
               <button
                 onClick={() => setIsEditing(true)}
@@ -363,8 +435,9 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl space-y-6">
+      <div className="relative flex-1 overflow-hidden">
+        <div className="absolute inset-0 overflow-auto p-6">
+          <div className="space-y-6 pb-16">
           {isEditing ? (
             <>
               <div>
@@ -455,7 +528,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
               {idea.description ? (
                 <div className="bg-card rounded-lg border border-border p-6">
                   <div className="prose prose-sm">
-                    <Markdown>{idea.description}</Markdown>
+                    <Markdown remarkPlugins={[remarkGfm]}>{idea.description}</Markdown>
                   </div>
                 </div>
               ) : (
@@ -471,7 +544,11 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
               </div>
             </>
           )}
+          </div>
         </div>
+        
+        {/* Bottom fade overlay */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background-secondary to-transparent" />
       </div>
 
       {/* Delete confirmation modal */}
@@ -585,7 +662,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
                   </div>
 
                   {generatePrd && (
-                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background border border-border ml-4">
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background border border-border">
                       <input
                         type="checkbox"
                         id="breakdown-stories"
@@ -710,6 +787,6 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

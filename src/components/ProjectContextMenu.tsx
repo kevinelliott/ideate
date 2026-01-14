@@ -10,6 +10,7 @@ interface ProjectContextMenuProps {
   onClose: () => void
   onRename: () => void
   onDelete: () => void
+  onShowProcessHistory: () => void
 }
 
 export function ProjectContextMenu({
@@ -19,6 +20,7 @@ export function ProjectContextMenu({
   onClose,
   onRename,
   onDelete,
+  onShowProcessHistory,
 }: ProjectContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -63,6 +65,11 @@ export function ProjectContextMenu({
     onClose()
   }
 
+  const handleProcessHistory = () => {
+    onShowProcessHistory()
+    onClose()
+  }
+
   return (
     <div
       ref={menuRef}
@@ -74,6 +81,12 @@ export function ProjectContextMenu({
         className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-white transition-colors"
       >
         Reveal in Finder
+      </button>
+      <button
+        onClick={handleProcessHistory}
+        className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-white transition-colors"
+      >
+        Process History
       </button>
       <button
         onClick={handleRename}

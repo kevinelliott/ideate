@@ -36,17 +36,20 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SpawnTerminalResult {
     pub terminal_id: String,
 }
 
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalOutputEvent {
     pub terminal_id: String,
     pub data: String,
 }
 
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalExitEvent {
     pub terminal_id: String,
     pub exit_code: Option<u32>,
@@ -85,7 +88,7 @@ fn build_shell_command(working_directory: &str) -> CommandBuilder {
 ///
 /// Returns a terminal ID that can be used for subsequent operations.
 #[cfg(unix)]
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn spawn_terminal(
     app: AppHandle,
     working_directory: String,
@@ -201,7 +204,7 @@ pub fn spawn_terminal(
 
 /// Writes data to a terminal's PTY.
 #[cfg(unix)]
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn write_terminal(terminal_id: String, data: String) -> Result<(), String> {
     let mut terminals = PTY_TERMINALS
         .lock()
@@ -226,7 +229,7 @@ pub fn write_terminal(terminal_id: String, data: String) -> Result<(), String> {
 
 /// Resizes a terminal's PTY to match the frontend dimensions.
 #[cfg(unix)]
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn resize_terminal(terminal_id: String, cols: u16, rows: u16) -> Result<(), String> {
     let terminals = PTY_TERMINALS
         .lock()
@@ -251,7 +254,7 @@ pub fn resize_terminal(terminal_id: String, cols: u16, rows: u16) -> Result<(), 
 
 /// Kills a terminal and cleans up its resources.
 #[cfg(unix)]
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn kill_terminal(app: AppHandle, terminal_id: String) -> Result<(), String> {
     let mut terminals = PTY_TERMINALS
         .lock()

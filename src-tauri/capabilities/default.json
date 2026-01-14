@@ -7,6 +7,10 @@
     "core:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-document-write-recursive",
+    "fs:allow-download-write-recursive",
+    "fs:allow-desktop-write-recursive",
+    "fs:allow-home-write-recursive",
     "shell:default"
   ]
 }

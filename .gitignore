@@ -4,6 +4,7 @@ target/
 
 # Build outputs
 dist/
+src-tauri/binaries/
 
 # IDE
 .idea/

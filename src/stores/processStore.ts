@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 
-export type ProcessType = 'build' | 'chat' | 'prd' | 'dev-server' | 'detection'
+export type ProcessType = 'build' | 'chat' | 'prd' | 'dev-server' | 'detection' | 'tunnel'
 
 export interface ProcessLogEntry {
   id: string
@@ -24,6 +24,7 @@ export interface RunningProcess {
   startedAt: Date
   agentId?: string
   command?: ProcessCommand
+  url?: string
 }
 
 export interface CompletedProcessInfo {
@@ -42,7 +43,8 @@ interface ProcessStore {
   selectedProcessId: string | null
   
   registerProcess: (process: Omit<RunningProcess, 'startedAt'>) => void
-  unregisterProcess: (processId: string) => void
+  updateProcessUrl: (processId: string, url: string) => void
+  unregisterProcess: (processId: string, exitCode?: number | null, success?: boolean) => void
   getProcessesByProject: (projectId: string) => RunningProcess[]
   getProcessesByType: (type: ProcessType) => RunningProcess[]
   getProcess: (processId: string) => RunningProcess | undefined
@@ -151,7 +153,23 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
     }))
   },
 
-  unregisterProcess: (processId) => {
+  updateProcessUrl: (processId, url) => {
+    set((state) => {
+      const process = state.processes[processId]
+      if (!process) return state
+      return {
+        processes: {
+          ...state.processes,
+          [processId]: {
+            ...process,
+            url,
+          },
+        },
+      }
+    })
+  },
+
+  unregisterProcess: (processId, exitCode?: number | null, success?: boolean) => {
     const state = get()
     const process = state.processes[processId]
     
@@ -179,8 +197,27 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
         },
       }))
       
-      // Save logs to file
-      get().saveProcessLogToFile(processId).catch((e) => {
+      // Save logs to file and then save history entry
+      get().saveProcessLogToFile(processId).then((logFilePath) => {
+        // Save to process history
+        const historyEntry = {
+          processId: process.processId,
+          projectId: process.projectId,
+          processType: process.type,
+          label: process.label,
+          startedAt: process.startedAt.toISOString(),
+          completedAt: now.toISOString(),
+          durationMs: duration,
+          exitCode: exitCode ?? null,
+          success: success ?? true,
+          agentId: process.agentId,
+          command: process.command,
+          logFilePath,
+        }
+        invoke('save_process_history_entry', { entry: historyEntry }).catch((e) => {
+          console.error('Failed to save process history entry:', e)
+        })
+      }).catch((e) => {
         console.error('Failed to save process log to file:', e)
       })
     }

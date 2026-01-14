@@ -26,13 +26,29 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 
           {/* App Name & Version */}
           <h1 className="text-2xl font-bold text-foreground mb-1">Ideate</h1>
-          <p className="text-sm text-muted mb-4">Version 0.1.0</p>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm text-muted">Version 0.1.0</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium">MIT License</span>
+          </div>
+
+          {/* Tagline */}
+          <div className="flex items-center gap-2 mb-4 text-sm font-medium">
+            <span className="text-accent">IDEA</span>
+            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            <span className="text-accent">PLAN</span>
+            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            <span className="text-accent">GENERATE</span>
+          </div>
 
           {/* Description */}
           <p className="text-sm text-secondary mb-6 leading-relaxed">
-            A desktop app for managing AI coding agent workflows.
-            Build software faster with intelligent PRD generation,
-            user story management, and seamless agent integration.
+            A free, open source desktop app for AI-powered software development.
+            Generate PRDs, manage user stories, and integrate with 8 AI coding agents
+            to build software faster than ever.
           </p>
 
           {/* Links */}
@@ -48,6 +64,19 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
+            </a>
+
+            <a
+              href="https://ideate.sh"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 text-sm text-secondary hover:text-foreground transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                <path strokeLinecap="round" strokeWidth="2" d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              <span>Visit Website</span>
             </a>
 
             <a

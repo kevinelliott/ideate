@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -30,6 +31,7 @@ lazy_static = "1.4"
 glob = "0.3"
 dirs = "5"
 regex = "1"
+reqwest = { version = "0.12", features = ["json"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -1,38 +1,51 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
+import { readTextFile, exists } from '@tauri-apps/plugin-fs'
 import { usePromptStore } from '../stores/promptStore'
 import { useProcessStore } from '../stores/processStore'
+import { notify } from '../utils/notify'
 
 interface DevServerConfig {
   command: string
   args: string[]
   url: string
   framework?: string
+  env?: Record<string, string>
 }
 
 interface SpawnAgentResult {
-  process_id: string
+  processId: string
 }
 
 interface AgentOutputEvent {
-  process_id: string
-  stream_type: string
+  processId: string
+  streamType: string
   content: string
 }
 
 interface AgentExitEvent {
-  process_id: string
-  exit_code: number | null
+  processId: string
+  exitCode: number | null
   success: boolean
 }
 
 export type DevServerStatus = 'idle' | 'detecting' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error'
 
+// Track which projects have had their dev server manually stopped
+// This persists across component remounts to prevent auto-restart
+const manuallyStoppedProjects = new Set<string>()
+
 async function detectDevServerFromPackage(projectPath: string): Promise<DevServerConfig | null> {
   try {
     const packageJsonPath = `${projectPath}/package.json`
-    const content = await invoke<string>('read_file', { path: packageJsonPath })
+    
+    // Check if package.json exists first
+    if (!await exists(packageJsonPath)) {
+      return null
+    }
+    
+    const content = await readTextFile(packageJsonPath)
     const packageJson = JSON.parse(content)
     
     const scripts = packageJson.scripts || {}
@@ -92,27 +105,22 @@ async function detectDevServerFromPackage(projectPath: string): Promise<DevServe
       port = parseInt(portMatch[1], 10)
     }
     
+    // Detect package manager by checking for lock files
     let packageManager = 'npm'
-    try {
-      await invoke<string>('read_file', { path: `${projectPath}/pnpm-lock.yaml` })
+    if (await exists(`${projectPath}/pnpm-lock.yaml`)) {
       packageManager = 'pnpm'
-    } catch {
-      try {
-        await invoke<string>('read_file', { path: `${projectPath}/yarn.lock` })
-        packageManager = 'yarn'
-      } catch {
-        try {
-          await invoke<string>('read_file', { path: `${projectPath}/bun.lockb` })
-          packageManager = 'bun'
-        } catch {
-          // Default to npm
-        }
-      }
+    } else if (await exists(`${projectPath}/yarn.lock`)) {
+      packageManager = 'yarn'
+    } else if (await exists(`${projectPath}/bun.lockb`)) {
+      packageManager = 'bun'
     }
+    
+    // Build args - for npm we need 'run' prefix
+    const args = packageManager === 'npm' ? ['run', devScript] : [devScript]
     
     return {
       command: packageManager,
-      args: packageManager === 'npm' ? ['run', devScript] : [devScript],
+      args,
       url: `http://localhost:${port}`,
       framework,
     }
@@ -143,23 +151,43 @@ export function useDevServer(projectPath: string, projectId?: string) {
   
   const registerProcess = useProcessStore((state) => state.registerProcess)
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
-  const appendProcessLog = useProcessStore((state) => state.appendProcessLog)
   const getProcessesByType = useProcessStore((state) => state.getProcessesByType)
+  const appendProcessLog = useProcessStore((state) => state.appendProcessLog)
 
-  // Check for existing dev-server process on mount
+  // Check for existing dev-server or detection process on mount
   useEffect(() => {
     if (!projectId) return
     
+    // Check for existing dev-server
     const existingDevServers = getProcessesByType('dev-server')
-    const existingForProject = existingDevServers.find(p => p.projectId === projectId)
+    const existingDevServer = existingDevServers.find(p => p.projectId === projectId)
     
-    if (existingForProject) {
-      serverProcessIdRef.current = existingForProject.processId
+    if (existingDevServer) {
+      serverProcessIdRef.current = existingDevServer.processId
       statusRef.current = 'running'
       setStatus('running')
+      // Restore the URL from the process store
+      if (existingDevServer.url) {
+        setUrl(existingDevServer.url)
+      }
+      return
+    }
+    
+    // Check for existing detection process
+    const existingDetections = getProcessesByType('detection')
+    const existingDetection = existingDetections.find(p => p.projectId === projectId)
+    
+    if (existingDetection) {
+      detectProcessIdRef.current = existingDetection.processId
+      isDetectingRef.current = true
+      statusRef.current = 'detecting'
+      setStatus('detecting')
     }
   }, [projectId, getProcessesByType])
 
+  // Listen for events relevant to this hook's processes
+  // Note: App.tsx handles appending logs to processStore globally,
+  // but this hook needs to listen for specific events to update local state
   useEffect(() => {
     let mounted = true
     
@@ -177,47 +205,60 @@ export function useDevServer(projectPath: string, projectId?: string) {
       unlistenOutputRef.current = await listen<AgentOutputEvent>('agent-output', (event) => {
         if (!mounted) return
         
-        if (event.payload.process_id === serverProcessIdRef.current) {
-          // Batch log updates to reduce UI pressure
+        if (event.payload.processId === serverProcessIdRef.current) {
+          // Batch log updates to reduce UI pressure (for local logs state)
           logBufferRef.current.push(event.payload.content)
           if (logFlushTimeoutRef.current === null) {
             logFlushTimeoutRef.current = window.setTimeout(flushLogs, 100)
           }
           
-          appendProcessLog(event.payload.process_id, event.payload.stream_type as 'stdout' | 'stderr', event.payload.content)
+          // Detect URL from output - handles port changes like "Port 5173 is in use, trying another one..."
+          // Strip ANSI escape codes first for cleaner matching
+          const cleanContent = event.payload.content.replace(/\x1b\[[0-9;]*m/g, '')
           
-          // Detect URL from output
-          const urlMatch = event.payload.content.match(/https?:\/\/localhost[:\d]*/i) ||
-                          event.payload.content.match(/https?:\/\/127\.0\.0\.1[:\d]*/i) ||
-                          event.payload.content.match(/https?:\/\/0\.0\.0\.0[:\d]*/i)
-          if (urlMatch && statusRef.current === 'starting') {
-            const detectedUrl = urlMatch[0].replace('0.0.0.0', 'localhost')
-            setUrl(detectedUrl)
-            statusRef.current = 'running'
-            setStatus('running')
+          // Match URLs with port numbers (e.g., http://localhost:5178/)
+          // Use a comprehensive regex that captures the full URL with port
+          const urlMatch = cleanContent.match(/https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)/i)
+          if (urlMatch) {
+            const port = urlMatch[1]
+            const detectedUrl = `http://localhost:${port}`
+            
+            // Update URL if this is a new/different URL
+            if (statusRef.current === 'starting') {
+              setUrl(detectedUrl)
+              statusRef.current = 'running'
+              setStatus('running')
+              notify.success('Dev server running', detectedUrl)
+            } else if (statusRef.current === 'running') {
+              // Server is already running but detected a new URL (port changed)
+              setUrl((currentUrl) => {
+                if (currentUrl !== detectedUrl) {
+                  notify.info('Dev server port changed', detectedUrl)
+                  return detectedUrl
+                }
+                return currentUrl
+              })
+            }
           }
-        } else if (event.payload.process_id === detectProcessIdRef.current) {
+        } else if (event.payload.processId === detectProcessIdRef.current) {
+          // Collect detection output for JSON parsing
           detectOutputRef.current += event.payload.content + '\n'
-          appendProcessLog(event.payload.process_id, event.payload.stream_type as 'stdout' | 'stderr', event.payload.content)
+          // Also log to processStore for display in AgentRunView
+          appendProcessLog(event.payload.processId, event.payload.streamType as 'stdout' | 'stderr', event.payload.content)
         }
       })
       
       unlistenExitRef.current = await listen<AgentExitEvent>('agent-exit', (event) => {
         if (!mounted) return
         
-        if (event.payload.process_id === serverProcessIdRef.current) {
-          if (projectId) {
-            unregisterProcess(event.payload.process_id)
-          }
+        if (event.payload.processId === serverProcessIdRef.current) {
+          // Note: App.tsx handles unregisterProcess globally
           serverProcessIdRef.current = null
           statusRef.current = 'stopped'
           setStatus('stopped')
           setUrl(null)
-        } else if (event.payload.process_id === detectProcessIdRef.current) {
-          if (projectId) {
-            unregisterProcess(event.payload.process_id)
-          }
-          
+        } else if (event.payload.processId === detectProcessIdRef.current) {
+          // Parse the detection output
           const output = detectOutputRef.current
           detectProcessIdRef.current = null
           isDetectingRef.current = false
@@ -263,14 +304,24 @@ export function useDevServer(projectPath: string, projectId?: string) {
       unlistenOutputRef.current?.()
       unlistenExitRef.current?.()
     }
-  }, [projectId, unregisterProcess, appendProcessLog])
+  }, [projectId])
 
   const detectWithAmp = useCallback(async () => {
     if (!projectPath) return null
     
-    // Guard against concurrent detection processes
+    // Guard against concurrent detection processes - check both ref and store
     if (detectProcessIdRef.current) {
       return null
+    }
+    
+    // Also check the store for any existing detection processes for this project
+    if (projectId) {
+      const existingDetections = useProcessStore.getState().getProcessesByType('detection')
+      const existingForProject = existingDetections.find(p => p.projectId === projectId)
+      if (existingForProject) {
+        detectProcessIdRef.current = existingForProject.processId
+        return null
+      }
     }
     
     detectOutputRef.current = ''
@@ -281,14 +332,14 @@ export function useDevServer(projectPath: string, projectId?: string) {
       const result = await invoke<SpawnAgentResult>('spawn_agent', {
         executable: 'amp',
         args: ['--execute', prompt],
-        working_directory: projectPath,
+        workingDirectory: projectPath,
       })
       
-      detectProcessIdRef.current = result.process_id
+      detectProcessIdRef.current = result.processId
       
       if (projectId) {
         registerProcess({
-          processId: result.process_id,
+          processId: result.processId,
           projectId,
           type: 'detection',
           label: 'Detecting dev server',
@@ -301,7 +352,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
       }
       
       // Fire and forget - rely on agent-exit event for completion
-      invoke('wait_agent', { process_id: result.process_id }).catch((e) => {
+      invoke('wait_agent', { processId: result.processId }).catch((e) => {
         console.error('wait_agent failed for detection:', e)
       })
       
@@ -315,6 +366,39 @@ export function useDevServer(projectPath: string, projectId?: string) {
   const detectDevServer = useCallback(async () => {
     // Hard guard using ref - prevents any race conditions
     if (isDetectingRef.current) return
+    
+    // Skip detection if server is already running
+    if (serverProcessIdRef.current) return
+    
+    // Check the store for any existing dev-server or detection processes for this project
+    if (projectId) {
+      const state = useProcessStore.getState()
+      
+      // If dev-server is already running, just update our state to match
+      const existingDevServers = state.getProcessesByType('dev-server')
+      const existingDevServer = existingDevServers.find(p => p.projectId === projectId)
+      if (existingDevServer) {
+        serverProcessIdRef.current = existingDevServer.processId
+        statusRef.current = 'running'
+        setStatus('running')
+        // Restore the URL from the process store
+        if (existingDevServer.url) {
+          setUrl(existingDevServer.url)
+        }
+        return
+      }
+      
+      // If detection is already running, just track it
+      const existingDetections = state.getProcessesByType('detection')
+      const existingForProject = existingDetections.find(p => p.projectId === projectId)
+      if (existingForProject) {
+        detectProcessIdRef.current = existingForProject.processId
+        isDetectingRef.current = true
+        statusRef.current = 'detecting'
+        setStatus('detecting')
+        return
+      }
+    }
     
     isDetectingRef.current = true
     statusRef.current = 'detecting'
@@ -340,7 +424,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
       setStatus('error')
       isDetectingRef.current = false
     }
-  }, [projectPath, detectWithAmp])
+  }, [projectPath, projectId, detectWithAmp])
 
   const startServer = useCallback(async () => {
     if (!config) return
@@ -358,8 +442,15 @@ export function useDevServer(projectPath: string, projectId?: string) {
         serverProcessIdRef.current = existingForProject.processId
         statusRef.current = 'running'
         setStatus('running')
+        // Restore the URL from the process store
+        if (existingForProject.url) {
+          setUrl(existingForProject.url)
+        }
         return
       }
+      
+      // Clear manually stopped flag since user is explicitly starting
+      manuallyStoppedProjects.delete(projectId)
     }
     
     isStartingRef.current = true
@@ -373,14 +464,14 @@ export function useDevServer(projectPath: string, projectId?: string) {
       const result = await invoke<SpawnAgentResult>('spawn_agent', {
         executable: config.command,
         args: config.args,
-        working_directory: projectPath,
+        workingDirectory: projectPath,
       })
       
-      serverProcessIdRef.current = result.process_id
+      serverProcessIdRef.current = result.processId
 
       if (projectId) {
         registerProcess({
-          processId: result.process_id,
+          processId: result.processId,
           projectId,
           type: 'dev-server',
           label: config.framework ? `Dev Server (${config.framework})` : 'Dev Server',
@@ -389,6 +480,7 @@ export function useDevServer(projectPath: string, projectId?: string) {
             args: config.args,
             workingDirectory: projectPath,
           },
+          url: config.url,
         })
       }
       
@@ -401,15 +493,17 @@ export function useDevServer(projectPath: string, projectId?: string) {
       }, 3000)
       
     } catch (e) {
-      setError(`Failed to start dev server: ${e}`)
+      const errorMessage = `Failed to start dev server: ${e}`
+      setError(errorMessage)
       statusRef.current = 'error'
       setStatus('error')
+      notify.error('Dev server failed', String(e))
     } finally {
       isStartingRef.current = false
     }
   }, [config, projectPath, projectId, registerProcess])
 
-  const stopServer = useCallback(async () => {
+  const stopServer = useCallback(async (manual = true) => {
     if (!serverProcessIdRef.current) return
     
     statusRef.current = 'stopping'
@@ -417,9 +511,13 @@ export function useDevServer(projectPath: string, projectId?: string) {
     
     try {
       const processId = serverProcessIdRef.current
-      await invoke('kill_agent', { process_id: processId })
+      await invoke('kill_agent', { processId: processId })
       if (projectId) {
-        unregisterProcess(processId)
+        unregisterProcess(processId, null, false)
+        // Track that this project's dev server was manually stopped
+        if (manual) {
+          manuallyStoppedProjects.add(projectId)
+        }
       }
       serverProcessIdRef.current = null
       statusRef.current = 'stopped'
@@ -442,20 +540,20 @@ export function useDevServer(projectPath: string, projectId?: string) {
     }
   }, [config, startServer, stopServer, detectDevServer])
 
-  useEffect(() => {
-    return () => {
-      if (serverProcessIdRef.current) {
-        const processId = serverProcessIdRef.current
-        invoke('kill_agent', { process_id: processId }).catch(() => {})
-        if (projectId) {
-          unregisterProcess(processId)
-        }
-      }
-      if (detectProcessIdRef.current) {
-        invoke('kill_agent', { process_id: detectProcessIdRef.current }).catch(() => {})
-      }
+  // Note: We intentionally do NOT kill the dev server on unmount.
+  // The dev server should persist when the user navigates to view its details
+  // or switches between views. It should only be stopped explicitly via stopServer().
+  // Detection processes are also left running - they complete on their own.
+
+  // Check if this project was manually stopped
+  const wasManualyStopped = projectId ? manuallyStoppedProjects.has(projectId) : false
+  
+  // Clear the manually stopped flag (called when user explicitly starts)
+  const clearStoppedFlag = useCallback(() => {
+    if (projectId) {
+      manuallyStoppedProjects.delete(projectId)
     }
-  }, [projectId, unregisterProcess])
+  }, [projectId])
 
   return {
     status,
@@ -463,9 +561,11 @@ export function useDevServer(projectPath: string, projectId?: string) {
     url,
     error,
     logs,
+    wasManualyStopped,
     detectDevServer,
     startServer,
     stopServer,
     toggleServer,
+    clearStoppedFlag,
   }
 }

@@ -15,6 +15,7 @@ export interface Project {
 interface ProjectState {
   projects: Project[]
   activeProjectId: string | null
+  processHistoryProjectId: string | null
   isLoaded: boolean
   addProject: (project: Omit<Project, 'id' | 'createdAt'>) => Project
   removeProject: (id: string) => void
@@ -23,11 +24,14 @@ interface ProjectState {
   loadProjects: () => Promise<void>
   saveProjects: () => Promise<void>
   setProjects: (projects: Project[]) => void
+  showProcessHistory: (projectId: string) => void
+  hideProcessHistory: () => void
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
   activeProjectId: null,
+  processHistoryProjectId: null,
   isLoaded: false,
 
   addProject: (projectData) => {
@@ -85,5 +89,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } catch (error) {
       console.error('Failed to save projects:', error)
     }
+  },
+
+  showProcessHistory: (projectId) => {
+    set({ processHistoryProjectId: projectId })
+  },
+
+  hideProcessHistory: () => {
+    set({ processHistoryProjectId: null })
   },
 }))

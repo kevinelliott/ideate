@@ -8,6 +8,7 @@ use std::collections::HashMap;
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectConfig {
     pub name: String,
     pub description: String,
@@ -19,6 +20,7 @@ pub struct ProjectConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectSettings {
     pub agent: Option<String>,
     pub autonomy: String,
@@ -27,19 +29,20 @@ pub struct ProjectSettings {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateProjectResult {
     pub path: String,
     pub config_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StoredProject {
     pub id: String,
     pub name: String,
     pub description: String,
     pub path: String,
     pub status: String,
-    #[serde(rename = "createdAt")]
     pub created_at: String,
 }
 
@@ -48,11 +51,11 @@ pub struct StoredProject {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Story {
     pub id: String,
     pub title: String,
     pub description: String,
-    #[serde(rename = "acceptanceCriteria")]
     pub acceptance_criteria: Vec<String>,
     pub priority: i32,
     pub passes: bool,
@@ -62,32 +65,29 @@ pub struct Story {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Prd {
     #[serde(default)]
     pub project: Option<String>,
-    #[serde(rename = "branchName", default)]
+    #[serde(default)]
     pub branch_name: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(rename = "userStories")]
     pub user_stories: Vec<Story>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StoryRetryInfo {
-    #[serde(rename = "retryCount")]
     pub retry_count: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectState {
-    #[serde(rename = "currentStoryId")]
     pub current_story_id: Option<String>,
-    #[serde(rename = "storyStatuses")]
     pub story_statuses: HashMap<String, String>,
-    #[serde(rename = "storyRetries")]
     pub story_retries: HashMap<String, StoryRetryInfo>,
-    #[serde(rename = "buildPhase")]
     pub build_phase: String,
 }
 
@@ -96,19 +96,18 @@ pub struct ProjectState {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CostEntry {
     pub id: String,
-    #[serde(rename = "projectId")]
     pub project_id: String,
     pub timestamp: String,
-    #[serde(rename = "agentId")]
     pub agent_id: String,
     pub description: String,
-    #[serde(rename = "inputTokens", default)]
+    #[serde(default)]
     pub input_tokens: Option<i64>,
-    #[serde(rename = "outputTokens", default)]
+    #[serde(default)]
     pub output_tokens: Option<i64>,
-    #[serde(rename = "totalTokens", default)]
+    #[serde(default)]
     pub total_tokens: Option<i64>,
     #[serde(default)]
     pub cost: Option<f64>,
@@ -116,9 +115,9 @@ pub struct CostEntry {
     pub credits: Option<f64>,
     #[serde(default)]
     pub model: Option<String>,
-    #[serde(rename = "threadId", default)]
+    #[serde(default)]
     pub thread_id: Option<String>,
-    #[serde(rename = "durationMs", default)]
+    #[serde(default)]
     pub duration_ms: Option<i64>,
 }
 
@@ -132,14 +131,13 @@ pub struct CostHistory {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Idea {
     pub id: String,
     pub title: String,
     pub summary: String,
     pub description: String,
-    #[serde(rename = "createdAt")]
     pub created_at: String,
-    #[serde(rename = "updatedAt")]
     pub updated_at: String,
 }
 
@@ -148,6 +146,7 @@ pub struct Idea {
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SpawnAgentResult {
     pub process_id: String,
 }
@@ -159,6 +158,7 @@ pub struct KillAgentResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct WaitAgentResult {
     pub process_id: String,
     pub exit_code: Option<i32>,
@@ -166,6 +166,7 @@ pub struct WaitAgentResult {
 }
 
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentOutputEvent {
     pub process_id: String,
     pub stream_type: String,
@@ -173,6 +174,7 @@ pub struct AgentOutputEvent {
 }
 
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentExitEvent {
     pub process_id: String,
     pub exit_code: Option<i32>,
@@ -180,6 +182,7 @@ pub struct AgentExitEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessLogEntry {
     pub timestamp: String,
     #[serde(rename = "type")]
@@ -187,11 +190,46 @@ pub struct ProcessLogEntry {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessCommand {
+    pub executable: String,
+    pub args: Vec<String>,
+    pub working_directory: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessHistoryEntry {
+    pub process_id: String,
+    pub project_id: String,
+    pub process_type: String,
+    pub label: String,
+    pub started_at: String,
+    pub completed_at: String,
+    pub duration_ms: i64,
+    pub exit_code: Option<i32>,
+    pub success: bool,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub command: Option<ProcessCommand>,
+    #[serde(default)]
+    pub log_file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessHistory {
+    pub entries: Vec<ProcessHistoryEntry>,
+}
+
 // ============================================================================
 // Agent Plugin Models
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentModel {
     pub id: String,
     pub name: String,
@@ -200,19 +238,17 @@ pub struct AgentModel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentPlugin {
     pub id: String,
     pub name: String,
     pub command: String,
-    #[serde(rename = "versionCommand")]
     pub version_command: Vec<String>,
-    #[serde(rename = "printArgs")]
     pub print_args: Vec<String>,
-    #[serde(rename = "interactiveArgs")]
     pub interactive_args: Vec<String>,
-    #[serde(rename = "defaultModel", default)]
+    #[serde(default)]
     pub default_model: Option<String>,
-    #[serde(rename = "supportedModels", default)]
+    #[serde(default)]
     pub supported_models: Vec<AgentModel>,
     pub capabilities: Vec<String>,
     pub website: String,
@@ -220,13 +256,14 @@ pub struct AgentPlugin {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentPluginStatus {
     #[serde(flatten)]
     pub agent: AgentPlugin,
     pub status: String,
-    #[serde(rename = "installedVersion", default)]
+    #[serde(default)]
     pub installed_version: Option<String>,
-    #[serde(rename = "cliPath", default)]
+    #[serde(default)]
     pub cli_path: Option<String>,
 }
 
@@ -235,32 +272,59 @@ pub struct AgentPluginStatus {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentCliPath {
-    #[serde(rename = "agentId")]
     pub agent_id: String,
     pub path: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OutRayCredentials {
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct OutRayConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub use_custom_path: bool,
+    #[serde(default)]
+    pub cli_path: Option<String>,
+    #[serde(default)]
+    pub default_subdomain: Option<String>,
+    #[serde(default)]
+    pub global: Option<OutRayCredentials>,
+    #[serde(default)]
+    pub per_project: HashMap<String, OutRayCredentials>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preferences {
-    #[serde(rename = "defaultAgent", default)]
+    #[serde(default)]
     pub default_agent: Option<String>,
-    #[serde(rename = "defaultAutonomy", default = "default_autonomy")]
+    #[serde(default = "default_autonomy")]
     pub default_autonomy: String,
-    #[serde(rename = "defaultBuildMode", default = "default_build_mode")]
+    #[serde(default = "default_build_mode")]
     pub default_build_mode: String,
-    #[serde(rename = "logBufferSize", default = "default_log_buffer_size")]
+    #[serde(default = "default_log_buffer_size")]
     pub log_buffer_size: i32,
-    #[serde(rename = "agentPaths", default)]
+    #[serde(default)]
     pub agent_paths: Vec<AgentCliPath>,
     #[serde(default = "default_theme")]
     pub theme: String,
-    #[serde(rename = "appIcon", default = "default_app_icon")]
+    #[serde(default = "default_app_icon")]
     pub app_icon: String,
-    #[serde(rename = "promptOverrides", default)]
+    #[serde(default)]
     pub prompt_overrides: HashMap<String, String>,
-    #[serde(rename = "hasSeenWelcomeGuide", default)]
+    #[serde(default)]
     pub has_seen_welcome_guide: bool,
+    #[serde(default)]
+    pub outray: OutRayConfig,
 }
 
 fn default_autonomy() -> String {
@@ -295,6 +359,7 @@ impl Default for Preferences {
             app_icon: default_app_icon(),
             prompt_overrides: HashMap::new(),
             has_seen_welcome_guide: false,
+            outray: OutRayConfig::default(),
         }
     }
 }
@@ -304,9 +369,8 @@ impl Default for Preferences {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecentThreadDuration {
-    #[serde(rename = "threadId")]
     pub thread_id: Option<String>,
-    #[serde(rename = "durationMs")]
     pub duration_ms: i64,
 }

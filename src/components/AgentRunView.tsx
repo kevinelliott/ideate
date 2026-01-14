@@ -7,6 +7,7 @@ import { useTheme } from "../hooks/useTheme";
 import { getTerminalTheme } from "../utils/terminalThemes";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { notify } from "../utils/notify";
 import "@xterm/xterm/css/xterm.css";
 
 interface AgentRunViewProps {
@@ -22,6 +23,39 @@ function formatDuration(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return `${hours}h ${remainingMinutes}m`;
+}
+
+/**
+ * Quote an argument for shell display using POSIX-compliant single-quote escaping.
+ * This produces a string that could be copy-pasted into a shell.
+ */
+function shellQuoteArg(arg: string): string {
+  // Empty string needs quotes
+  if (arg === '') {
+    return "''"
+  }
+  // If arg contains only safe characters, no quoting needed
+  if (/^[a-zA-Z0-9_./:@=-]+$/.test(arg)) {
+    return arg;
+  }
+  // Use $'...' syntax for strings with newlines or special escapes for better readability
+  if (arg.includes('\n') || arg.includes('\t') || arg.includes('\r')) {
+    // Escape backslashes, single quotes, and control characters
+    const escaped = arg
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t')
+      .replace(/\r/g, '\\r')
+    return `$'${escaped}'`
+  }
+  // Standard single-quote escaping: replace ' with '\''
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+function formatCommand(executable: string, args: string[]): string {
+  const quotedArgs = args.map(shellQuoteArg);
+  return `${executable} ${quotedArgs.join(" ")}`;
 }
 
 function getProcessTypeLabel(type: string): string {
@@ -65,6 +99,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
   const lastLogCountRef = useRef(0);
   
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [commandExpanded, setCommandExpanded] = useState(false);
 
   // Update elapsed time
   useEffect(() => {
@@ -200,54 +235,88 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     selectProcess(null);
   };
 
+  const [isStopping, setIsStopping] = useState(false);
+
   const handleKillProcess = async () => {
+    if (isStopping) return;
+    
+    setIsStopping(true);
     try {
-      await invoke('kill_agent', { process_id: process.processId });
+      const result = await invoke<{ success: boolean; message: string }>('kill_agent', { 
+        processId: process.processId 
+      });
+      if (result.success) {
+        notify.info('Process stopped', result.message);
+      } else {
+        notify.warning('Stop failed', result.message);
+      }
     } catch (error) {
       console.error('Failed to kill process:', error);
+      notify.error('Failed to stop process', String(error));
+    } finally {
+      setIsStopping(false);
     }
   };
 
-  // Format command for display
+  const handleCopyCommand = async () => {
+    if (commandString) {
+      try {
+        await navigator.clipboard.writeText(commandString);
+      } catch (error) {
+        console.error('Failed to copy command:', error);
+      }
+    }
+  };
+
+  const handleCopyOutput = async () => {
+    if (logs.length === 0) return;
+    try {
+      const outputText = logs.map(log => {
+        const timestamp = log.timestamp.toLocaleTimeString();
+        const prefix = log.type === 'stderr' ? '[ERR]' : log.type === 'system' ? '[SYS]' : '[OUT]';
+        return `[${timestamp}] ${prefix} ${log.content}`;
+      }).join('\n');
+      await navigator.clipboard.writeText(outputText);
+    } catch (error) {
+      console.error('Failed to copy output:', error);
+    }
+  };
+
+  // Format command for display with proper shell quoting
   const commandString = process.command 
-    ? `${process.command.executable} ${process.command.args.join(' ')}`
+    ? formatCommand(process.command.executable, process.command.args)
     : null;
 
-  return (
-    <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border">
-      {/* Drag region */}
-      <div className="h-12 drag-region border-b border-border" />
+  // Determine if command is long (multi-line or > 200 chars)
+  const isLongCommand = commandString && (commandString.length > 200 || commandString.includes('\n'));
 
-      {/* Header */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b border-border bg-card">
-        <button
-          onClick={handleBack}
-          className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-background transition-colors"
-          title="Back to project"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-              isStillRunning ? 'bg-accent animate-pulse' : 'bg-muted'
-            }`} />
-            <h1 className="text-lg font-semibold truncate">{process.label}</h1>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-background text-muted">
-              {getProcessTypeLabel(process.type)}
-            </span>
-          </div>
-          <p className="text-sm text-muted mt-0.5">
+  return (
+    <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border overflow-hidden">
+      {/* Top bar - matching ProjectTopBar style */}
+      <div className="h-12 flex items-center justify-between px-4 border-b border-border bg-background drag-region">
+        <div className="flex items-center gap-3 no-drag">
+          <button
+            onClick={handleBack}
+            className="p-1 rounded text-muted hover:text-foreground hover:bg-card transition-colors"
+            title="Back to project"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="text-sm font-medium text-foreground truncate max-w-[200px]">
             {project?.name || 'Unknown Project'}
-          </p>
+          </h1>
+          {project?.description && (
+            <span className="text-xs text-muted truncate max-w-[300px] hidden lg:block">
+              {project.description}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 no-drag">
           {isStillRunning && elapsedTime > 0 && (
-            <div className="text-sm text-muted">
+            <div className="text-xs text-muted">
               ⏱ {formatDuration(elapsedTime)}
             </div>
           )}
@@ -255,21 +324,39 @@ export function AgentRunView({ process }: AgentRunViewProps) {
           {isStillRunning && (
             <button
               onClick={handleKillProcess}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+              disabled={isStopping}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                isStopping 
+                  ? 'bg-muted/10 text-muted cursor-not-allowed' 
+                  : 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+              }`}
             >
-              Stop
+              {isStopping ? 'Stopping...' : 'Stop'}
             </button>
           )}
           
           {!isStillRunning && (
-            <span className="text-sm text-muted">Completed</span>
+            <span className="text-xs text-muted">Completed</span>
           )}
         </div>
       </div>
 
+      {/* Process header */}
+      <div className="flex items-center gap-4 px-6 py-3 border-b border-border bg-card flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+            isStillRunning ? 'bg-accent animate-pulse' : 'bg-muted'
+          }`} />
+          <h2 className="text-base font-medium truncate">{process.label}</h2>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-background text-muted">
+            {getProcessTypeLabel(process.type)}
+          </span>
+        </div>
+      </div>
+
       {/* Process details */}
-      <div className="px-6 py-3 border-b border-border bg-background">
-        <div className="flex items-center gap-6 text-sm">
+      <div className="px-6 py-3 border-b border-border bg-background flex-shrink-0 overflow-hidden">
+        <div className="flex items-center gap-6 text-sm flex-wrap">
           <div>
             <span className="text-muted">Process ID:</span>
             <span className="ml-2 font-mono text-xs text-foreground">{process.processId.substring(0, 8)}</span>
@@ -294,18 +381,45 @@ export function AgentRunView({ process }: AgentRunViewProps) {
         
         {/* Command display */}
         {commandString && (
-          <div className="mt-2 flex items-start gap-2">
-            <span className="text-muted text-sm flex-shrink-0">Command:</span>
-            <code className="text-xs font-mono text-foreground bg-card px-2 py-1 rounded border border-border break-all">
+          <div className="mt-3 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-muted text-sm">Command:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyCommand}
+                  className="p-1 text-muted hover:text-foreground transition-colors"
+                  title="Copy command"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+                {isLongCommand && (
+                  <button
+                    onClick={() => setCommandExpanded(!commandExpanded)}
+                    className="text-xs text-accent hover:text-accent/80 transition-colors"
+                  >
+                    {commandExpanded ? 'Collapse' : 'Expand'}
+                  </button>
+                )}
+              </div>
+            </div>
+            <pre 
+              className={`text-xs font-mono text-foreground bg-card px-3 py-2 rounded border border-border ${
+                commandExpanded 
+                  ? 'whitespace-pre-wrap break-all' 
+                  : 'whitespace-nowrap overflow-hidden text-ellipsis'
+              }`}
+            >
               {commandString}
-            </code>
+            </pre>
           </div>
         )}
         
         {/* Working directory */}
         {process.command?.workingDirectory && (
-          <div className="mt-1 flex items-center gap-2 text-sm">
-            <span className="text-muted">Directory:</span>
+          <div className="mt-2 flex items-center gap-2 text-sm min-w-0">
+            <span className="text-muted flex-shrink-0">Directory:</span>
             <span className="text-xs font-mono text-muted truncate">{process.command.workingDirectory}</span>
           </div>
         )}
@@ -316,21 +430,34 @@ export function AgentRunView({ process }: AgentRunViewProps) {
         ref={containerRef}
         className="flex-1 flex flex-col min-h-0 overflow-hidden"
       >
-        <div className="flex items-center justify-between px-4 py-2 bg-background/50">
+        <div className="flex items-center justify-between px-4 py-2 bg-background/50 flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted uppercase tracking-wider">Output</span>
             {logs.length > 0 && (
               <span className="text-xs text-muted">({logs.length} lines)</span>
             )}
           </div>
-          {!autoScroll && logs.length > 0 && (
-            <button
-              onClick={handleScrollToBottom}
-              className="text-xs text-accent hover:text-accent/80 transition-colors"
-            >
-              Scroll to bottom
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {!autoScroll && logs.length > 0 && (
+              <button
+                onClick={handleScrollToBottom}
+                className="text-xs text-accent hover:text-accent/80 transition-colors"
+              >
+                Scroll to bottom
+              </button>
+            )}
+            {logs.length > 0 && (
+              <button
+                onClick={handleCopyOutput}
+                className="p-1 text-muted hover:text-foreground transition-colors"
+                title="Copy output"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         
         <div

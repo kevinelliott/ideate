@@ -241,11 +241,11 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
           <button
             onClick={handleOpenRegenerateModal}
             disabled={isGenerating}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-muted hover:text-foreground hover:bg-card transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg border border-border text-muted hover:text-foreground hover:bg-card transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             title="Regenerate PRD from codebase"
           >
             <svg
-              className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`}
+              className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -257,7 +257,6 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
               />
             </svg>
-            <span className="text-xs font-medium">Regenerate</span>
           </button>
 
           {/* AI Generate button */}

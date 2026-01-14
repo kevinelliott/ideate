@@ -9,29 +9,35 @@ import { useThemeStore } from "./stores/themeStore";
 import { useAgentStore } from "./stores/agentStore";
 import { usePromptStore } from "./stores/promptStore";
 import { useIdeasStore } from "./stores/ideasStore";
+import { usePanelStore } from "./stores/panelStore";
+import { useProcessStore } from "./stores/processStore";
+import { useIntegrationsStore } from "./stores/integrationsStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
+import { useWindowState } from "./hooks/useWindowState";
+
+import { notify } from "./utils/notify";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Lazy load modals - they are only shown on user interaction
 const NewProjectModal = lazy(() => import("./components/NewProjectModal").then(m => ({ default: m.NewProjectModal })));
 const ImportProjectModal = lazy(() => import("./components/ImportProjectModal").then(m => ({ default: m.ImportProjectModal })));
-const PreferencesWindow = lazy(() => import("./components/PreferencesWindow").then(m => ({ default: m.PreferencesWindow })));
 const PermissionsModal = lazy(() => import("./components/PermissionsModal").then(m => ({ default: m.PermissionsModal })));
 const WelcomeGuideModal = lazy(() => import("./components/WelcomeGuideModal").then(m => ({ default: m.WelcomeGuideModal })));
 
 interface CreateProjectResult {
   path: string;
-  config_path: string;
+  configPath: string;
 }
 
 interface AgentOutputPayload {
-  process_id: string;
-  stream_type: "stdout" | "stderr";
+  processId: string;
+  streamType: "stdout" | "stderr";
   content: string;
 }
 
 interface AgentExitPayload {
-  process_id: string;
-  exit_code: number | null;
+  processId: string;
+  exitCode: number | null;
   success: boolean;
 }
 
@@ -58,7 +64,6 @@ function ModalFallback() {
 function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showImportProjectModal, setShowImportProjectModal] = useState(false);
-  const [showPreferencesWindow, setShowPreferencesWindow] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -76,29 +81,39 @@ function App() {
   const setDefaultAgentId = useAgentStore((state) => state.setDefaultAgentId);
   const initSession = useAgentStore((state) => state.initSession);
   const loadPromptOverrides = usePromptStore((state) => state.loadOverrides);
+  const loadPanelStates = usePanelStore((state) => state.loadPanelStates);
+  const isPanelStatesLoaded = usePanelStore((state) => state.isLoaded);
+  const appendProcessLog = useProcessStore((state) => state.appendProcessLog);
+  const getProcess = useProcessStore((state) => state.getProcess);
+  const unregisterProcess = useProcessStore((state) => state.unregisterProcess);
 
-  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPreferencesWindow || showPermissionsModal || showWelcomeGuide;
+  // Track and persist window state
+  useWindowState();
+
+  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide;
 
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
-    onOpenPreferences: () => setShowPreferencesWindow(true),
+    onOpenSettings: () => window.dispatchEvent(new CustomEvent('open-settings')),
     isModalOpen: isAnyModalOpen,
     onCloseModal: () => {
       setShowNewProjectModal(false);
       setShowImportProjectModal(false);
-      setShowPreferencesWindow(false);
       setShowPermissionsModal(false);
       setShowWelcomeGuide(false);
     },
   });
 
   const loadIdeas = useIdeasStore((state) => state.loadIdeas);
+  const loadIntegrationsConfig = useIntegrationsStore((state) => state.loadConfig);
 
   useEffect(() => {
     loadProjects();
     loadTheme();
     loadPromptOverrides();
     loadIdeas();
+    loadPanelStates();
+    loadIntegrationsConfig();
     
     // Load preferences to set default agent and check first-run
     invoke<Preferences | null>("load_preferences")
@@ -118,7 +133,7 @@ function App() {
         setShowWelcomeGuide(true);
         setPreferencesLoaded(true);
       });
-  }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas]);
+  }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas, loadPanelStates, loadIntegrationsConfig]);
 
   // Listen for native menu event to show welcome guide
   useEffect(() => {
@@ -131,8 +146,10 @@ function App() {
     };
   }, []);
 
+  // Global listener for agent output and exit events
+  // This handles both buildStore processes (build/chat/prd) and processStore processes (detection/dev-server)
   useEffect(() => {
-    // Helper to find which project a process belongs to
+    // Helper to find which project a process belongs to in buildStore
     const findProjectByProcessId = (processId: string): string | null => {
       for (const [projectId, state] of Object.entries(projectStates)) {
         if (state.currentProcessId === processId) {
@@ -143,22 +160,44 @@ function App() {
     };
 
     const unlistenOutputPromise = listen<AgentOutputPayload>("agent-output", (event) => {
-      const { process_id, stream_type, content } = event.payload;
-      const projectId = findProjectByProcessId(process_id);
-      if (projectId) {
-        appendLog(projectId, stream_type, content, process_id);
+      const { processId, streamType, content } = event.payload;
+      
+      // Always append to processStore if the process is registered there
+      // This ensures process history has complete logs
+      const processStoreProcess = useProcessStore.getState().getProcess(processId);
+      if (processStoreProcess) {
+        appendProcessLog(processId, streamType, content);
+      }
+      
+      // Also append to buildStore if this is a build process (for the build log panel)
+      const buildProjectId = findProjectByProcessId(processId);
+      if (buildProjectId) {
+        appendLog(buildProjectId, streamType, content, processId);
       }
     });
 
     const unlistenExitPromise = listen<AgentExitPayload>("agent-exit", (event) => {
-      const { process_id, exit_code, success } = event.payload;
-      const projectId = findProjectByProcessId(process_id);
-      if (projectId) {
-        handleProcessExit(projectId, {
-          processId: process_id,
-          exitCode: exit_code,
+      const { processId, exitCode, success } = event.payload;
+      
+      // Check if this is a buildStore process and update build state
+      const buildProjectId = findProjectByProcessId(processId);
+      if (buildProjectId) {
+        handleProcessExit(buildProjectId, {
+          processId: processId,
+          exitCode: exitCode,
           success,
         });
+        // Note: The hooks (useBuildLoop, usePrdGeneration) call unregisterProcess
+        // with proper exit info, so process history is saved there.
+        return;
+      }
+      
+      // For processStore processes (dev-server, detection), unregister them
+      // Note: The specific hooks also handle this, but having it here ensures
+      // cleanup even if the hook is unmounted
+      const processStoreProcess = useProcessStore.getState().getProcess(processId);
+      if (processStoreProcess) {
+        unregisterProcess(processId, exitCode, success);
       }
     });
 
@@ -166,7 +205,7 @@ function App() {
       unlistenOutputPromise.then((unlisten) => unlisten());
       unlistenExitPromise.then((unlisten) => unlisten());
     };
-  }, [appendLog, handleProcessExit, projectStates]);
+  }, [appendLog, handleProcessExit, projectStates, appendProcessLog, getProcess, unregisterProcess]);
 
   // Trigger PRD generation after import if needed
   useEffect(() => {
@@ -196,10 +235,6 @@ function App() {
     setShowImportProjectModal(false);
   };
 
-  const handleClosePreferencesWindow = () => {
-    setShowPreferencesWindow(false);
-  };
-
   const handleCreateProject = async (name: string, description: string, directory: string | null) => {
     if (!directory) {
       console.error("No directory selected");
@@ -227,12 +262,14 @@ function App() {
       initSession(newProject.id);
 
       setShowNewProjectModal(false);
+      notify.success("Project created", `${name} is ready to go`);
     } catch (error) {
       const errorMessage = String(error);
       if (errorMessage.includes("Operation not permitted") || errorMessage.includes("os error 1")) {
         setShowPermissionsModal(true);
       } else {
         console.error("Failed to create project:", error);
+        notify.error("Failed to create project", errorMessage);
       }
     }
   };
@@ -259,6 +296,7 @@ function App() {
       initSession(newProject.id);
 
       setShowImportProjectModal(false);
+      notify.success("Project imported", `${name} is ready to go`);
 
       // If PRD generation is requested, trigger it after import
       // Use setTimeout to ensure the active project state has propagated
@@ -277,11 +315,12 @@ function App() {
         setShowPermissionsModal(true);
       } else {
         console.error("Failed to import project:", error);
+        notify.error("Failed to import project", errorMessage);
       }
     }
   };
 
-  if (!isLoaded || !isThemeLoaded || !preferencesLoaded) {
+  if (!isLoaded || !isThemeLoaded || !preferencesLoaded || !isPanelStatesLoaded) {
     return (
       <div className="flex h-screen bg-background text-foreground items-center justify-center">
         <div className="text-secondary">Loading...</div>
@@ -291,8 +330,12 @@ function App() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar onNewProject={handleNewProject} onImportProject={handleImportProject} />
-      <MainContent />
+      <ErrorBoundary>
+        <Sidebar onNewProject={handleNewProject} onImportProject={handleImportProject} />
+      </ErrorBoundary>
+      <ErrorBoundary>
+        <MainContent />
+      </ErrorBoundary>
       
       {/* Lazy loaded modals - only render when open */}
       <Suspense fallback={<ModalFallback />}>
@@ -308,12 +351,6 @@ function App() {
             isOpen={showImportProjectModal}
             onClose={handleCloseImportProjectModal}
             onImport={handleImportExistingProject}
-          />
-        )}
-        {showPreferencesWindow && (
-          <PreferencesWindow
-            isOpen={showPreferencesWindow}
-            onClose={handleClosePreferencesWindow}
           />
         )}
         {showPermissionsModal && (

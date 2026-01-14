@@ -6,24 +6,24 @@ import { useProcessStore } from '../stores/processStore'
 import { defaultPlugins } from '../types'
 
 interface SpawnAgentResult {
-  process_id: string
+  processId: string
 }
 
 interface WaitAgentResult {
-  process_id: string
-  exit_code: number | null
+  processId: string
+  exitCode: number | null
   success: boolean
 }
 
 interface AgentOutputEvent {
-  process_id: string
-  stream_type: 'stdout' | 'stderr'
+  processId: string
+  streamType: 'stdout' | 'stderr'
   content: string
 }
 
 interface AgentExitEvent {
-  process_id: string
-  exit_code: number | null
+  processId: string
+  exitCode: number | null
   success: boolean
 }
 
@@ -54,20 +54,20 @@ export function useAgentSession(
     const setupListeners = async () => {
       unlistenOutputRef.current = await listen<AgentOutputEvent>('agent-output', (event) => {
         if (!mounted) return
-        if (event.payload.process_id === currentProcessIdRef.current) {
+        if (event.payload.processId === currentProcessIdRef.current) {
           appendToLastMessage(projectId, event.payload.content + '\n')
-          onOutput(event.payload.content, event.payload.stream_type)
+          onOutput(event.payload.content, event.payload.streamType)
         }
       })
 
       unlistenExitRef.current = await listen<AgentExitEvent>('agent-exit', (event) => {
         if (!mounted) return
-        if (event.payload.process_id === currentProcessIdRef.current) {
-          unregisterProcess(event.payload.process_id)
+        if (event.payload.processId === currentProcessIdRef.current) {
+          unregisterProcess(event.payload.processId, event.payload.exitCode, event.payload.success)
           currentProcessIdRef.current = null
           setProcessId(projectId, null)
           setIsRunning(projectId, false)
-          onExit(event.payload.success, event.payload.exit_code)
+          onExit(event.payload.success, event.payload.exitCode)
         }
       })
     }
@@ -115,11 +115,11 @@ export function useAgentSession(
         workingDirectory: projectPath,
       })
 
-      currentProcessIdRef.current = result.process_id
-      setProcessId(projectId, result.process_id)
+      currentProcessIdRef.current = result.processId
+      setProcessId(projectId, result.processId)
 
       registerProcess({
-        processId: result.process_id,
+        processId: result.processId,
         projectId,
         type: 'chat',
         label: `Chat with ${plugin.name}`,
@@ -132,10 +132,10 @@ export function useAgentSession(
       })
 
       invoke<WaitAgentResult>('wait_agent', {
-        processId: result.process_id,
+        processId: result.processId,
       }).catch((error) => {
         console.error('Error waiting for agent:', error)
-        unregisterProcess(result.process_id)
+        unregisterProcess(result.processId, null, false)
         setIsRunning(projectId, false)
       })
 
@@ -153,8 +153,8 @@ export function useAgentSession(
     const processId = currentProcessIdRef.current
     if (processId) {
       try {
-        await invoke('kill_agent', { process_id: processId })
-        unregisterProcess(processId)
+        await invoke('kill_agent', { processId: processId })
+        unregisterProcess(processId, null, false)
         currentProcessIdRef.current = null
         setProcessId(projectId, null)
         setIsRunning(projectId, false)

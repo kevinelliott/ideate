@@ -9,6 +9,7 @@ import { useProcessStore } from "../stores/processStore";
 const ProjectView = lazy(() => import("./ProjectView").then(m => ({ default: m.ProjectView })));
 const IdeaDetailView = lazy(() => import("./IdeaDetailView").then(m => ({ default: m.IdeaDetailView })));
 const AgentRunView = lazy(() => import("./AgentRunView").then(m => ({ default: m.AgentRunView })));
+const ProcessHistoryView = lazy(() => import("./ProcessHistoryView").then(m => ({ default: m.ProcessHistoryView })));
 
 interface Prd {
   project?: string
@@ -56,6 +57,9 @@ export function MainContent() {
   const selectedProcessId = useProcessStore((state) => state.selectedProcessId);
   const getProcess = useProcessStore((state) => state.getProcess);
   const selectedProcess = selectedProcessId ? getProcess(selectedProcessId) : null;
+
+  const processHistoryProjectId = useProjectStore((state) => state.processHistoryProjectId);
+  const hideProcessHistory = useProjectStore((state) => state.hideProcessHistory);
 
   const loadingProjectIdRef = useRef<string | null>(null);
 
@@ -121,6 +125,15 @@ export function MainContent() {
 
     loadPrd();
   }, [activeProjectId, activeProject?.path, setPrd, clearPrd, setStatus, selectStory, loadedProjectId]);
+
+  // Show process history view if requested
+  if (processHistoryProjectId) {
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        <ProcessHistoryView projectId={processHistoryProjectId} onBack={hideProcessHistory} />
+      </Suspense>
+    );
+  }
 
   // Show agent run view if a process is selected
   if (selectedProcess) {

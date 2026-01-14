@@ -15,17 +15,17 @@ interface TerminalPanelProps {
 }
 
 interface SpawnTerminalResult {
-  terminal_id: string;
+  terminalId: string;
 }
 
 interface TerminalOutputPayload {
-  terminal_id: string;
+  terminalId: string;
   data: string;
 }
 
 interface TerminalExitPayload {
-  terminal_id: string;
-  exit_code: number | null;
+  terminalId: string;
+  exitCode: number | null;
 }
 
 const MIN_HEIGHT = 100;
@@ -125,9 +125,9 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
       unlistenOutputRef.current = await listen<TerminalOutputPayload>(
         "terminal-output",
         (event) => {
-          const { terminal_id, data } = event.payload;
+          const { terminalId, data } = event.payload;
           // Only write if this is our current terminal
-          if (terminal_id === currentTerminalIdRef.current && xtermRef.current) {
+          if (terminalId === currentTerminalIdRef.current && xtermRef.current) {
             xtermRef.current.write(data);
           }
         }
@@ -136,12 +136,12 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
       unlistenExitRef.current = await listen<TerminalExitPayload>(
         "terminal-exit",
         (event) => {
-          const { terminal_id, exit_code } = event.payload;
-          if (terminal_id === currentTerminalIdRef.current && xtermRef.current) {
+          const { terminalId, exitCode } = event.payload;
+          if (terminalId === currentTerminalIdRef.current && xtermRef.current) {
             xtermRef.current.writeln(
-              `\r\n\x1b[90mShell exited with code ${exit_code ?? "unknown"}\x1b[0m`
+              `\r\n\x1b[90mShell exited with code ${exitCode ?? "unknown"}\x1b[0m`
             );
-            markTerminalExited(terminal_id);
+            markTerminalExited(terminalId);
             currentTerminalIdRef.current = null;
           }
         }
@@ -194,7 +194,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
     terminal.onData((data) => {
       if (currentTerminalIdRef.current) {
         invoke("write_terminal", {
-          terminal_id: currentTerminalIdRef.current,
+          terminalId: currentTerminalIdRef.current,
           data,
         }).catch((err) => console.error("Failed to write to terminal:", err));
       }
@@ -218,17 +218,17 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           const rows = xtermRef.current?.rows ?? 24;
 
           const result = await invoke<SpawnTerminalResult>("spawn_terminal", {
-            working_directory: projectPath,
+            workingDirectory: projectPath,
             cols,
             rows,
           });
 
           if (mounted) {
-            currentTerminalIdRef.current = result.terminal_id;
-            registerTerminal(projectId, result.terminal_id, projectPath);
+            currentTerminalIdRef.current = result.terminalId;
+            registerTerminal(projectId, result.terminalId, projectPath);
           } else {
             // Component unmounted during spawn, kill the terminal
-            await invoke("kill_terminal", { terminal_id: result.terminal_id });
+            await invoke("kill_terminal", { terminalId: result.terminalId });
           }
         } catch (error) {
           console.error("Failed to spawn terminal:", error);
@@ -256,7 +256,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           // Notify PTY of resize
           if (currentTerminalIdRef.current) {
             invoke("resize_terminal", {
-              terminal_id: currentTerminalIdRef.current,
+              terminalId: currentTerminalIdRef.current,
               cols: xtermRef.current.cols,
               rows: xtermRef.current.rows,
             }).catch((err) => console.error("Failed to resize terminal:", err));
@@ -304,13 +304,13 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           const rows = xtermRef.current.rows ?? 24;
 
           const result = await invoke<SpawnTerminalResult>("spawn_terminal", {
-            working_directory: projectPath,
+            workingDirectory: projectPath,
             cols,
             rows,
           });
 
-          currentTerminalIdRef.current = result.terminal_id;
-          registerTerminal(projectId, result.terminal_id, projectPath);
+          currentTerminalIdRef.current = result.terminalId;
+          registerTerminal(projectId, result.terminalId, projectPath);
         } catch (error) {
           console.error("Failed to spawn terminal:", error);
           if (xtermRef.current) {
@@ -336,7 +336,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
         // Notify PTY of resize
         if (currentTerminalIdRef.current && xtermRef.current) {
           invoke("resize_terminal", {
-            terminal_id: currentTerminalIdRef.current,
+            terminalId: currentTerminalIdRef.current,
             cols: xtermRef.current.cols,
             rows: xtermRef.current.rows,
           }).catch((err) => console.error("Failed to resize terminal:", err));
@@ -364,7 +364,7 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
     const existingId = getTerminalId(projectId);
     if (existingId) {
       unregisterTerminal(projectId);
-      await invoke("kill_terminal", { terminal_id: existingId }).catch((err) =>
+      await invoke("kill_terminal", { terminalId: existingId }).catch((err) =>
         console.error("Failed to kill terminal:", err)
       );
     }
@@ -377,13 +377,13 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
       const rows = xtermRef.current?.rows ?? 24;
 
       const result = await invoke<SpawnTerminalResult>("spawn_terminal", {
-        working_directory: projectPath,
+        workingDirectory: projectPath,
         cols,
         rows,
       });
 
-      currentTerminalIdRef.current = result.terminal_id;
-      registerTerminal(projectId, result.terminal_id, projectPath);
+      currentTerminalIdRef.current = result.terminalId;
+      registerTerminal(projectId, result.terminalId, projectPath);
     } catch (error) {
       console.error("Failed to spawn terminal:", error);
       if (xtermRef.current) {

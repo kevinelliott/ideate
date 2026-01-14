@@ -1,20 +1,52 @@
 import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { usePrdStore, type PrdMetadata } from "../stores/prdStore";
+import { usePrdStore, type PrdMetadata, type Story } from "../stores/prdStore";
 import { useBuildStore } from "../stores/buildStore";
 import { useCostStore } from "../stores/costStore";
 import { usePromptStore } from "../stores/promptStore";
 import { useProcessStore } from "../stores/processStore";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useProjectStore } from "../stores/projectStore";
+import { notify } from "../utils/notify";
+
+type LogType = "stdout" | "stderr" | "system";
+
+/**
+ * Helper to safely set PRD only if the target project is still active.
+ * This prevents race conditions where a long-running PRD generation for
+ * project A completes after the user has switched to project B.
+ * 
+ * Returns true if the PRD was applied, false if skipped due to project mismatch.
+ */
+function safeSetPrd(
+  projectId: string,
+  stories: Story[],
+  metadata: PrdMetadata,
+  setPrd: (stories: Story[], metadata: PrdMetadata, projectId?: string) => void,
+  appendLog: (projectId: string, type: LogType, message: string) => void,
+): boolean {
+  const currentActiveProjectId = useProjectStore.getState().activeProjectId;
+  
+  if (currentActiveProjectId !== projectId) {
+    appendLog(
+      projectId,
+      "system",
+      "PRD saved to disk but project is no longer active; will load when project is reopened.",
+    );
+    return false;
+  }
+  
+  setPrd(stories, metadata, projectId);
+  return true;
+}
 
 interface SpawnAgentResult {
-  process_id: string;
+  processId: string;
 }
 
 interface WaitAgentResult {
-  process_id: string;
-  exit_code: number | null;
+  processId: string;
+  exitCode: number | null;
   success: boolean;
 }
 
@@ -102,15 +134,15 @@ export function usePrdGeneration() {
           workingDirectory: projectPath,
         });
 
-        setCurrentProcessId(activeProjectId, spawnResult.process_id);
+        setCurrentProcessId(activeProjectId, spawnResult.processId);
         appendLog(
           activeProjectId,
           "system",
-          `Agent started (process ID: ${spawnResult.process_id})`,
+          `Agent started (process ID: ${spawnResult.processId})`,
         );
 
         registerProcess({
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
           agentId: plugin.id,
           command: {
             executable: plugin.command,
@@ -123,12 +155,12 @@ export function usePrdGeneration() {
         });
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
         });
 
         const durationMs = Date.now() - startTime;
 
-        unregisterProcess(spawnResult.process_id);
+        unregisterProcess(spawnResult.processId, waitResult.exitCode, waitResult.success);
         setCurrentProcessId(activeProjectId, null);
 
         const logs = useBuildStore
@@ -151,7 +183,7 @@ export function usePrdGeneration() {
           appendLog(
             activeProjectId,
             "system",
-            `Agent exited with error (code: ${waitResult.exit_code ?? "unknown"})`,
+            `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
           setStatus("error");
           return false;
@@ -182,13 +214,21 @@ export function usePrdGeneration() {
             description: prd.description,
             branchName: prd.branchName,
           };
-          setPrd(stories, metadata, activeProjectId);
-          setStatus("ready");
-          appendLog(
-            activeProjectId,
-            "system",
-            `PRD loaded with ${stories.length} user stories`,
-          );
+          
+          // Guard: only apply PRD if this project is still active
+          const applied = safeSetPrd(activeProjectId, stories, metadata, setPrd, appendLog);
+          if (applied) {
+            setStatus("ready");
+            appendLog(
+              activeProjectId,
+              "system",
+              `PRD loaded with ${stories.length} user stories`,
+            );
+            notify.success("PRD generated", `${stories.length} user stories created`);
+          } else {
+            // PRD saved to disk but not loaded into UI (project switched)
+            notify.success("PRD generated", `${stories.length} stories saved. Open project to view.`);
+          }
           return true;
         } else {
           appendLog(
@@ -204,6 +244,7 @@ export function usePrdGeneration() {
           error instanceof Error ? error.message : String(error);
         appendLog(activeProjectId, "system", `Error: ${errorMessage}`);
         setStatus("error");
+        notify.error("PRD generation failed", errorMessage);
         return false;
       }
     },
@@ -270,15 +311,15 @@ export function usePrdGeneration() {
           workingDirectory: projectPath,
         });
 
-        setCurrentProcessId(projectId, spawnResult.process_id);
+        setCurrentProcessId(projectId, spawnResult.processId);
         appendLog(
           projectId,
           "system",
-          `Agent started (process ID: ${spawnResult.process_id})`,
+          `Agent started (process ID: ${spawnResult.processId})`,
         );
 
         registerProcess({
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
           agentId: plugin.id,
           command: {
             executable: plugin.command,
@@ -291,12 +332,12 @@ export function usePrdGeneration() {
         });
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
         });
 
         const durationMs = Date.now() - startTime;
 
-        unregisterProcess(spawnResult.process_id);
+        unregisterProcess(spawnResult.processId, waitResult.exitCode, waitResult.success);
         setCurrentProcessId(projectId, null);
 
         const logs = useBuildStore.getState().getProjectState(projectId).logs;
@@ -317,7 +358,7 @@ export function usePrdGeneration() {
           appendLog(
             projectId,
             "system",
-            `Agent exited with error (code: ${waitResult.exit_code ?? "unknown"})`,
+            `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
           setStatus("error");
           return false;
@@ -348,13 +389,20 @@ export function usePrdGeneration() {
             description: prd.description,
             branchName: prd.branchName,
           };
-          setPrd(stories, metadata, projectId);
-          setStatus("ready");
-          appendLog(
-            projectId,
-            "system",
-            `PRD generated with ${stories.length} user stories from codebase analysis`,
-          );
+          
+          // Guard: only apply PRD if this project is still active
+          const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
+          if (applied) {
+            setStatus("ready");
+            appendLog(
+              projectId,
+              "system",
+              `PRD generated with ${stories.length} user stories from codebase analysis`,
+            );
+            notify.success("Codebase analysis complete", `${stories.length} user stories generated`);
+          } else {
+            notify.success("Codebase analysis complete", `${stories.length} stories saved. Open project to view.`);
+          }
           return true;
         } else {
           appendLog(
@@ -370,6 +418,7 @@ export function usePrdGeneration() {
           error instanceof Error ? error.message : String(error);
         appendLog(projectId, "system", `Error: ${errorMessage}`);
         setStatus("error");
+        notify.error("Codebase analysis failed", errorMessage);
         return false;
       }
     },
@@ -449,15 +498,15 @@ export function usePrdGeneration() {
           workingDirectory: projectPath,
         });
 
-        setCurrentProcessId(projectId, spawnResult.process_id);
+        setCurrentProcessId(projectId, spawnResult.processId);
         appendLog(
           projectId,
           "system",
-          `Agent started (process ID: ${spawnResult.process_id})`,
+          `Agent started (process ID: ${spawnResult.processId})`,
         );
 
         registerProcess({
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
           agentId: plugin.id,
           command: {
             executable: plugin.command,
@@ -470,12 +519,12 @@ export function usePrdGeneration() {
         });
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
         });
 
         const durationMs = Date.now() - startTime;
 
-        unregisterProcess(spawnResult.process_id);
+        unregisterProcess(spawnResult.processId, waitResult.exitCode, waitResult.success);
         setCurrentProcessId(projectId, null);
 
         const logs = useBuildStore.getState().getProjectState(projectId).logs;
@@ -496,7 +545,7 @@ export function usePrdGeneration() {
           appendLog(
             projectId,
             "system",
-            `Agent exited with error (code: ${waitResult.exit_code ?? "unknown"})`,
+            `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
           setStatus("ready");
           return false;
@@ -529,13 +578,17 @@ export function usePrdGeneration() {
           };
 
           const newStoriesCount = stories.length - currentStories.length;
-          setPrd(stories, metadata, projectId);
-          setStatus("ready");
-          appendLog(
-            projectId,
-            "system",
-            `Added ${newStoriesCount} new user stories (total: ${stories.length})`,
-          );
+          
+          // Guard: only apply PRD if this project is still active
+          const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
+          if (applied) {
+            setStatus("ready");
+            appendLog(
+              projectId,
+              "system",
+              `Added ${newStoriesCount} new user stories (total: ${stories.length})`,
+            );
+          }
           return true;
         } else {
           appendLog(
@@ -616,15 +669,15 @@ export function usePrdGeneration() {
           workingDirectory: projectPath,
         });
 
-        setCurrentProcessId(projectId, spawnResult.process_id);
+        setCurrentProcessId(projectId, spawnResult.processId);
         appendLog(
           projectId,
           "system",
-          `Agent started (process ID: ${spawnResult.process_id})`,
+          `Agent started (process ID: ${spawnResult.processId})`,
         );
 
         registerProcess({
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
           agentId: plugin.id,
           command: {
             executable: plugin.command,
@@ -637,12 +690,12 @@ export function usePrdGeneration() {
         });
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
         });
 
         const durationMs = Date.now() - startTime;
 
-        unregisterProcess(spawnResult.process_id);
+        unregisterProcess(spawnResult.processId, waitResult.exitCode, waitResult.success);
         setCurrentProcessId(projectId, null);
 
         const logs = useBuildStore.getState().getProjectState(projectId).logs;
@@ -663,7 +716,7 @@ export function usePrdGeneration() {
           appendLog(
             projectId,
             "system",
-            `Agent exited with error (code: ${waitResult.exit_code ?? "unknown"})`,
+            `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
           setStatus("error");
           return false;
@@ -695,22 +748,25 @@ export function usePrdGeneration() {
             branchName: prd.branchName,
           };
 
-          setPrd(stories, metadata, projectId);
-          setStatus("ready");
+          // Guard: only apply PRD if this project is still active
+          const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
+          if (applied) {
+            setStatus("ready");
 
-          const delta = stories.length - initialCount;
-          if (delta > 0) {
-            appendLog(
-              projectId,
-              "system",
-              `Story breakdown complete: ${initialCount} → ${stories.length} stories (+${delta} from breakdown)`,
-            );
-          } else {
-            appendLog(
-              projectId,
-              "system",
-              `Story breakdown complete: all ${stories.length} stories are already well-sized`,
-            );
+            const delta = stories.length - initialCount;
+            if (delta > 0) {
+              appendLog(
+                projectId,
+                "system",
+                `Story breakdown complete: ${initialCount} → ${stories.length} stories (+${delta} from breakdown)`,
+              );
+            } else {
+              appendLog(
+                projectId,
+                "system",
+                `Story breakdown complete: all ${stories.length} stories are already well-sized`,
+              );
+            }
           }
           return true;
         } else {
@@ -811,15 +867,15 @@ export function usePrdGeneration() {
           workingDirectory: projectPath,
         });
 
-        setCurrentProcessId(projectId, spawnResult.process_id);
+        setCurrentProcessId(projectId, spawnResult.processId);
         appendLog(
           projectId,
           "system",
-          `Agent started (process ID: ${spawnResult.process_id})`,
+          `Agent started (process ID: ${spawnResult.processId})`,
         );
 
         registerProcess({
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
           agentId: plugin.id,
           command: {
             executable: plugin.command,
@@ -832,12 +888,12 @@ export function usePrdGeneration() {
         });
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
-          processId: spawnResult.process_id,
+          processId: spawnResult.processId,
         });
 
         const durationMs = Date.now() - startTime;
 
-        unregisterProcess(spawnResult.process_id);
+        unregisterProcess(spawnResult.processId, waitResult.exitCode, waitResult.success);
         setCurrentProcessId(projectId, null);
 
         const logs = useBuildStore.getState().getProjectState(projectId).logs;
@@ -858,7 +914,7 @@ export function usePrdGeneration() {
           appendLog(
             projectId,
             "system",
-            `Agent exited with error (code: ${waitResult.exit_code ?? "unknown"})`,
+            `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
           setStatus("error");
           return false;
@@ -889,35 +945,39 @@ export function usePrdGeneration() {
             description: prd.description,
             branchName: prd.branchName,
           };
-          setPrd(stories, metadata, projectId);
-          appendLog(
-            projectId,
-            "system",
-            `PRD generated with ${stories.length} user stories from idea`,
-          );
-
-          if (shouldBreakdown) {
-            appendLog(projectId, "system", "");
+          
+          // Guard: only apply PRD if this project is still active
+          const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
+          if (applied) {
             appendLog(
               projectId,
               "system",
-              "--- Starting Story Breakdown Pass ---",
+              `PRD generated with ${stories.length} user stories from idea`,
             );
-            const breakdownSuccess = await breakdownStories(
-              projectId,
-              projectName,
-              projectPath,
-              agentId,
-            );
-            if (!breakdownSuccess) {
+
+            if (shouldBreakdown) {
+              appendLog(projectId, "system", "");
               appendLog(
                 projectId,
                 "system",
-                "Story breakdown failed, but initial PRD is available",
+                "--- Starting Story Breakdown Pass ---",
               );
+              const breakdownSuccess = await breakdownStories(
+                projectId,
+                projectName,
+                projectPath,
+                agentId,
+              );
+              if (!breakdownSuccess) {
+                appendLog(
+                  projectId,
+                  "system",
+                  "Story breakdown failed, but initial PRD is available",
+                );
+              }
+            } else {
+              setStatus("ready");
             }
-          } else {
-            setStatus("ready");
           }
 
           return true;

@@ -6,15 +6,16 @@ import { useCostStore } from '../stores/costStore'
 import { useProcessStore } from '../stores/processStore'
 import { defaultPlugins } from '../types'
 import { usePromptStore } from '../stores/promptStore'
+import { notify } from '../utils/notify'
 import type { AutonomyLevel, BuildMode } from '../components/ProjectTopBar'
 
 interface SpawnAgentResult {
-  process_id: string
+  processId: string
 }
 
 interface WaitAgentResult {
-  process_id: string
-  exit_code: number | null
+  processId: string
+  exitCode: number | null
   success: boolean
 }
 
@@ -97,11 +98,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         workingDirectory: projectPath,
       })
 
-      setCurrentProcessId(projectId, result.process_id)
-      appendLog(projectId, 'system', `Agent process started (ID: ${result.process_id})`)
+      setCurrentProcessId(projectId, result.processId)
+      appendLog(projectId, 'system', `Agent process started (ID: ${result.processId})`)
 
       registerProcess({
-        processId: result.process_id,
+        processId: result.processId,
         projectId,
         type: 'build',
         label: story.title,
@@ -114,12 +115,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
-        processId: result.process_id,
+        processId: result.processId,
       })
 
       const durationMs = Date.now() - startTime
 
-      unregisterProcess(result.process_id)
+      unregisterProcess(result.processId, waitResult.exitCode, waitResult.success)
       setCurrentProcessId(projectId, null)
 
       const logs = useBuildStore.getState().getProjectState(projectId).logs
@@ -127,13 +128,13 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
       if (waitResult.success) {
-        appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exit_code})`)
+        appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exitCode})`)
         setStoryStatus(projectId, story.id, 'complete')
         updateStory(story.id, { passes: true })
         await savePrd(projectPath)
         return true
       } else {
-        appendLog(projectId, 'system', `✗ Story ${story.id} failed (exit code: ${waitResult.exit_code})`)
+        appendLog(projectId, 'system', `✗ Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
         setStoryStatus(projectId, story.id, 'failed')
         return false
       }
@@ -169,11 +170,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         workingDirectory: projectPath,
       })
 
-      activeProcessesRef.current.set(story.id, result.process_id)
-      appendLog(projectId, 'system', `[Parallel] Agent started for ${story.id} (PID: ${result.process_id})`)
+      activeProcessesRef.current.set(story.id, result.processId)
+      appendLog(projectId, 'system', `[Parallel] Agent started for ${story.id} (PID: ${result.processId})`)
 
       registerProcess({
-        processId: result.process_id,
+        processId: result.processId,
         projectId,
         type: 'build',
         label: `[P] ${story.title}`,
@@ -186,12 +187,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       })
 
       const waitResult = await invoke<WaitAgentResult>('wait_agent', {
-        processId: result.process_id,
+        processId: result.processId,
       })
 
       const durationMs = Date.now() - startTime
 
-      unregisterProcess(result.process_id)
+      unregisterProcess(result.processId, waitResult.exitCode, waitResult.success)
       activeProcessesRef.current.delete(story.id)
 
       const logs = useBuildStore.getState().getProjectState(projectId).logs
@@ -205,7 +206,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         await savePrd(projectPath)
         return true
       } else {
-        appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exit_code})`)
+        appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
         setStoryStatus(projectId, story.id, 'failed')
         return false
       }
@@ -465,6 +466,10 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
     if (allComplete) {
       appendLog(projectId, 'system', '🎉 All stories completed successfully!')
+      notify.success('Build complete', 'All stories completed successfully')
+    } else {
+      const failedCount = usePrdStore.getState().stories.filter((s) => !s.passes).length
+      notify.warning('Build finished', `${failedCount} ${failedCount === 1 ? 'story' : 'stories'} still incomplete`)
     }
 
     setCurrentStory(projectId, null)
@@ -550,8 +555,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     const processId = useBuildStore.getState().getProjectState(projectId).currentProcessId
     if (processId) {
       try {
-        await invoke('kill_agent', { process_id: processId })
-        unregisterProcess(processId)
+        await invoke('kill_agent', { processId: processId })
+        unregisterProcess(processId, null, false)
         appendLog(projectId, 'system', 'Agent process terminated')
       } catch (error) {
         appendLog(projectId, 'system', `Failed to kill agent: ${error}`)
@@ -560,8 +565,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     for (const [storyId, pid] of activeProcessesRef.current.entries()) {
       try {
-        await invoke('kill_agent', { process_id: pid })
-        unregisterProcess(pid)
+        await invoke('kill_agent', { processId: pid })
+        unregisterProcess(pid, null, false)
         appendLog(projectId, 'system', `Terminated parallel agent for story ${storyId}`)
       } catch (error) {
         appendLog(projectId, 'system', `Failed to kill parallel agent: ${error}`)

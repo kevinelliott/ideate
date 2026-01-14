@@ -10,6 +10,8 @@ import { SettingsModal } from './SettingsModal'
 import { useIdeasStore } from '../stores/ideasStore'
 import { CreateIdeaModal } from './CreateIdeaModal'
 import { AboutModal } from './AboutModal'
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal'
+import { notify } from '../utils/notify'
 
 interface SidebarProps {
   onNewProject: () => void;
@@ -53,6 +55,11 @@ const processTypeIcons: Record<ProcessType, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
     </svg>
   ),
+  tunnel: (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+    </svg>
+  ),
 }
 
 interface ContextMenuState {
@@ -89,6 +96,8 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const selectIdea = useIdeasStore((state) => state.selectIdea)
   const addIdea = useIdeasStore((state) => state.addIdea)
 
+  const showProcessHistory = useProjectStore((state) => state.showProcessHistory)
+
   const { theme, toggleTheme } = useTheme()
 
   const [width, setWidth] = useState(DEFAULT_WIDTH)
@@ -96,6 +105,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCreateIdeaOpen, setIsCreateIdeaOpen] = useState(false)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false)
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
@@ -169,6 +179,15 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     }
   }, [editingProjectId])
 
+  // Listen for keyboard shortcut to open settings (Cmd+,)
+  useEffect(() => {
+    const handleOpenSettings = () => {
+      setIsSettingsOpen(true)
+    }
+    window.addEventListener('open-settings', handleOpenSettings)
+    return () => window.removeEventListener('open-settings', handleOpenSettings)
+  }, [])
+
   const handleContextMenu = (e: React.MouseEvent, project: Project) => {
     e.preventDefault()
     setContextMenu({
@@ -225,6 +244,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
 
   const handleConfirmDelete = () => {
     const projectIdToDelete = deleteModal.projectId
+    const projectName = deleteModal.projectName
     
     // If we're deleting the project whose PRD is currently loaded, clear it first
     if (loadedProjectId === projectIdToDelete) {
@@ -243,6 +263,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     
     removeProject(projectIdToDelete)
     setDeleteModal({ isOpen: false, projectId: '', projectName: '' })
+    notify.success('Project removed', projectName)
   }
 
   const handlePlayPause = (e: React.MouseEvent, projectId: string) => {
@@ -657,6 +678,17 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
             </button>
 
             <button
+              onClick={() => setIsKeyboardShortcutsOpen(true)}
+              className="p-2 rounded-md text-secondary hover:text-foreground hover:bg-card transition-colors"
+              title="Keyboard Shortcuts"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <rect x="2" y="6" width="20" height="12" rx="2" strokeWidth={1.5} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+              </svg>
+            </button>
+
+            <button
               onClick={() => setIsAboutOpen(true)}
               className="p-2 rounded-md text-secondary hover:text-foreground hover:bg-card transition-colors"
               title="About Ideate"
@@ -697,6 +729,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
           onClose={closeContextMenu}
           onRename={handleRename}
           onDelete={handleDelete}
+          onShowProcessHistory={() => showProcessHistory(contextMenu.project!.id)}
         />
       )}
 
@@ -725,6 +758,11 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
       <AboutModal
         isOpen={isAboutOpen}
         onClose={() => setIsAboutOpen(false)}
+      />
+
+      <KeyboardShortcutsModal
+        isOpen={isKeyboardShortcutsOpen}
+        onClose={() => setIsKeyboardShortcutsOpen(false)}
       />
     </>
   );

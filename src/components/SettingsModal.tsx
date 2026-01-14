@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTheme, type Theme } from "../hooks/useTheme";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
 import { DEFAULT_PROMPTS, PROMPT_CATEGORIES, getPromptsByCategory, type PromptCategory } from "../utils/prompts";
+import { useIntegrationsStore, type OutRayConfig } from "../stores/integrationsStore";
 
 interface Preferences {
   defaultAgent: string | null;
@@ -13,6 +14,7 @@ interface Preferences {
   theme: string;
   appIcon: string;
   promptOverrides: Record<string, string>;
+  outray?: OutRayConfig;
 }
 
 interface AgentModel {
@@ -44,7 +46,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = "general" | "agents" | "prompts";
+type SettingsTab = "general" | "agents" | "prompts" | "integrations";
 type AppIconVariant = "transparent" | "light" | "dark";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
@@ -67,22 +69,84 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [agentStatuses, setAgentStatuses] = useState<AgentPluginStatus[]>([]);
   const [isDetectingAgents, setIsDetectingAgents] = useState(false);
 
+  // Integrations store
+  const outrayConfig = useIntegrationsStore((state) => state.outray);
+  const setOutRayConfig = useIntegrationsStore((state) => state.setOutRayConfig);
+  const loadIntegrationsConfig = useIntegrationsStore((state) => state.loadConfig);
+
+  // OutRay auth state
+  const [outrayLoggedIn, setOutrayLoggedIn] = useState<boolean | null>(null);
+  const [outrayLoggingIn, setOutrayLoggingIn] = useState(false);
+  const [outrayLoginError, setOutrayLoginError] = useState<string | null>(null);
+
   useModalKeyboard(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
       loadPreferences();
+      loadIntegrationsConfig();
       setActiveTab("general");
       setEditingPromptId(null);
       setIconChanged(false);
     }
-  }, [isOpen]);
+  }, [isOpen, loadIntegrationsConfig]);
 
   useEffect(() => {
     if (isOpen && activeTab === "agents" && agentStatuses.length === 0) {
       detectAgents();
     }
   }, [isOpen, activeTab]);
+
+  // Check OutRay auth status when integrations tab is active and OutRay is enabled
+  useEffect(() => {
+    if (isOpen && activeTab === "integrations" && outrayConfig.enabled) {
+      checkOutrayAuth();
+    }
+  }, [isOpen, activeTab, outrayConfig.enabled]);
+
+  const checkOutrayAuth = async () => {
+    try {
+      const customPath = outrayConfig.useCustomPath ? outrayConfig.cliPath : null;
+      const isLoggedIn = await invoke<boolean>("check_auth", { customCliPath: customPath });
+      setOutrayLoggedIn(isLoggedIn);
+    } catch {
+      setOutrayLoggedIn(false);
+    }
+  };
+
+  interface OutrayLoginResult {
+    success: boolean;
+    needsSetup: boolean;
+    setupUrl: string | null;
+    error: string | null;
+  }
+
+  const handleOutrayLogin = async () => {
+    setOutrayLoggingIn(true);
+    setOutrayLoginError(null);
+    try {
+      const customPath = outrayConfig.useCustomPath ? outrayConfig.cliPath : null;
+      const result = await invoke<OutrayLoginResult>("login", { customCliPath: customPath });
+      
+      if (result.success) {
+        setOutrayLoggedIn(true);
+      } else if (result.needsSetup && result.setupUrl) {
+        setOutrayLoginError("Please complete your account setup first.");
+        // Open the dashboard in a new window
+        await invoke("open_dashboard");
+        setOutrayLoggedIn(false);
+      } else {
+        setOutrayLoginError(result.error || "Login failed");
+        setOutrayLoggedIn(false);
+      }
+    } catch (e) {
+      console.error("OutRay login failed:", e);
+      setOutrayLoginError(String(e));
+      setOutrayLoggedIn(false);
+    } finally {
+      setOutrayLoggingIn(false);
+    }
+  };
 
   const loadPreferences = async () => {
     try {
@@ -125,6 +189,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         theme: theme,
         appIcon,
         promptOverrides,
+        outray: outrayConfig,
       };
       await invoke("save_preferences", { preferences: prefs });
       setIsDirty(false);
@@ -287,6 +352,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               }`}
             >
               Prompts
+            </button>
+            <button
+              onClick={() => setActiveTab("integrations")}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                activeTab === "integrations"
+                  ? "bg-accent/10 text-accent"
+                  : "text-secondary hover:text-foreground"
+              }`}
+            >
+              Integrations
             </button>
           </div>
         </div>
@@ -749,6 +824,196 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   ))}
                 </div>
               )}
+            </section>
+          )}
+
+          {activeTab === "integrations" && (
+            <section>
+              {/* OutRay Section */}
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <h3 className="text-sm font-medium text-secondary uppercase tracking-wider">
+                    OutRay Tunneling
+                  </h3>
+                  <a
+                    href="https://outray.dev"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-accent hover:underline"
+                  >
+                    outray.dev
+                  </a>
+                </div>
+                <p className="text-xs text-muted mb-4">
+                  Share your local dev server with anyone on the internet using secure tunnels.
+                  OutRay provides a free tier with unlimited tunnels.
+                </p>
+                <div className="space-y-4 bg-background rounded-lg p-4 border border-border">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium text-foreground">
+                        Enable OutRay
+                      </label>
+                      <p className="text-xs text-muted mt-0.5">
+                        Show tunnel button in preview panel
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setOutRayConfig({ enabled: !outrayConfig.enabled })}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                        outrayConfig.enabled ? "bg-accent" : "bg-muted/30"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          outrayConfig.enabled ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {outrayConfig.enabled && (
+                    <>
+                      {/* CLI Source Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          OutRay CLI
+                        </label>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-secondary cursor-pointer transition-colors">
+                            <input
+                              type="radio"
+                              name="outray-source"
+                              checked={!outrayConfig.useCustomPath}
+                              onChange={() => setOutRayConfig({ useCustomPath: false })}
+                              className="w-4 h-4 text-accent"
+                            />
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-foreground">Use bundled</span>
+                              <p className="text-xs text-muted mt-0.5">
+                                Uses the OutRay binary included with Ideate
+                              </p>
+                            </div>
+                          </label>
+                          <label className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-secondary cursor-pointer transition-colors">
+                            <input
+                              type="radio"
+                              name="outray-source"
+                              checked={outrayConfig.useCustomPath}
+                              onChange={() => setOutRayConfig({ useCustomPath: true })}
+                              className="w-4 h-4 text-accent"
+                            />
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-foreground">Use custom path</span>
+                              <p className="text-xs text-muted mt-0.5">
+                                Specify a custom OutRay CLI installation
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Custom Path Input (only shown when custom path is selected) */}
+                      {outrayConfig.useCustomPath && (
+                        <div>
+                          <label
+                            htmlFor="outray-cli-path"
+                            className="block text-sm font-medium text-foreground mb-1.5"
+                          >
+                            CLI Path
+                          </label>
+                          <input
+                            id="outray-cli-path"
+                            type="text"
+                            value={outrayConfig.cliPath || ""}
+                            onChange={(e) => setOutRayConfig({ cliPath: e.target.value || null })}
+                            placeholder="/usr/local/bin/outray"
+                            className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm placeholder:text-secondary/60 focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
+                          />
+                          <p className="mt-1.5 text-xs text-muted">
+                            Full path to your OutRay CLI binary
+                          </p>
+                        </div>
+                      )}
+
+                      <div>
+                        <label
+                          htmlFor="outray-subdomain"
+                          className="block text-sm font-medium text-foreground mb-1.5"
+                        >
+                          Default Subdomain
+                        </label>
+                        <input
+                          id="outray-subdomain"
+                          type="text"
+                          value={outrayConfig.defaultSubdomain || ""}
+                          onChange={(e) => setOutRayConfig({ defaultSubdomain: e.target.value || null })}
+                          placeholder="my-project"
+                          className="w-full px-3 py-2 bg-card border border-border rounded-lg text-foreground text-sm placeholder:text-secondary/60 focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
+                        />
+                        <p className="mt-1.5 text-xs text-muted">
+                          Request a specific subdomain (e.g., my-project.outray.app). Optional.
+                        </p>
+                      </div>
+
+                      {/* Authentication Section */}
+                      <div className="pt-3 border-t border-border">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <label className="text-sm font-medium text-foreground">
+                              Authentication
+                            </label>
+                            <p className="text-xs text-muted mt-0.5">
+                              {outrayLoggedIn === null
+                                ? "Checking..."
+                                : outrayLoggedIn
+                                ? "You are logged in to OutRay"
+                                : "Login to OutRay to create tunnels"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {outrayLoggedIn === true && (
+                              <span className="flex items-center gap-1 text-xs text-success">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Logged in
+                              </span>
+                            )}
+                            <button
+                              onClick={handleOutrayLogin}
+                              disabled={outrayLoggingIn}
+                              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                outrayLoggedIn
+                                  ? "bg-card text-secondary hover:text-foreground"
+                                  : "bg-accent text-white hover:opacity-90"
+                              } disabled:opacity-50`}
+                            >
+                              {outrayLoggingIn ? (
+                                <span className="flex items-center gap-2">
+                                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                  Logging in...
+                                </span>
+                              ) : outrayLoggedIn ? (
+                                "Re-login"
+                              ) : (
+                                "Login to OutRay"
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        {outrayLoginError && (
+                          <p className="mt-2 text-xs text-destructive">
+                            {outrayLoginError}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </section>
           )}
         </div>

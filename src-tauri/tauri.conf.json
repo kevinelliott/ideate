@@ -41,6 +41,9 @@
       "icons/512x512@2x.png",
       "icons/icon.icns",
       "icons/icon.png"
+    ],
+    "externalBin": [
+      "binaries/outray"
     ]
   },
   "plugins": {

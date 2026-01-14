@@ -6,14 +6,14 @@ type NavigationContext = "projects" | "stories";
 
 interface UseKeyboardNavigationProps {
   onNewProject: () => void;
-  onOpenPreferences: () => void;
+  onOpenSettings: () => void;
   isModalOpen: boolean;
   onCloseModal: () => void;
 }
 
 export function useKeyboardNavigation({
   onNewProject,
-  onOpenPreferences,
+  onOpenSettings,
   isModalOpen,
   onCloseModal,
 }: UseKeyboardNavigationProps) {
@@ -45,7 +45,7 @@ export function useKeyboardNavigation({
 
       if ((e.metaKey || e.ctrlKey) && e.key === "," && !isModalOpen) {
         e.preventDefault();
-        onOpenPreferences();
+        onOpenSettings();
         return;
       }
 
@@ -143,7 +143,7 @@ export function useKeyboardNavigation({
       navigationContext,
       isModalOpen,
       onNewProject,
-      onOpenPreferences,
+      onOpenSettings,
       onCloseModal,
     ]
   );

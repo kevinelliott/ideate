@@ -15,13 +15,13 @@ use crate::utils::{get_ideate_dir, sanitize_json};
 // ============================================================================
 
 /// Creates a new project with the given name and description.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn create_project(
     name: String,
     description: String,
-    base_path: String,
+    parent_path: String,
 ) -> Result<CreateProjectResult, String> {
-    let project_dir = PathBuf::from(&base_path).join(&name);
+    let project_dir = PathBuf::from(&parent_path).join(&name);
     
     if project_dir.exists() {
         return Err(format!(
@@ -60,12 +60,12 @@ pub fn create_project(
 }
 
 /// Imports an existing directory as a project.
-#[tauri::command]
-pub fn import_project(path: String) -> Result<CreateProjectResult, String> {
-    let project_dir = PathBuf::from(&path);
+#[tauri::command(rename_all = "camelCase")]
+pub fn import_project(name: String, project_path: String) -> Result<CreateProjectResult, String> {
+    let project_dir = PathBuf::from(&project_path);
     
     if !project_dir.exists() {
-        return Err(format!("Directory '{}' does not exist", path));
+        return Err(format!("Directory '{}' does not exist", project_path));
     }
     
     let ideate_dir = project_dir.join(".ideate");
@@ -77,11 +77,16 @@ pub fn import_project(path: String) -> Result<CreateProjectResult, String> {
     let config_path = ideate_dir.join("config.json");
     
     if !config_path.exists() {
-        let project_name = project_dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Imported Project")
-            .to_string();
+        // Use provided name, or fall back to directory name
+        let project_name = if name.is_empty() {
+            project_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Imported Project")
+                .to_string()
+        } else {
+            name
+        };
         
         let config = ProjectConfig {
             name: project_name,
@@ -156,7 +161,7 @@ pub fn save_projects(app: AppHandle, projects: Vec<StoredProject>) -> Result<(),
 // ============================================================================
 
 /// Loads the PRD (Product Requirements Document) for a project.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn load_prd(project_path: String) -> Result<Option<Prd>, String> {
     let prd_path = get_ideate_dir(&project_path).join("prd.json");
     
@@ -177,7 +182,7 @@ pub fn load_prd(project_path: String) -> Result<Option<Prd>, String> {
 }
 
 /// Saves the PRD for a project.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn save_prd(project_path: String, prd: Prd) -> Result<(), String> {
     let ideate_dir = get_ideate_dir(&project_path);
     
@@ -202,7 +207,7 @@ pub fn save_prd(project_path: String, prd: Prd) -> Result<(), String> {
 // ============================================================================
 
 /// Loads project-specific settings.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn load_project_settings(project_path: String) -> Result<Option<ProjectSettings>, String> {
     let config_path = get_ideate_dir(&project_path).join("config.json");
     
@@ -224,7 +229,7 @@ pub fn load_project_settings(project_path: String) -> Result<Option<ProjectSetti
 }
 
 /// Saves project-specific settings.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn save_project_settings(
     project_path: String,
     settings: ProjectSettings,
@@ -260,7 +265,7 @@ pub fn save_project_settings(
 // ============================================================================
 
 /// Loads the build state for a project.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn load_project_state(project_path: String) -> Result<Option<ProjectState>, String> {
     let state_path = get_ideate_dir(&project_path).join("state.json");
     
@@ -278,7 +283,7 @@ pub fn load_project_state(project_path: String) -> Result<Option<ProjectState>, 
 }
 
 /// Saves the build state for a project.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn save_project_state(project_path: String, state: ProjectState) -> Result<(), String> {
     let ideate_dir = get_ideate_dir(&project_path);
     
@@ -303,7 +308,7 @@ pub fn save_project_state(project_path: String, state: ProjectState) -> Result<(
 // ============================================================================
 
 /// Loads the cost history for a project.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn load_cost_history(project_path: String) -> Result<CostHistory, String> {
     let cost_path = get_ideate_dir(&project_path).join("costs.json");
     
@@ -323,7 +328,7 @@ pub fn load_cost_history(project_path: String) -> Result<CostHistory, String> {
 }
 
 /// Saves the cost history for a project.
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub fn save_cost_history(project_path: String, history: CostHistory) -> Result<(), String> {
     let ideate_dir = get_ideate_dir(&project_path);
     

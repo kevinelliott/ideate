@@ -1,6 +1,7 @@
 //! Utility functions used across the application.
 
 use regex::Regex;
+use std::fs;
 use std::path::PathBuf;
 
 /// Returns the path to the .ideate directory within a project.
@@ -37,4 +38,11 @@ pub fn sanitize_json(content: &str) -> String {
     }
     
     result
+}
+
+/// Write binary data to a file at the specified path.
+/// This bypasses the fs plugin scope restrictions for user-selected save paths.
+#[tauri::command]
+pub fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    fs::write(&path, &data).map_err(|e| format!("Failed to write file: {}", e))
 }
