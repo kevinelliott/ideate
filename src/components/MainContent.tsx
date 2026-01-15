@@ -4,12 +4,18 @@ import { useProjectStore } from "../stores/projectStore";
 import { usePrdStore, type Story, type PrdMetadata } from "../stores/prdStore";
 import { useIdeasStore } from "../stores/ideasStore";
 import { useProcessStore } from "../stores/processStore";
+import { useBuildStore } from "../stores/buildStore";
 
-// Lazy load heavy view components
-const ProjectView = lazy(() => import("./ProjectView").then(m => ({ default: m.ProjectView })));
+// Lazy load view components
 const IdeaDetailView = lazy(() => import("./IdeaDetailView").then(m => ({ default: m.IdeaDetailView })));
 const AgentRunView = lazy(() => import("./AgentRunView").then(m => ({ default: m.AgentRunView })));
-const ProcessHistoryView = lazy(() => import("./ProcessHistoryView").then(m => ({ default: m.ProcessHistoryView })));
+
+// Lazy load project layout and content components
+const ProjectLayout = lazy(() => import("./ProjectLayout").then(m => ({ default: m.ProjectLayout })));
+const RequirementsView = lazy(() => import("./RequirementsView").then(m => ({ default: m.RequirementsView })));
+const OverviewContent = lazy(() => import("./OverviewContent").then(m => ({ default: m.OverviewContent })));
+const BuildStatusContent = lazy(() => import("./BuildStatusContent").then(m => ({ default: m.BuildStatusContent })));
+const ProcessHistoryContent = lazy(() => import("./ProcessHistoryContent").then(m => ({ default: m.ProcessHistoryContent })));
 
 interface Prd {
   project?: string
@@ -59,7 +65,10 @@ export function MainContent() {
   const selectedProcess = selectedProcessId ? getProcess(selectedProcessId) : null;
 
   const processHistoryProjectId = useProjectStore((state) => state.processHistoryProjectId);
-  const hideProcessHistory = useProjectStore((state) => state.hideProcessHistory);
+  const buildStatusProjectId = useProjectStore((state) => state.buildStatusProjectId);
+  const projectOverviewProjectId = useProjectStore((state) => state.projectOverviewProjectId);
+  
+  const getProjectState = useBuildStore((state) => state.getProjectState);
 
   const loadingProjectIdRef = useRef<string | null>(null);
 
@@ -81,9 +90,21 @@ export function MainContent() {
       // Track which project we're loading
       loadingProjectIdRef.current = activeProjectId;
 
+      // Check if this project has an active PRD generation process running
+      const projectBuildState = getProjectState(activeProjectId);
+      const hasActivePrdProcess = projectBuildState.currentProcessId !== null;
+      const currentPrdStatus = usePrdStore.getState().status;
+      const isGenerating = currentPrdStatus === "generating" && hasActivePrdProcess;
+
       // Clear existing stories and selection immediately when project changes
+      // But preserve "generating" status if PRD generation is in progress for this project
       clearPrd();
-      setStatus("idle");
+      if (!isGenerating) {
+        setStatus("idle");
+      } else {
+        // Restore the generating status after clearPrd reset it
+        setStatus("generating");
+      }
 
       try {
         const prd = await invoke<Prd | null>("load_prd", {
@@ -124,18 +145,9 @@ export function MainContent() {
     }
 
     loadPrd();
-  }, [activeProjectId, activeProject?.path, setPrd, clearPrd, setStatus, selectStory, loadedProjectId]);
+  }, [activeProjectId, activeProject?.path, setPrd, clearPrd, setStatus, selectStory, loadedProjectId, getProjectState]);
 
-  // Show process history view if requested
-  if (processHistoryProjectId) {
-    return (
-      <Suspense fallback={<ViewFallback />}>
-        <ProcessHistoryView projectId={processHistoryProjectId} onBack={hideProcessHistory} />
-      </Suspense>
-    );
-  }
-
-  // Show agent run view if a process is selected
+  // Show agent run view if a process is selected (takes priority)
   if (selectedProcess) {
     return (
       <Suspense fallback={<ViewFallback />}>
@@ -153,11 +165,43 @@ export function MainContent() {
     );
   }
 
-  // Show project view if a project is active
+  // Show project with layout if a project is active
   if (activeProject) {
+    // Determine which content to show based on state
+    let content: React.ReactNode;
+    
+    if (projectOverviewProjectId === activeProject.id) {
+      content = (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+          <OverviewContent project={activeProject} />
+        </Suspense>
+      );
+    } else if (buildStatusProjectId === activeProject.id) {
+      content = (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+          <BuildStatusContent projectId={activeProject.id} />
+        </Suspense>
+      );
+    } else if (processHistoryProjectId === activeProject.id) {
+      content = (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+          <ProcessHistoryContent projectId={activeProject.id} />
+        </Suspense>
+      );
+    } else {
+      // Default to requirements view
+      content = (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+          <RequirementsView project={activeProject} />
+        </Suspense>
+      );
+    }
+
     return (
       <Suspense fallback={<ViewFallback />}>
-        <ProjectView project={activeProject} />
+        <ProjectLayout project={activeProject}>
+          {content}
+        </ProjectLayout>
       </Suspense>
     );
   }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { useProjectStore } from '../stores/projectStore'
 
 interface ProcessCommand {
   executable: string
@@ -27,9 +26,8 @@ interface ProcessHistory {
   entries: ProcessHistoryEntry[]
 }
 
-interface ProcessHistoryViewProps {
+interface ProcessHistoryContentProps {
   projectId: string
-  onBack: () => void
 }
 
 function formatDuration(ms: number): string {
@@ -199,13 +197,10 @@ function ProcessHistoryItem({ entry }: { entry: ProcessHistoryEntry }) {
   )
 }
 
-export function ProcessHistoryView({ projectId, onBack }: ProcessHistoryViewProps) {
+export function ProcessHistoryContent({ projectId }: ProcessHistoryContentProps) {
   const [history, setHistory] = useState<ProcessHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
-  
-  const projects = useProjectStore((state) => state.projects)
-  const project = projects.find((p) => p.id === projectId)
 
   useEffect(() => {
     async function loadHistory() {
@@ -228,30 +223,7 @@ export function ProcessHistoryView({ projectId, onBack }: ProcessHistoryViewProp
   const processTypes = Array.from(new Set(history.map((e) => e.processType)))
 
   return (
-    <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border overflow-hidden">
-      {/* Top bar */}
-      <div className="h-12 flex items-center justify-between px-4 border-b border-border bg-background drag-region">
-        <div className="flex items-center gap-3 no-drag">
-          <button
-            onClick={onBack}
-            className="p-1 rounded text-muted hover:text-foreground hover:bg-card transition-colors"
-            title="Back to project"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-sm font-medium text-foreground truncate max-w-[200px]">
-            {project?.name || 'Unknown Project'}
-          </h1>
-          {project?.description && (
-            <span className="text-xs text-muted truncate max-w-[300px] hidden lg:block">
-              {project.description}
-            </span>
-          )}
-        </div>
-      </div>
-
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-6 py-4 border-b border-border bg-card flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -313,6 +285,6 @@ export function ProcessHistoryView({ projectId, onBack }: ProcessHistoryViewProp
           </div>
         )}
       </div>
-    </main>
+    </div>
   )
 }
