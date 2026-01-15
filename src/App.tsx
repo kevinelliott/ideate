@@ -23,6 +23,7 @@ const NewProjectModal = lazy(() => import("./components/NewProjectModal").then(m
 const ImportProjectModal = lazy(() => import("./components/ImportProjectModal").then(m => ({ default: m.ImportProjectModal })));
 const PermissionsModal = lazy(() => import("./components/PermissionsModal").then(m => ({ default: m.PermissionsModal })));
 const WelcomeGuideModal = lazy(() => import("./components/WelcomeGuideModal").then(m => ({ default: m.WelcomeGuideModal })));
+const DisclaimerModal = lazy(() => import("./components/DisclaimerModal").then(m => ({ default: m.DisclaimerModal })));
 
 interface CreateProjectResult {
   path: string;
@@ -48,6 +49,7 @@ interface Preferences {
   agentPaths: Array<{ agentId: string; path: string }>;
   theme: string;
   hasSeenWelcomeGuide?: boolean;
+  hasAcceptedDisclaimer?: boolean;
 }
 
 // Loading fallback for modals
@@ -66,6 +68,7 @@ function App() {
   const [showImportProjectModal, setShowImportProjectModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [pendingPrdGeneration, setPendingPrdGeneration] = useState<{projectId: string, projectPath: string, projectName: string} | null>(null);
   
@@ -90,7 +93,7 @@ function App() {
   // Track and persist window state
   useWindowState();
 
-  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide;
+  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide || showDisclaimer;
 
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
@@ -121,16 +124,19 @@ function App() {
         if (prefs?.defaultAgent) {
           setDefaultAgentId(prefs.defaultAgent);
         }
-        // Show welcome guide on first run
-        if (!prefs?.hasSeenWelcomeGuide) {
+        // Show disclaimer on first run (before welcome guide)
+        if (!prefs?.hasAcceptedDisclaimer) {
+          setShowDisclaimer(true);
+        } else if (!prefs?.hasSeenWelcomeGuide) {
+          // Show welcome guide only if disclaimer already accepted
           setShowWelcomeGuide(true);
         }
         setPreferencesLoaded(true);
       })
       .catch((error) => {
         console.error("Failed to load preferences:", error);
-        // Show welcome guide if we can't load preferences (first run)
-        setShowWelcomeGuide(true);
+        // Show disclaimer if we can't load preferences (first run)
+        setShowDisclaimer(true);
         setPreferencesLoaded(true);
       });
   }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas, loadPanelStates, loadIntegrationsConfig]);
@@ -218,6 +224,28 @@ function App() {
       setPendingPrdGeneration(null);
     }
   }, [pendingPrdGeneration]);
+
+  const handleAcceptDisclaimer = async () => {
+    try {
+      // Load current preferences, update, and save
+      const prefs = await invoke<Preferences | null>("load_preferences");
+      await invoke("save_preferences", {
+        preferences: {
+          ...prefs,
+          hasAcceptedDisclaimer: true,
+        },
+      });
+      setShowDisclaimer(false);
+      // Show welcome guide after accepting disclaimer if not seen
+      if (!prefs?.hasSeenWelcomeGuide) {
+        setShowWelcomeGuide(true);
+      }
+    } catch (error) {
+      console.error("Failed to save disclaimer acceptance:", error);
+      // Still dismiss the modal even if save fails
+      setShowDisclaimer(false);
+    }
+  };
 
   const handleNewProject = () => {
     setShowNewProjectModal(true);
@@ -363,6 +391,12 @@ function App() {
           <WelcomeGuideModal
             isOpen={showWelcomeGuide}
             onClose={() => setShowWelcomeGuide(false)}
+          />
+        )}
+        {showDisclaimer && (
+          <DisclaimerModal
+            isOpen={showDisclaimer}
+            onAccept={handleAcceptDisclaimer}
           />
         )}
       </Suspense>

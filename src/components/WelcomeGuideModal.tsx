@@ -7,6 +7,21 @@ interface WelcomeGuideModalProps {
   onClose: () => void;
 }
 
+interface Preferences {
+  defaultAgent: string | null;
+  defaultAutonomy: string;
+  defaultBuildMode: string;
+  logBufferSize: number;
+  maxParallelAgents: number;
+  agentPaths: Array<{ agentId: string; path: string }>;
+  theme: string;
+  appIcon: string;
+  promptOverrides: Record<string, string>;
+  hasSeenWelcomeGuide: boolean;
+  hasAcceptedDisclaimer: boolean;
+  outray?: unknown;
+}
+
 const STEPS = [
   {
     title: "Welcome to Ideate",
@@ -118,13 +133,15 @@ export function WelcomeGuideModal({ isOpen, onClose }: WelcomeGuideModalProps) {
   const handleFinish = async () => {
     if (dontShowAgain) {
       try {
-        const prefs = await invoke<Record<string, unknown> | null>("load_preferences");
-        await invoke("save_preferences", {
-          preferences: {
-            ...prefs,
-            hasSeenWelcomeGuide: true,
-          },
-        });
+        const prefs = await invoke<Preferences | null>("load_preferences");
+        if (prefs) {
+          await invoke("save_preferences", {
+            preferences: {
+              ...prefs,
+              hasSeenWelcomeGuide: true,
+            },
+          });
+        }
       } catch (error) {
         console.error("Failed to save preference:", error);
       }
