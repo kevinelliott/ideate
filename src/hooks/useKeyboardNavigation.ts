@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from "react";
 import { useProjectStore } from "../stores/projectStore";
 import { usePrdStore } from "../stores/prdStore";
+import { usePanelStore } from "../stores/panelStore";
 
 type NavigationContext = "projects" | "stories";
 
@@ -25,6 +26,11 @@ export function useKeyboardNavigation({
   const selectedStoryId = usePrdStore((state) => state.selectedStoryId);
   const selectStory = usePrdStore((state) => state.selectStory);
 
+  const toggleLogPanel = usePanelStore((state) => state.toggleLogPanel);
+  const toggleTerminalPanel = usePanelStore((state) => state.toggleTerminalPanel);
+  const toggleAgentPanel = usePanelStore((state) => state.toggleAgentPanel);
+  const togglePreviewPanel = usePanelStore((state) => state.togglePreviewPanel);
+
   const [navigationContext, setNavigationContext] = useState<NavigationContext>("projects");
 
   const sortedStories = [...stories].sort((a, b) => a.priority - b.priority);
@@ -46,6 +52,57 @@ export function useKeyboardNavigation({
       if ((e.metaKey || e.ctrlKey) && e.key === "," && !isModalOpen) {
         e.preventDefault();
         onOpenSettings();
+        return;
+      }
+
+      // Cmd+/ to toggle keyboard shortcuts
+      if ((e.metaKey || e.ctrlKey) && e.key === "/") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("toggle-keyboard-shortcuts"));
+        return;
+      }
+
+      // Panel toggle shortcuts (only when a project is active)
+      if ((e.metaKey || e.ctrlKey) && activeProjectId && !isModalOpen) {
+        // Cmd+L to toggle log panel
+        if (e.key === "l") {
+          e.preventDefault();
+          toggleLogPanel(activeProjectId);
+          return;
+        }
+        // Cmd+T to toggle terminal panel
+        if (e.key === "t") {
+          e.preventDefault();
+          toggleTerminalPanel(activeProjectId);
+          return;
+        }
+        // Cmd+J to toggle sidekick agent panel
+        if (e.key === "j") {
+          e.preventDefault();
+          toggleAgentPanel(activeProjectId);
+          return;
+        }
+        // Cmd+\ to toggle preview panel
+        if (e.key === "\\") {
+          e.preventDefault();
+          togglePreviewPanel(activeProjectId);
+          return;
+        }
+      }
+
+      // Cmd+1 through Cmd+9 to switch to project by index
+      if ((e.metaKey || e.ctrlKey) && e.key >= "1" && e.key <= "9" && !isModalOpen) {
+        e.preventDefault();
+        const index = parseInt(e.key, 10) - 1;
+        if (index < projects.length) {
+          const project = projects[index];
+          if (activeProjectId === project.id) {
+            // Already on this project, toggle collapse
+            window.dispatchEvent(new CustomEvent("toggle-project-expand", { detail: { projectId: project.id } }));
+          } else {
+            setActiveProject(project.id);
+          }
+        }
         return;
       }
 
@@ -145,6 +202,10 @@ export function useKeyboardNavigation({
       onNewProject,
       onOpenSettings,
       onCloseModal,
+      toggleLogPanel,
+      toggleTerminalPanel,
+      toggleAgentPanel,
+      togglePreviewPanel,
     ]
   );
 

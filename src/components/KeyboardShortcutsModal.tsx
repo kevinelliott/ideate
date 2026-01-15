@@ -20,6 +20,7 @@ const shortcutCategories: ShortcutCategory[] = [
     title: "General",
     shortcuts: [
       { keys: "⌘ + ,", description: "Open Settings" },
+      { keys: "⌘ + /", description: "Toggle Keyboard Shortcuts" },
       { keys: "⌘ + N", description: "New Project" },
       { keys: "⌘ + I", description: "Import Project" },
       { keys: "Escape", description: "Close modal / Cancel" },
@@ -30,6 +31,15 @@ const shortcutCategories: ShortcutCategory[] = [
     shortcuts: [
       { keys: "⌘ + 1-9", description: "Switch to project by index" },
       { keys: "↑ / ↓", description: "Navigate stories" },
+    ],
+  },
+  {
+    title: "Panels",
+    shortcuts: [
+      { keys: "⌘ + L", description: "Toggle Log Panel" },
+      { keys: "⌘ + T", description: "Toggle Terminal Panel" },
+      { keys: "⌘ + J", description: "Toggle Sidekick Assistant" },
+      { keys: "⌘ + \\", description: "Toggle Preview Panel" },
     ],
   },
   {

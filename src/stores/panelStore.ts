@@ -8,6 +8,8 @@ export interface ProjectPanelState {
   previewPanelWidth: number
   terminalPanelCollapsed: boolean
   terminalPanelHeight: number
+  agentPanelCollapsed: boolean
+  agentPanelHeight: number
 }
 
 const DEFAULT_PANEL_STATE: ProjectPanelState = {
@@ -17,6 +19,8 @@ const DEFAULT_PANEL_STATE: ProjectPanelState = {
   previewPanelWidth: 400,
   terminalPanelCollapsed: true,
   terminalPanelHeight: 300,
+  agentPanelCollapsed: true,
+  agentPanelHeight: 200,
 }
 
 interface UiState {
@@ -45,6 +49,12 @@ interface PanelStore {
   setPreviewPanelWidth: (projectId: string, width: number) => void
   setTerminalPanelCollapsed: (projectId: string, collapsed: boolean) => void
   setTerminalPanelHeight: (projectId: string, height: number) => void
+  setAgentPanelCollapsed: (projectId: string, collapsed: boolean) => void
+  setAgentPanelHeight: (projectId: string, height: number) => void
+  toggleLogPanel: (projectId: string) => void
+  toggleTerminalPanel: (projectId: string) => void
+  toggleAgentPanel: (projectId: string) => void
+  togglePreviewPanel: (projectId: string) => void
 }
 
 // Debounce timer for saving
@@ -175,5 +185,53 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       debouncedSave(newStates)
       return { panelStates: newStates }
     })
+  },
+
+  setAgentPanelCollapsed: (projectId, collapsed) => {
+    set((state) => {
+      const newStates = {
+        ...state.panelStates,
+        [projectId]: {
+          ...(state.panelStates[projectId] || DEFAULT_PANEL_STATE),
+          agentPanelCollapsed: collapsed,
+        },
+      }
+      debouncedSave(newStates)
+      return { panelStates: newStates }
+    })
+  },
+
+  setAgentPanelHeight: (projectId, height) => {
+    set((state) => {
+      const newStates = {
+        ...state.panelStates,
+        [projectId]: {
+          ...(state.panelStates[projectId] || DEFAULT_PANEL_STATE),
+          agentPanelHeight: height,
+        },
+      }
+      debouncedSave(newStates)
+      return { panelStates: newStates }
+    })
+  },
+
+  toggleLogPanel: (projectId) => {
+    const current = get().getPanelState(projectId)
+    get().setLogPanelCollapsed(projectId, !current.logPanelCollapsed)
+  },
+
+  toggleTerminalPanel: (projectId) => {
+    const current = get().getPanelState(projectId)
+    get().setTerminalPanelCollapsed(projectId, !current.terminalPanelCollapsed)
+  },
+
+  toggleAgentPanel: (projectId) => {
+    const current = get().getPanelState(projectId)
+    get().setAgentPanelCollapsed(projectId, !current.agentPanelCollapsed)
+  },
+
+  togglePreviewPanel: (projectId) => {
+    const current = get().getPanelState(projectId)
+    get().setPreviewPanelCollapsed(projectId, !current.previewPanelCollapsed)
   },
 }))

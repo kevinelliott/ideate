@@ -16,6 +16,18 @@ pub struct ProjectPanelState {
     pub preview_panel_width: f64,
     pub terminal_panel_collapsed: bool,
     pub terminal_panel_height: f64,
+    #[serde(default = "default_agent_panel_collapsed")]
+    pub agent_panel_collapsed: bool,
+    #[serde(default = "default_agent_panel_height")]
+    pub agent_panel_height: f64,
+}
+
+fn default_agent_panel_collapsed() -> bool {
+    true
+}
+
+fn default_agent_panel_height() -> f64 {
+    200.0
 }
 
 /// Window state (position and size).
