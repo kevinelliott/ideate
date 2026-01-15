@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useBuildStore } from "../stores/buildStore";
 import { useCostStore } from "../stores/costStore";
+import { usePrdStore } from "../stores/prdStore";
 import { CostModal } from "./CostModal";
 
 export type AutonomyLevel = "autonomous" | "pause-between" | "manual";
@@ -11,7 +12,7 @@ export type BuildMode = "ralph" | "parallel" | "none";
 interface ProjectSettings {
   agent: string | null;
   autonomy: AutonomyLevel;
-  build_mode: BuildMode | null;
+  buildMode: BuildMode | null;
 }
 
 interface Preferences {
@@ -129,6 +130,16 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   const buildStatus = useBuildStore((state) => state.projectStates[projectId]?.status ?? 'idle');
+  const startBuild = useBuildStore((state) => state.startBuild);
+  const pauseBuild = useBuildStore((state) => state.pauseBuild);
+  const resumeBuild = useBuildStore((state) => state.resumeBuild);
+  const cancelBuild = useBuildStore((state) => state.cancelBuild);
+  
+  const stories = usePrdStore((state) => state.stories);
+  const hasIncompleteStories = stories.some((s) => !s.passes);
+  const hasStories = stories.length > 0;
+  const canStart = hasStories && hasIncompleteStories && buildStatus === "idle";
+  
   const isBuilding = buildStatus === "running" || buildStatus === "paused";
 
   const entries = useCostStore((state) => state.entries);
@@ -167,7 +178,7 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
           if (settings) {
             setSelectedAgent(settings.agent || defaultAgent);
             setAutonomyLevel(settings.autonomy || defaultAutonomy);
-            setBuildMode(settings.build_mode || defaultBuildMode);
+            setBuildMode(settings.buildMode || defaultBuildMode);
           } else {
             setSelectedAgent(defaultAgent);
             setAutonomyLevel(defaultAutonomy);
@@ -220,9 +231,13 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
         settings: {
           agent: agent || null,
           autonomy,
-          build_mode: mode,
+          buildMode: mode,
         },
       });
+      // Notify other components that settings have changed
+      window.dispatchEvent(new CustomEvent("project-settings-changed", { 
+        detail: { projectId, projectPath } 
+      }));
     } catch (err) {
       console.error("Failed to save project settings:", err);
     }
@@ -344,6 +359,61 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="w-px h-4 bg-border" />
+
+              {/* Build control buttons */}
+              <div className="flex items-center gap-1">
+                {buildStatus === "idle" && (
+                  <button
+                    onClick={() => startBuild(projectId)}
+                    disabled={!canStart}
+                    className={`p-1.5 rounded transition-colors ${
+                      canStart
+                        ? 'text-success hover:bg-success/10'
+                        : 'text-muted cursor-not-allowed'
+                    }`}
+                    title={canStart ? "Start build" : hasStories ? "All stories complete" : "No stories to build"}
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                )}
+                {buildStatus === "running" && (
+                  <button
+                    onClick={() => pauseBuild(projectId)}
+                    className="p-1.5 rounded text-warning hover:bg-warning/10 transition-colors"
+                    title="Pause build"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                    </svg>
+                  </button>
+                )}
+                {buildStatus === "paused" && (
+                  <button
+                    onClick={() => resumeBuild(projectId)}
+                    className="p-1.5 rounded text-success hover:bg-success/10 transition-colors"
+                    title="Resume build"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                )}
+                {(buildStatus === "running" || buildStatus === "paused") && (
+                  <button
+                    onClick={() => cancelBuild(projectId)}
+                    className="p-1.5 rounded text-destructive hover:bg-destructive/10 transition-colors"
+                    title="Stop build"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 6h12v12H6z" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </>
           )}

@@ -13,8 +13,34 @@ import { usePrdGeneration } from "../hooks/usePrdGeneration";
 import { useAgentStore } from "../stores/agentStore";
 import { usePrdStore } from "../stores/prdStore";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
-import { exportIdeaToPdf } from "../utils/exportPdf";
+import { exportIdeaToPdf, loadLogoForPdf } from "../utils/exportPdf";
 import { notify } from "../utils/notify";
+import { defaultPlugins, type AgentPlugin } from "../types";
+
+type AutonomyLevel = "autonomous" | "pause-between" | "manual";
+type BuildMode = "ralph" | "parallel" | "none";
+
+interface Preferences {
+  defaultAgent: string | null;
+  defaultAutonomy: string;
+  defaultBuildMode: string;
+  logBufferSize: number;
+  agentPaths: Array<{ agentId: string; path: string }>;
+  theme: string;
+  promptOverrides: Record<string, string>;
+}
+
+const autonomyOptions: { value: AutonomyLevel; label: string; description: string }[] = [
+  { value: "autonomous", label: "Auto", description: "Run all stories automatically" },
+  { value: "pause-between", label: "Pause", description: "Pause between stories for review" },
+  { value: "manual", label: "Manual", description: "Run one story at a time" },
+];
+
+const buildModeOptions: { value: BuildMode; label: string; description: string }[] = [
+  { value: "ralph", label: "Ralph", description: "Sequential story execution" },
+  { value: "parallel", label: "Parallel", description: "Run stories concurrently" },
+  { value: "none", label: "None", description: "No automatic building" },
+];
 
 interface CreateProjectResult {
   path: string;
@@ -46,11 +72,17 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
   const [showCreateConfirm, setShowCreateConfirm] = useState(false);
   const [generatePrd, setGeneratePrd] = useState(true);
   const [breakdownStories, setBreakdownStories] = useState(true);
+  const [startBuildAfterPrd, setStartBuildAfterPrd] = useState(false);
   const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showGeneratingModal, setShowGeneratingModal] = useState(false);
   const [, setCreatedProjectId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  
+  // Build options state (loaded from app preferences)
+  const [buildMode, setBuildMode] = useState<BuildMode>("ralph");
+  const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [autonomyLevel, setAutonomyLevel] = useState<AutonomyLevel>("autonomous");
 
   const { generateDescription, isGenerating, generationType } = useIdeaGeneration();
 
@@ -58,6 +90,26 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
   const isGeneratingPrd = prdStatus === 'generating';
 
   useModalKeyboard(showCreateConfirm && !isCreatingProject, () => setShowCreateConfirm(false));
+
+  // Load app preferences when modal opens
+  useEffect(() => {
+    if (!showCreateConfirm) return;
+    
+    async function loadPreferences() {
+      try {
+        const prefs = await invoke<Preferences | null>("load_preferences");
+        if (prefs) {
+          setSelectedAgent(prefs.defaultAgent || "");
+          setAutonomyLevel((prefs.defaultAutonomy as AutonomyLevel) || "autonomous");
+          setBuildMode((prefs.defaultBuildMode as BuildMode) || "ralph");
+        }
+      } catch (error) {
+        console.error("Failed to load preferences:", error);
+      }
+    }
+    
+    loadPreferences();
+  }, [showCreateConfirm]);
 
   // Reset form when idea changes
   useEffect(() => {
@@ -155,6 +207,16 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
         parentPath: selectedDirectory,
       });
 
+      // Save project settings with the build options from the modal
+      await invoke("save_project_settings", {
+        projectPath: result.path,
+        settings: {
+          agent: selectedAgent || null,
+          autonomy: autonomyLevel,
+          buildMode: buildMode,
+        },
+      });
+
       const newProject = addProject({
         name: projectName,
         description: idea.summary || "",
@@ -176,7 +238,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
         // Set as active project
         setActiveProject(newProject.id);
         
-        // Start PRD generation with optional breakdown (fire and forget)
+        // Start PRD generation with optional breakdown and build option
         generatePrdFromIdea(
           newProject.id,
           projectName,
@@ -184,7 +246,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
           idea.title,
           idea.summary,
           idea.description,
-          { breakdownStories }
+          { breakdownStories, startBuildAfterPrd }
         );
       } else {
         // Just switch to the project without generating
@@ -224,7 +286,15 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
       });
       
       if (filePath) {
-        const pdfBlob = exportIdeaToPdf({ idea });
+        // Load logo for PDF
+        let logoDataUrl: string | undefined;
+        try {
+          logoDataUrl = await loadLogoForPdf();
+        } catch {
+          // Continue without logo if it fails to load
+        }
+        
+        const pdfBlob = exportIdeaToPdf({ idea, logoDataUrl });
         const arrayBuffer = await pdfBlob.arrayBuffer();
         const data = Array.from(new Uint8Array(arrayBuffer));
         
@@ -353,7 +423,7 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                 </svg>
-                Create Project
+                Create Project from Idea
               </button>
               <button
                 onClick={handleExportPdf}
@@ -598,8 +668,8 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold">Create Project</h2>
-                  <p className="text-xs text-muted">From: {idea.title}</p>
+                  <h2 className="text-lg font-semibold">Create Project from Idea</h2>
+                  <p className="text-xs text-muted truncate max-w-[280px]" title={idea.title}>{idea.title}</p>
                 </div>
               </div>
               {!isCreatingProject && (
@@ -662,24 +732,105 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
                   </div>
 
                   {generatePrd && (
-                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background border border-border">
-                      <input
-                        type="checkbox"
-                        id="breakdown-stories"
-                        checked={breakdownStories}
-                        onChange={(e) => setBreakdownStories(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded border-border text-accent focus:ring-accent"
-                      />
-                      <div>
-                        <label htmlFor="breakdown-stories" className="text-sm font-medium text-foreground cursor-pointer">
-                          Break Down Complex Stories
+                    <>
+                      <div className="flex items-start gap-3 p-4 rounded-lg bg-background border border-border">
+                        <input
+                          type="checkbox"
+                          id="breakdown-stories"
+                          checked={breakdownStories}
+                          onChange={(e) => setBreakdownStories(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded border-border text-accent focus:ring-accent"
+                        />
+                        <div>
+                          <label htmlFor="breakdown-stories" className="text-sm font-medium text-foreground cursor-pointer">
+                            Break Down Complex Stories
+                          </label>
+                          <p className="text-xs text-muted mt-0.5">
+                            After initial generation, AI will evaluate each story and break down any that are too complex into smaller, single-iteration stories. May result in 50-100+ stories for complex ideas.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3 p-4 rounded-lg bg-background border border-border">
+                        <input
+                          type="checkbox"
+                          id="start-build-after-prd"
+                          checked={startBuildAfterPrd}
+                          onChange={(e) => setStartBuildAfterPrd(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded border-border text-accent focus:ring-accent"
+                        />
+                        <div>
+                          <label htmlFor="start-build-after-prd" className="text-sm font-medium text-foreground cursor-pointer">
+                            Start Building After PRD Generation
+                          </label>
+                          <p className="text-xs text-muted mt-0.5">
+                            Automatically begin the build process once user stories are generated.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Build Options */}
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <div className="px-4 py-2.5 bg-background-secondary border-b border-border">
+                      <span className="text-sm font-medium text-foreground">Build Options</span>
+                    </div>
+                    <div className="p-4 bg-background space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="build-mode" className="text-sm text-secondary">
+                          Mode
                         </label>
-                        <p className="text-xs text-muted mt-0.5">
-                          After initial generation, AI will evaluate each story and break down any that are too complex into smaller, single-iteration stories. May result in 50-100+ stories for complex ideas.
-                        </p>
+                        <select
+                          id="build-mode"
+                          value={buildMode}
+                          onChange={(e) => setBuildMode(e.target.value as BuildMode)}
+                          className="px-2 py-1 rounded bg-card border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                        >
+                          {buildModeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="build-agent" className="text-sm text-secondary">
+                          Agent
+                        </label>
+                        <select
+                          id="build-agent"
+                          value={selectedAgent}
+                          onChange={(e) => setSelectedAgent(e.target.value)}
+                          className="px-2 py-1 rounded bg-card border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                        >
+                          <option value="">No agent</option>
+                          {defaultPlugins.map((plugin: AgentPlugin) => (
+                            <option key={plugin.id} value={plugin.id}>
+                              {plugin.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="build-autonomy" className="text-sm text-secondary">
+                          Autonomy
+                        </label>
+                        <select
+                          id="build-autonomy"
+                          value={autonomyLevel}
+                          onChange={(e) => setAutonomyLevel(e.target.value as AutonomyLevel)}
+                          className="px-2 py-1 rounded bg-card border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                        >
+                          {autonomyOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </>
               )}
             </div>
