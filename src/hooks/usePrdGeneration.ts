@@ -5,6 +5,7 @@ import { useBuildStore } from "../stores/buildStore";
 import { useCostStore } from "../stores/costStore";
 import { usePromptStore } from "../stores/promptStore";
 import { useProcessStore } from "../stores/processStore";
+import { useAgentStore } from "../stores/agentStore";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useProjectStore } from "../stores/projectStore";
 import { notify } from "../utils/notify";
@@ -82,6 +83,7 @@ export function usePrdGeneration() {
 
   const registerProcess = useProcessStore((state) => state.registerProcess);
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess);
+  const defaultAgentId = useAgentStore((state) => state.defaultAgentId);
 
   const generatePrd = useCallback(
     async (
@@ -104,7 +106,7 @@ export function usePrdGeneration() {
       );
 
       try {
-        const selectedAgentId = agentId || "amp";
+        const selectedAgentId = agentId || defaultAgentId;
         const plugin =
           defaultPlugins.find((p: AgentPlugin) => p.id === selectedAgentId) ||
           defaultPlugins[0];
@@ -259,6 +261,7 @@ export function usePrdGeneration() {
       getPrompt,
       registerProcess,
       unregisterProcess,
+      defaultAgentId,
     ],
   );
 
@@ -278,7 +281,7 @@ export function usePrdGeneration() {
       );
 
       try {
-        const selectedAgentId = agentId || "amp";
+        const selectedAgentId = agentId || defaultAgentId;
         const plugin =
           defaultPlugins.find((p: AgentPlugin) => p.id === selectedAgentId) ||
           defaultPlugins[0];
@@ -432,6 +435,7 @@ export function usePrdGeneration() {
       getPrompt,
       registerProcess,
       unregisterProcess,
+      defaultAgentId,
     ],
   );
 
@@ -449,7 +453,7 @@ export function usePrdGeneration() {
       appendLog(projectId, "system", `Generating additional user stories...`);
 
       try {
-        const selectedAgentId = agentId || "amp";
+        const selectedAgentId = agentId || defaultAgentId;
         const plugin =
           defaultPlugins.find((p: AgentPlugin) => p.id === selectedAgentId) ||
           defaultPlugins[0];
@@ -616,6 +620,7 @@ export function usePrdGeneration() {
       getPrompt,
       registerProcess,
       unregisterProcess,
+      defaultAgentId,
     ],
   );
 
@@ -636,7 +641,7 @@ export function usePrdGeneration() {
       );
 
       try {
-        const selectedAgentId = agentId || "amp";
+        const selectedAgentId = agentId || defaultAgentId;
         const plugin =
           defaultPlugins.find((p: AgentPlugin) => p.id === selectedAgentId) ||
           defaultPlugins[0];
@@ -795,6 +800,7 @@ export function usePrdGeneration() {
       getPrompt,
       registerProcess,
       unregisterProcess,
+      defaultAgentId,
     ],
   );
 
@@ -809,10 +815,12 @@ export function usePrdGeneration() {
       options?: {
         agentId?: string;
         breakdownStories?: boolean;
+        startBuildAfterPrd?: boolean;
       },
     ): Promise<boolean> => {
       const agentId = options?.agentId;
       const shouldBreakdown = options?.breakdownStories ?? false;
+      const shouldStartBuild = options?.startBuildAfterPrd ?? false;
 
       setStatus("generating");
       clearLogs(projectId);
@@ -830,7 +838,7 @@ export function usePrdGeneration() {
       }
 
       try {
-        const selectedAgentId = agentId || "amp";
+        const selectedAgentId = agentId || defaultAgentId;
         const plugin =
           defaultPlugins.find((p: AgentPlugin) => p.id === selectedAgentId) ||
           defaultPlugins[0];
@@ -978,6 +986,18 @@ export function usePrdGeneration() {
             } else {
               setStatus("ready");
             }
+            
+            // Start the build if requested
+            if (shouldStartBuild) {
+              appendLog(projectId, "system", "");
+              appendLog(projectId, "system", "Starting build as requested...");
+              // Dispatch event to trigger build loop
+              window.dispatchEvent(
+                new CustomEvent("sidebar-start-build", {
+                  detail: { projectId },
+                })
+              );
+            }
           }
 
           return true;
@@ -1009,6 +1029,7 @@ export function usePrdGeneration() {
       registerProcess,
       unregisterProcess,
       breakdownStories,
+      defaultAgentId,
     ],
   );
 

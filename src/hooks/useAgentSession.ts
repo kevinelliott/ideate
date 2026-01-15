@@ -83,7 +83,8 @@ export function useAgentSession(
 
   const sendMessage = useCallback(async (message: string) => {
     const currentSession = useAgentStore.getState().getSession(projectId)
-    const agentId = currentSession.agentId || 'amp'
+    const defaultAgentId = useAgentStore.getState().defaultAgentId
+    const agentId = currentSession.agentId || defaultAgentId
     const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
 
     const conversationContext = currentSession.messages

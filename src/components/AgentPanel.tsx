@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useAgentSession } from "../hooks/useAgentSession";
 import { useAgentStore } from "../stores/agentStore";
+import { usePanelStore } from "../stores/panelStore";
 import { useTheme } from "../hooks/useTheme";
 import { getTerminalTheme } from "../utils/terminalThemes";
 import { formatAgentOutput, wordWrap } from "../utils/markdownToAnsi";
@@ -16,7 +17,6 @@ interface AgentPanelProps {
 
 const MIN_HEIGHT = 100;
 const MAX_HEIGHT = 500;
-const DEFAULT_HEIGHT = 200;
 const COLLAPSED_HEIGHT = 36;
 
 const GREETING_MESSAGE = "Hello, I'm a sidekick agent separate from your main build agent. I can help you inspect your project, answer questions, or perform research.";
@@ -29,8 +29,21 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   
-  const [height, setHeight] = useState(DEFAULT_HEIGHT);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const panelState = usePanelStore((state) => state.getPanelState(projectId));
+  const setAgentPanelCollapsed = usePanelStore((state) => state.setAgentPanelCollapsed);
+  const setAgentPanelHeight = usePanelStore((state) => state.setAgentPanelHeight);
+  
+  const isCollapsed = panelState.agentPanelCollapsed;
+  const height = panelState.agentPanelHeight;
+  
+  const setIsCollapsed = useCallback((collapsed: boolean) => {
+    setAgentPanelCollapsed(projectId, collapsed);
+  }, [projectId, setAgentPanelCollapsed]);
+  
+  const setHeight = useCallback((newHeight: number) => {
+    setAgentPanelHeight(projectId, newHeight);
+  }, [projectId, setAgentPanelHeight]);
+  
   const [isResizing, setIsResizing] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
