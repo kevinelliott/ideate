@@ -33,14 +33,14 @@ const buildModeLabels: Record<BuildMode, string> = {
 
 export function OverviewContent({ project }: OverviewContentProps) {
   const stories = usePrdStore((state) => state.stories);
-  const getProjectState = useBuildStore((state) => state.getProjectState);
+  // Subscribe directly to the project state for reactivity
+  const projectState = useBuildStore((state) => state.projectStates[project.id]);
   const entries = useCostStore((state) => state.entries);
 
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const projectState = getProjectState(project.id);
-  const buildStatus = projectState.status;
+  const buildStatus = projectState?.status ?? 'idle';
 
   // Load settings from disk
   const loadSettings = async (showLoading = true) => {

@@ -17,10 +17,10 @@ const COLLAPSED_HEIGHT = 36;
 
 
 export function LogPanel({ projectId }: LogPanelProps) {
-  const getProjectState = useBuildStore((state) => state.getProjectState);
-  const projectState = getProjectState(projectId);
-  const logs = projectState.logs;
-  const status = projectState.status;
+  // Subscribe directly to the project state to trigger re-renders when logs change
+  const projectState = useBuildStore((state) => state.projectStates[projectId]);
+  const logs = projectState?.logs ?? [];
+  const status = projectState?.status ?? 'idle';
 
   const { resolvedTheme } = useTheme();
 

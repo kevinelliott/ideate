@@ -55,12 +55,15 @@ function getStatusLabel(status: StoryBuildStatus) {
 }
 
 export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
-  const getProjectState = useBuildStore((state) => state.getProjectState);
-  const projectState = getProjectState(projectId);
+  // Subscribe directly to the project state to trigger re-renders when state changes
+  const projectState = useBuildStore((state) => state.projectStates[projectId]);
   const stories = usePrdStore((state) => state.stories);
   const selectStory = usePrdStore((state) => state.selectStory);
 
-  const { status: buildStatus, storyStatuses, currentStoryId, logs } = projectState;
+  const buildStatus = projectState?.status ?? 'idle';
+  const storyStatuses = projectState?.storyStatuses ?? {};
+  const currentStoryId = projectState?.currentStoryId ?? null;
+  const logs = projectState?.logs ?? [];
 
   const storyProgress: StoryWithBuildStatus[] = useMemo(() => {
     return stories.map((story) => {

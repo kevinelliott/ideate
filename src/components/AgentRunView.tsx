@@ -73,10 +73,9 @@ export function AgentRunView({ process }: AgentRunViewProps) {
   const projects = useProjectStore((state) => state.projects);
   const project = projects.find((p) => p.id === process.projectId);
   
-  // Get logs from buildStore for build processes
-  const getProjectState = useBuildStore((state) => state.getProjectState);
-  const projectState = getProjectState(process.projectId);
-  const buildLogs = projectState.logs;
+  // Get logs from buildStore for build processes - subscribe directly for reactivity
+  const projectState = useBuildStore((state) => state.projectStates[process.projectId]);
+  const buildLogs = projectState?.logs ?? [];
   
   // Get logs from processStore for non-build processes
   const processLogs = useProcessStore((state) => state.getProcessLogs(process.processId));

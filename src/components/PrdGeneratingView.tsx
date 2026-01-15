@@ -12,9 +12,9 @@ interface DetectedStory {
 }
 
 export function PrdGeneratingView({ projectId, projectName }: PrdGeneratingViewProps) {
-  const getProjectState = useBuildStore((state) => state.getProjectState);
-  const projectState = getProjectState(projectId);
-  const logs = projectState.logs;
+  // Subscribe directly to the project state to trigger re-renders when logs change
+  const projectState = useBuildStore((state) => state.projectStates[projectId]);
+  const logs = projectState?.logs ?? [];
 
   // Parse logs to extract story titles as they're generated
   const detectedStories = useMemo(() => {

@@ -8,12 +8,12 @@ interface BuildControlsProps {
 }
 
 export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
-  const getProjectState = useBuildStore((state) => state.getProjectState);
+  // Subscribe directly to the project state for reactivity
+  const projectState = useBuildStore((state) => state.projectStates[projectId]);
   const pauseBuild = useBuildStore((state) => state.pauseBuild);
   
-  const projectState = getProjectState(projectId);
-  const status = projectState.status;
-  const currentStoryId = projectState.currentStoryId;
+  const status = projectState?.status ?? 'idle';
+  const currentStoryId = projectState?.currentStoryId ?? null;
 
   const stories = usePrdStore((state) => state.stories);
 

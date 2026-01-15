@@ -71,12 +71,11 @@ export function PreviewPanel({ projectId, projectPath }: PreviewPanelProps) {
 
   const setOutRayConfig = useIntegrationsStore((state) => state.setOutRayConfig);
 
-  // Track build state to refresh preview after story completion
-  const getProjectState = useBuildStore((state) => state.getProjectState);
-  const buildState = getProjectState(projectId);
+  // Track build state to refresh preview after story completion - subscribe directly for reactivity
+  const buildState = useBuildStore((state) => state.projectStates[projectId]);
   
   // Count completed stories
-  const completedCount = Object.values(buildState.storyStatuses).filter(
+  const completedCount = Object.values(buildState?.storyStatuses ?? {}).filter(
     (s) => s === 'complete'
   ).length;
 

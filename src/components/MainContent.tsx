@@ -68,7 +68,8 @@ export function MainContent() {
   const buildStatusProjectId = useProjectStore((state) => state.buildStatusProjectId);
   const projectOverviewProjectId = useProjectStore((state) => state.projectOverviewProjectId);
   
-  const getProjectState = useBuildStore((state) => state.getProjectState);
+  // Subscribe directly to project states for reactivity
+  const projectStates = useBuildStore((state) => state.projectStates);
 
   const loadingProjectIdRef = useRef<string | null>(null);
 
@@ -91,8 +92,8 @@ export function MainContent() {
       loadingProjectIdRef.current = activeProjectId;
 
       // Check if this project has an active PRD generation process running
-      const projectBuildState = getProjectState(activeProjectId);
-      const hasActivePrdProcess = projectBuildState.currentProcessId !== null;
+      const projectBuildState = projectStates[activeProjectId];
+      const hasActivePrdProcess = projectBuildState?.currentProcessId !== null;
       const currentPrdStatus = usePrdStore.getState().status;
       const isGenerating = currentPrdStatus === "generating" && hasActivePrdProcess;
 
@@ -145,7 +146,7 @@ export function MainContent() {
     }
 
     loadPrd();
-  }, [activeProjectId, activeProject?.path, setPrd, clearPrd, setStatus, selectStory, loadedProjectId, getProjectState]);
+  }, [activeProjectId, activeProject?.path, setPrd, clearPrd, setStatus, selectStory, loadedProjectId, projectStates]);
 
   // Show agent run view if a process is selected (takes priority)
   if (selectedProcess) {
