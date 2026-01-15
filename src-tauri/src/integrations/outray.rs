@@ -7,7 +7,7 @@ use std::fs;
 use std::process::Command;
 
 use tauri::AppHandle;
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 
 const WEB_URL: &str = "https://outray.dev";
 const DASHBOARD_URL: &str = "https://outray.dev/dashboard";
@@ -87,31 +87,43 @@ pub struct OutrayExecutable {
 /// Gets the OutRay executable to use.
 /// Prefers npx/system outray over bundled binary since the Bun-compiled
 /// binary has issues with fetch, os.homedir, etc.
+/// This is async to avoid blocking the UI thread during shell command execution.
 #[tauri::command(rename_all = "camelCase")]
-pub fn get_sidecar_path(app: AppHandle) -> Result<OutrayExecutable, String> {
+pub async fn get_sidecar_path(app: AppHandle) -> Result<OutrayExecutable, String> {
     use tauri::Manager;
     
-    // First, check if 'outray' is in PATH (globally installed)
-    if let Ok(output) = Command::new("which").arg("outray").output() {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Ok(OutrayExecutable {
-                    path,
+    // Run the which commands in a blocking task to avoid blocking the UI
+    let result = tokio::task::spawn_blocking(|| {
+        // First, check if 'outray' is in PATH (globally installed)
+        if let Ok(output) = Command::new("which").arg("outray").output() {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(OutrayExecutable {
+                        path,
+                        needs_auth_token: false,
+                    });
+                }
+            }
+        }
+        
+        // Second, check if npx is available
+        if let Ok(output) = Command::new("which").arg("npx").output() {
+            if output.status.success() {
+                return Some(OutrayExecutable {
+                    path: "npx".to_string(),
                     needs_auth_token: false,
                 });
             }
         }
-    }
+        
+        None
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
     
-    // Second, check if npx is available
-    if let Ok(output) = Command::new("which").arg("npx").output() {
-        if output.status.success() {
-            return Ok(OutrayExecutable {
-                path: "npx".to_string(),
-                needs_auth_token: false,
-            });
-        }
+    if let Some(exec) = result {
+        return Ok(exec);
     }
     
     // Fall back to bundled binary (but note it needs --key workaround)
@@ -186,8 +198,8 @@ pub async fn login(app: AppHandle, _custom_cli_path: Option<String>) -> Result<L
         .map_err(|e| format!("Failed to parse login response: {}", e))?;
     
     // Step 2: Open browser with login URL
-    app.shell()
-        .open(&login_init.login_url, None::<tauri_plugin_shell::open::Program>)
+    app.opener()
+        .open_url(&login_init.login_url, None::<&str>)
         .map_err(|e| format!("Failed to open browser: {}", e))?;
     
     // Step 3: Poll for authentication (up to 5 minutes)
@@ -351,8 +363,8 @@ pub async fn check_auth(_app: AppHandle, _custom_cli_path: Option<String>) -> Re
 /// Opens the OutRay dashboard in the browser for account setup.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn open_dashboard(app: AppHandle) -> Result<(), String> {
-    app.shell()
-        .open(DASHBOARD_URL, None::<tauri_plugin_shell::open::Program>)
+    app.opener()
+        .open_url(DASHBOARD_URL, None::<&str>)
         .map_err(|e| format!("Failed to open browser: {}", e))
 }
 

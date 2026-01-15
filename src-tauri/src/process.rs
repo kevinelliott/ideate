@@ -85,8 +85,9 @@ pub fn kill_all_processes() {
 }
 
 /// Spawns an agent process and returns its ID.
+/// This is async to avoid blocking the UI thread during process startup.
 #[tauri::command(rename_all = "camelCase")]
-pub fn spawn_agent(
+pub async fn spawn_agent(
     app: AppHandle,
     executable: String,
     args: Vec<String>,
@@ -95,23 +96,28 @@ pub fn spawn_agent(
 ) -> Result<SpawnAgentResult, String> {
     let process_id = Uuid::new_v4().to_string();
 
-    let mut cmd = Command::new(&executable);
-    cmd.args(&args)
-        .current_dir(&working_directory)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // Spawn the process in a blocking task to avoid blocking the UI
+    let child = tokio::task::spawn_blocking(move || {
+        let mut cmd = Command::new(&executable);
+        cmd.args(&args)
+            .current_dir(&working_directory)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
-    // Add custom environment variables if provided
-    if let Some(env_vars) = env {
-        for (key, value) in env_vars {
-            cmd.env(key, value);
+        // Add custom environment variables if provided
+        if let Some(env_vars) = env {
+            for (key, value) in env_vars {
+                cmd.env(key, value);
+            }
         }
-    }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to spawn process '{}': {}", executable, e))?;
+        cmd.spawn()
+            .map_err(|e| format!("Failed to spawn process '{}': {}", executable, e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
 
+    let mut child = child;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
