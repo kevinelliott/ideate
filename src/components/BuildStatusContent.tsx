@@ -154,7 +154,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
           <span className="text-xs text-muted">{logs.length} entries</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-auto-hide bg-background p-4">
+        <div className="flex-1 overflow-y-auto scrollbar-auto-hide bg-background p-4 select-text">
           {logs.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted text-sm">
               {buildStatus === "idle" ? "Build not started" : "Waiting for logs..."}
@@ -164,7 +164,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
               {logs.map((log, i) => (
                 <div
                   key={i}
-                  className={`${
+                  className={`break-words ${
                     log.type === "stderr" ? "text-destructive" :
                     log.type === "system" ? "text-accent" :
                     "text-secondary"
