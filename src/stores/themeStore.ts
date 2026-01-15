@@ -1,71 +1,120 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-
-export type Theme = "system" | "light" | "dark";
+import { type ThemeId, type ColorMode, applyThemeToDocument } from "../themes";
 
 interface ThemeState {
-  theme: Theme;
-  resolvedTheme: "light" | "dark";
+  themeId: ThemeId;
+  colorMode: ColorMode;
+  resolvedMode: "light" | "dark";
   isLoaded: boolean;
-  setTheme: (theme: Theme) => void;
+  setThemeId: (themeId: ThemeId) => void;
+  setColorMode: (mode: ColorMode) => void;
   loadTheme: () => Promise<void>;
+  saveTheme: () => Promise<void>;
 }
 
-function getSystemTheme(): "light" | "dark" {
+function getSystemMode(): "light" | "dark" {
   if (typeof window !== "undefined" && window.matchMedia) {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   return "light";
 }
 
-function resolveTheme(theme: Theme): "light" | "dark" {
-  if (theme === "system") {
-    return getSystemTheme();
+function resolveMode(mode: ColorMode): "light" | "dark" {
+  if (mode === "system") {
+    return getSystemMode();
   }
-  return theme;
+  return mode;
 }
 
-function applyTheme(resolvedTheme: "light" | "dark") {
-  const root = document.documentElement;
-  root.classList.remove("light", "dark");
-  root.classList.add(resolvedTheme);
-}
-
-export const useThemeStore = create<ThemeState>((set) => ({
-  theme: "system",
-  resolvedTheme: "light",
+export const useThemeStore = create<ThemeState>((set, get) => ({
+  themeId: "ideate",
+  colorMode: "system",
+  resolvedMode: "light",
   isLoaded: false,
 
-  setTheme: (theme: Theme) => {
-    const resolvedTheme = resolveTheme(theme);
-    applyTheme(resolvedTheme);
-    set({ theme, resolvedTheme });
+  setThemeId: (themeId: ThemeId) => {
+    const state = get();
+    const resolvedMode = resolveMode(state.colorMode);
+    applyThemeToDocument(themeId, resolvedMode);
+    set({ themeId });
+    // Save after state update
+    setTimeout(() => get().saveTheme(), 0);
+  },
+
+  setColorMode: (colorMode: ColorMode) => {
+    const state = get();
+    const resolvedMode = resolveMode(colorMode);
+    applyThemeToDocument(state.themeId, resolvedMode);
+    set({ colorMode, resolvedMode });
+    // Save after state update
+    setTimeout(() => get().saveTheme(), 0);
   },
 
   loadTheme: async () => {
     try {
-      const preferences = await invoke<{ theme?: string }>("load_preferences");
-      const theme = (preferences.theme as Theme) || "system";
-      const resolvedTheme = resolveTheme(theme);
-      applyTheme(resolvedTheme);
-      set({ theme, resolvedTheme, isLoaded: true });
+      const preferences = await invoke<{ 
+        theme?: string; 
+        themeId?: string;
+        colorMode?: string;
+      }>("load_preferences");
+      
+      // Support both old "theme" field and new "themeId" + "colorMode" fields
+      const themeId = (preferences.themeId as ThemeId) || "ideate";
+      const colorMode = (preferences.colorMode as ColorMode) || 
+                        (preferences.theme as ColorMode) || 
+                        "system";
+      const resolvedMode = resolveMode(colorMode);
+      
+      applyThemeToDocument(themeId, resolvedMode);
+      set({ themeId, colorMode, resolvedMode, isLoaded: true });
     } catch (err) {
       console.error("Failed to load theme preference:", err);
-      const resolvedTheme = getSystemTheme();
-      applyTheme(resolvedTheme);
-      set({ theme: "system", resolvedTheme, isLoaded: true });
+      const resolvedMode = getSystemMode();
+      applyThemeToDocument("ideate", resolvedMode);
+      set({ themeId: "ideate", colorMode: "system", resolvedMode, isLoaded: true });
+    }
+  },
+
+  saveTheme: async () => {
+    const { themeId, colorMode } = get();
+    try {
+      // Load current preferences and merge
+      const currentPrefs = await invoke<Record<string, unknown>>("load_preferences");
+      await invoke("save_preferences", {
+        preferences: {
+          ...currentPrefs,
+          themeId,
+          colorMode,
+          // Keep backward compatibility with old theme field
+          theme: colorMode,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to save theme preference:", err);
     }
   },
 }));
 
+// Listen for system color scheme changes
 if (typeof window !== "undefined" && window.matchMedia) {
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   mediaQuery.addEventListener("change", () => {
     const state = useThemeStore.getState();
-    if (state.theme === "system") {
-      const resolvedTheme = getSystemTheme();
-      applyTheme(resolvedTheme);
-      useThemeStore.setState({ resolvedTheme });
+    if (state.colorMode === "system") {
+      const resolvedMode = getSystemMode();
+      applyThemeToDocument(state.themeId, resolvedMode);
+      useThemeStore.setState({ resolvedMode });
     }
   });
 }
+
+// ============================================================================
+// Deprecated exports for backward compatibility
+// These map the old Theme type to the new ColorMode type
+// ============================================================================
+
+export type Theme = ColorMode;
+
+// Legacy hook compatibility
+export { type ThemeId, type ColorMode };

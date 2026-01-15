@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useTheme, type Theme } from "../hooks/useTheme";
+import { useTheme, type ColorMode, type ThemeId } from "../hooks/useTheme";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
 import { DEFAULT_PROMPTS, PROMPT_CATEGORIES, getPromptsByCategory, type PromptCategory } from "../utils/prompts";
 import { useIntegrationsStore, type OutRayConfig } from "../stores/integrationsStore";
@@ -12,7 +12,9 @@ interface Preferences {
   logBufferSize: number;
   maxParallelAgents: number;
   agentPaths: Array<{ agentId: string; path: string }>;
-  theme: string;
+  themeId: string;
+  colorMode: string;
+  theme: string; // legacy
   appIcon: string;
   promptOverrides: Record<string, string>;
   outray?: OutRayConfig;
@@ -51,7 +53,7 @@ type SettingsTab = "general" | "agents" | "prompts" | "integrations";
 type AppIconVariant = "transparent" | "light" | "dark";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { theme, setTheme } = useTheme();
+  const { themeId, colorMode, setThemeId, setColorMode, availableThemes } = useTheme();
   
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [defaultAgent, setDefaultAgent] = useState<string>("claude-code");
@@ -190,7 +192,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         logBufferSize,
         maxParallelAgents,
         agentPaths: [],
-        theme: theme,
+        themeId: themeId,
+        colorMode: colorMode,
+        theme: colorMode, // legacy field
         appIcon,
         promptOverrides,
         outray: outrayConfig,
@@ -210,8 +214,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     onClose();
   };
 
-  const handleThemeChange = (newTheme: Theme) => {
-    setTheme(newTheme);
+  const handleColorModeChange = (newMode: ColorMode) => {
+    setColorMode(newMode);
+    setIsDirty(true);
+  };
+
+  const handleThemeIdChange = (newThemeId: ThemeId) => {
+    setThemeId(newThemeId);
     setIsDirty(true);
   };
 
@@ -380,13 +389,39 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   Appearance
                 </h3>
                 <div className="space-y-4">
+                  {/* Theme Selection */}
                   <div>
                     <label className="block text-sm text-foreground mb-2">Theme</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {availableThemes.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => handleThemeIdChange(t.id as ThemeId)}
+                          className={`flex flex-col items-start p-3 rounded-lg border transition-colors text-left ${
+                            themeId === t.id
+                              ? "border-accent bg-accent/10"
+                              : "border-border hover:border-secondary"
+                          }`}
+                        >
+                          <span className={`text-sm font-medium ${themeId === t.id ? "text-accent" : "text-foreground"}`}>
+                            {t.name}
+                          </span>
+                          <span className="text-xs text-muted mt-0.5 line-clamp-2">
+                            {t.description}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color Mode Selection */}
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Color Mode</label>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleThemeChange("light")}
+                        onClick={() => handleColorModeChange("light")}
                         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                          theme === "light"
+                          colorMode === "light"
                             ? "border-accent bg-accent/10 text-accent"
                             : "border-border hover:border-secondary text-secondary hover:text-foreground"
                         }`}
@@ -397,9 +432,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <span className="text-sm">Light</span>
                       </button>
                       <button
-                        onClick={() => handleThemeChange("dark")}
+                        onClick={() => handleColorModeChange("dark")}
                         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                          theme === "dark"
+                          colorMode === "dark"
                             ? "border-accent bg-accent/10 text-accent"
                             : "border-border hover:border-secondary text-secondary hover:text-foreground"
                         }`}
@@ -410,9 +445,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <span className="text-sm">Dark</span>
                       </button>
                       <button
-                        onClick={() => handleThemeChange("system")}
+                        onClick={() => handleColorModeChange("system")}
                         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                          theme === "system"
+                          colorMode === "system"
                             ? "border-accent bg-accent/10 text-accent"
                             : "border-border hover:border-secondary text-secondary hover:text-foreground"
                         }`}

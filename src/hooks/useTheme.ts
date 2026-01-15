@@ -1,78 +1,49 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useThemeStore, type ColorMode, type ThemeId } from '../stores/themeStore'
+import { getThemeList } from '../themes'
 
-export type Theme = 'light' | 'dark' | 'system'
-
-function getSystemTheme(): 'light' | 'dark' {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-function applyTheme(theme: Theme) {
-  const root = document.documentElement
-  
-  // Remove existing theme classes
-  root.classList.remove('light', 'dark')
-  
-  if (theme === 'system') {
-    // Let the CSS media query handle it
-    return
-  }
-  
-  // Apply the explicit theme class
-  root.classList.add(theme)
-}
+// Re-export types for convenience
+export type { ThemeId, ColorMode }
+export type Theme = ColorMode // Backward compatibility
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const stored = localStorage.getItem('theme') as Theme | null
-    return stored || 'system'
-  })
+  const themeId = useThemeStore((state) => state.themeId)
+  const colorMode = useThemeStore((state) => state.colorMode)
+  const resolvedMode = useThemeStore((state) => state.resolvedMode)
+  const setThemeId = useThemeStore((state) => state.setThemeId)
+  const setColorMode = useThemeStore((state) => state.setColorMode)
 
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => {
-    const stored = localStorage.getItem('theme') as Theme | null
-    if (stored === 'light' || stored === 'dark') return stored
-    return getSystemTheme()
-  })
+  // Legacy compatibility: "theme" refers to colorMode
+  const theme = colorMode
+  const resolvedTheme = resolvedMode
 
-  // Apply theme on mount and when it changes
-  useEffect(() => {
-    applyTheme(theme)
-    
-    if (theme === 'system') {
-      setResolvedTheme(getSystemTheme())
-    } else {
-      setResolvedTheme(theme)
-    }
-    
-    localStorage.setItem('theme', theme)
-  }, [theme])
-
-  // Listen for system theme changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    
-    const handleChange = () => {
-      if (theme === 'system') {
-        setResolvedTheme(getSystemTheme())
-      }
-    }
-    
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [theme])
-
-  const setTheme = useCallback((newTheme: Theme) => {
-    setThemeState(newTheme)
-  }, [])
+  const setTheme = useCallback((mode: ColorMode) => {
+    setColorMode(mode)
+  }, [setColorMode])
 
   const toggleTheme = useCallback(() => {
-    setThemeState((current) => {
-      if (current === 'light') return 'dark'
-      if (current === 'dark') return 'system'
-      return 'light'
-    })
-  }, [])
+    const currentMode = useThemeStore.getState().colorMode
+    if (currentMode === 'light') {
+      setColorMode('dark')
+    } else if (currentMode === 'dark') {
+      setColorMode('system')
+    } else {
+      setColorMode('light')
+    }
+  }, [setColorMode])
+
+  const availableThemes = getThemeList()
 
   return {
+    // New theme system
+    themeId,
+    colorMode,
+    resolvedMode,
+    setThemeId,
+    setColorMode,
+    availableThemes,
+    
+    // Legacy compatibility
     theme,
     resolvedTheme,
     setTheme,

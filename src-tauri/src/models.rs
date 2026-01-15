@@ -317,7 +317,12 @@ pub struct Preferences {
     pub max_parallel_agents: i32,
     #[serde(default)]
     pub agent_paths: Vec<AgentCliPath>,
-    #[serde(default = "default_theme")]
+    #[serde(default = "default_theme_id")]
+    pub theme_id: String,
+    #[serde(default = "default_color_mode")]
+    pub color_mode: String,
+    /// Legacy field for backward compatibility
+    #[serde(default = "default_color_mode")]
     pub theme: String,
     #[serde(default = "default_app_icon")]
     pub app_icon: String,
@@ -351,7 +356,11 @@ fn default_app_icon() -> String {
     "transparent".to_string()
 }
 
-fn default_theme() -> String {
+fn default_theme_id() -> String {
+    "ideate".to_string()
+}
+
+fn default_color_mode() -> String {
     "system".to_string()
 }
 
@@ -364,7 +373,9 @@ impl Default for Preferences {
             log_buffer_size: default_log_buffer_size(),
             max_parallel_agents: default_max_parallel_agents(),
             agent_paths: Vec::new(),
-            theme: default_theme(),
+            theme_id: default_theme_id(),
+            color_mode: default_color_mode(),
+            theme: default_color_mode(),
             app_icon: default_app_icon(),
             prompt_overrides: HashMap::new(),
             has_seen_welcome_guide: false,
