@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useBuildStore } from '../stores/buildStore'
-import { usePrdStore } from '../stores/prdStore'
+import { usePrdStore, type Story } from '../stores/prdStore'
 import { useCostStore } from '../stores/costStore'
 import { useProcessStore } from '../stores/processStore'
+import { useAgentStore } from '../stores/agentStore'
+import { useProjectStore } from '../stores/projectStore'
 import { defaultPlugins } from '../types'
 import { usePromptStore } from '../stores/promptStore'
 import { notify } from '../utils/notify'
@@ -22,10 +24,84 @@ interface WaitAgentResult {
 interface ProjectSettings {
   agent: string | null
   autonomy: AutonomyLevel
-  build_mode: BuildMode | null
+  buildMode: BuildMode | null
 }
 
-const DEFAULT_PARALLEL_LIMIT = 3
+const DEFAULT_PARALLEL_LIMIT = 4
+
+interface StoryDeps {
+  storyId: string
+  prerequisites: string[]
+  conflicts: string[]
+}
+
+type StoryDepGraph = Record<string, StoryDeps>
+
+interface WorktreeResult {
+  worktreePath: string
+  branchName: string
+}
+
+interface GlobalPreferences {
+  maxParallelAgents?: number
+}
+
+function analyzeStoryDependencies(stories: Story[]): StoryDepGraph {
+  const graph: StoryDepGraph = {}
+
+  for (const story of stories) {
+    const text = [
+      story.title,
+      story.description,
+      story.acceptanceCriteria.join('\n'),
+      story.notes ?? '',
+    ].join('\n').toLowerCase()
+
+    const prerequisites = new Set<string>()
+
+    for (const other of stories) {
+      if (other.id === story.id) continue
+      
+      // Check if this story references another story by ID
+      if (text.includes(other.id.toLowerCase())) {
+        prerequisites.add(other.id)
+      }
+      
+      // Check for keywords like "after", "depends on", "requires"
+      const otherTitle = other.title.toLowerCase()
+      const dependencyPatterns = [
+        `after ${otherTitle}`,
+        `depends on ${otherTitle}`,
+        `requires ${otherTitle}`,
+        `following ${otherTitle}`,
+        `once ${otherTitle}`,
+      ]
+      
+      for (const pattern of dependencyPatterns) {
+        if (text.includes(pattern)) {
+          prerequisites.add(other.id)
+          break
+        }
+      }
+      
+      // Check notes for explicit dependency mentions
+      const notes = (story.notes ?? '').toLowerCase()
+      if (notes.includes(other.id.toLowerCase()) || 
+          notes.includes(`prerequisite: ${otherTitle}`) ||
+          notes.includes(`depends: ${otherTitle}`)) {
+        prerequisites.add(other.id)
+      }
+    }
+
+    graph[story.id] = {
+      storyId: story.id,
+      prerequisites: Array.from(prerequisites),
+      conflicts: [], // Could be extended for mutual exclusion
+    }
+  }
+
+  return graph
+}
 
 export function useBuildLoop(projectId: string | undefined, projectPath: string | undefined) {
   const getProjectState = useBuildStore((state) => state.getProjectState)
@@ -48,10 +124,13 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
   const registerProcess = useProcessStore((state) => state.registerProcess)
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
+  const defaultAgentId = useAgentStore((state) => state.defaultAgentId)
+  const showBuildStatus = useProjectStore((state) => state.showBuildStatus)
 
   const isRunningRef = useRef(false)
   const storyIndexRef = useRef(0)
   const activeProcessesRef = useRef<Map<string, string>>(new Map())
+  const worktreeRef = useRef<Map<string, { path: string; branch: string }>>(new Map())
 
   const projectState = projectId ? getProjectState(projectId) : null
   const status = projectState?.status || 'idle'
@@ -80,7 +159,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     try {
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
-      const agentId = settings?.agent || 'amp'
+      const agentId = settings?.agent || defaultAgentId
 
       const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
       const prompt = generatePrompt(story)
@@ -152,9 +231,22 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     setStoryStatus(projectId, story.id, 'in-progress')
     appendLog(projectId, 'system', `[Parallel] Starting story ${story.id}: ${story.title}`)
 
+    let worktreePath: string | null = null
+    let branchName: string | null = null
+
     try {
+      // Prepare worktree for isolated file edits
+      const prep = await invoke<WorktreeResult>('prepare_story_worktree', {
+        projectPath,
+        storyId: story.id,
+      })
+      worktreePath = prep.worktreePath
+      branchName = prep.branchName
+      worktreeRef.current.set(story.id, { path: worktreePath, branch: branchName })
+      appendLog(projectId, 'system', `[Parallel] Created worktree for ${story.id} at ${worktreePath}`)
+
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
-      const agentId = settings?.agent || 'amp'
+      const agentId = settings?.agent || defaultAgentId
 
       const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
       const prompt = generatePrompt(story)
@@ -164,10 +256,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
       const startTime = Date.now()
 
+      // Spawn agent in the worktree directory, not main project
       const result = await invoke<SpawnAgentResult>('spawn_agent', {
         executable: plugin.command,
         args,
-        workingDirectory: projectPath,
+        workingDirectory: worktreePath,
       })
 
       activeProcessesRef.current.set(story.id, result.processId)
@@ -182,7 +275,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         command: {
           executable: plugin.command,
           args,
-          workingDirectory: projectPath,
+          workingDirectory: worktreePath,
         },
       })
 
@@ -199,8 +292,18 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const recentLogs = logs.slice(-50).map(l => l.content).join('\n')
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
+      // Finalize worktree (merge if successful, cleanup)
+      await invoke('finalize_story_worktree', {
+        projectPath,
+        storyId: story.id,
+        worktreePath,
+        branchName,
+        success: waitResult.success,
+      })
+      worktreeRef.current.delete(story.id)
+
       if (waitResult.success) {
-        appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed successfully`)
+        appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed and merged`)
         setStoryStatus(projectId, story.id, 'complete')
         updateStory(story.id, { passes: true })
         await savePrd(projectPath)
@@ -214,9 +317,22 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       appendLog(projectId, 'system', `✗ [Parallel] Error running story ${story.id}: ${error}`)
       setStoryStatus(projectId, story.id, 'failed')
       activeProcessesRef.current.delete(story.id)
+
+      // Cleanup worktree on error
+      if (worktreePath && branchName) {
+        await invoke('finalize_story_worktree', {
+          projectPath,
+          storyId: story.id,
+          worktreePath,
+          branchName,
+          success: false,
+        }).catch(() => {})
+        worktreeRef.current.delete(story.id)
+      }
+
       return false
     }
-  }, [projectPath, projectId, generatePrompt, setStoryStatus, appendLog, updateStory, savePrd, parseAndAddFromOutput, registerProcess, unregisterProcess])
+  }, [projectPath, projectId, generatePrompt, setStoryStatus, appendLog, updateStory, savePrd, parseAndAddFromOutput, registerProcess, unregisterProcess, defaultAgentId])
 
   const runParallelBuildLoop = useCallback(async () => {
     if (!projectPath || !projectId || isRunningRef.current) return
@@ -227,7 +343,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     startBuild(projectId)
     appendLog(projectId, 'system', '🚀 Parallel build started')
 
-    const incompleteStories = stories
+    const allStories = usePrdStore.getState().stories
+    const incompleteStories = allStories
       .filter((s) => !s.passes)
       .sort((a, b) => a.priority - b.priority)
 
@@ -238,62 +355,175 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       return
     }
 
-    appendLog(projectId, 'system', `Running ${incompleteStories.length} stories with up to ${DEFAULT_PARALLEL_LIMIT} concurrent agents`)
+    // Auto-navigate to Build Status for parallel builds
+    showBuildStatus(projectId)
 
-    const runBatch = async (storiesToRun: typeof stories) => {
-      const promises = storiesToRun.map(story => runStoryParallel(story))
-      const results = await Promise.all(promises)
-      return results
+    // Load max parallel agents from preferences
+    let maxParallelAgents = DEFAULT_PARALLEL_LIMIT
+    try {
+      const prefs = await invoke<GlobalPreferences | null>('load_preferences')
+      if (prefs?.maxParallelAgents && prefs.maxParallelAgents > 0) {
+        maxParallelAgents = prefs.maxParallelAgents
+      }
+    } catch {
+      // Use default
     }
 
-    let storyQueue = [...incompleteStories]
-    let hasFailures = false
+    appendLog(projectId, 'system', `Running ${incompleteStories.length} stories with up to ${maxParallelAgents} concurrent agents`)
 
-    while (storyQueue.length > 0) {
+    // Analyze dependencies
+    const depGraph = analyzeStoryDependencies(incompleteStories)
+    const depsWithPrereqs = Object.values(depGraph).filter(d => d.prerequisites.length > 0)
+    if (depsWithPrereqs.length > 0) {
+      appendLog(projectId, 'system', `Detected ${depsWithPrereqs.length} stories with prerequisites`)
+      for (const dep of depsWithPrereqs) {
+        appendLog(projectId, 'system', `  ${dep.storyId} depends on: ${dep.prerequisites.join(', ')}`)
+      }
+    }
+
+    // Scheduler state
+    type StoryStatusLocal = 'pending' | 'in-progress' | 'complete' | 'failed'
+    const statusMap = new Map<string, StoryStatusLocal>()
+    incompleteStories.forEach(s => statusMap.set(s.id, 'pending'))
+
+    let activeCount = 0
+    let cancelled = false
+
+    const checkCancelled = () => {
       const buildStatus = useBuildStore.getState().getProjectState(projectId).status
-      if (buildStatus === 'idle') {
-        appendLog(projectId, 'system', 'Build cancelled')
-        break
+      if (buildStatus === 'idle') cancelled = true
+      return cancelled
+    }
+
+    const waitForPauseOrContinue = async (): Promise<boolean> => {
+      while (true) {
+        const buildStatus = useBuildStore.getState().getProjectState(projectId).status
+        if (buildStatus === 'idle') return false
+        if (buildStatus === 'running') return true
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+
+    const getReadyStories = (): typeof incompleteStories => {
+      const runningIds = new Set(
+        Array.from(statusMap.entries())
+          .filter(([_, st]) => st === 'in-progress')
+          .map(([id]) => id)
+      )
+
+      return incompleteStories.filter(story => {
+        const localStatus = statusMap.get(story.id)
+        if (localStatus !== 'pending') return false
+
+        const deps = depGraph[story.id]?.prerequisites ?? []
+        const conflicts = depGraph[story.id]?.conflicts ?? []
+
+        // All prerequisites must be complete
+        const depsSatisfied = deps.every(depId => {
+          const depStory = allStories.find(s => s.id === depId)
+          return depStory?.passes || statusMap.get(depId) === 'complete'
+        })
+
+        if (!depsSatisfied) return false
+
+        // Avoid conflicts with currently running stories
+        const hasConflict = conflicts.some(cId => runningIds.has(cId))
+        if (hasConflict) return false
+
+        return true
+      })
+    }
+
+    let resolveLoop: (() => void) | null = null
+    const loopPromise = new Promise<void>(resolve => { resolveLoop = resolve })
+
+    const scheduleNext = async () => {
+      if (cancelled || checkCancelled()) {
+        if (activeCount === 0 && resolveLoop) resolveLoop()
+        return
       }
 
+      // Check for pause
+      const buildStatus = useBuildStore.getState().getProjectState(projectId).status
       if (buildStatus === 'paused') {
         appendLog(projectId, 'system', 'Build paused - waiting to resume...')
-        while (useBuildStore.getState().getProjectState(projectId).status === 'paused') {
-          await new Promise(resolve => setTimeout(resolve, 500))
-          if (useBuildStore.getState().getProjectState(projectId).status === 'idle') {
-            appendLog(projectId, 'system', 'Build cancelled while paused')
-            isRunningRef.current = false
-            return
-          }
+        const shouldContinue = await waitForPauseOrContinue()
+        if (!shouldContinue) {
+          cancelled = true
+          if (activeCount === 0 && resolveLoop) resolveLoop()
+          return
         }
         appendLog(projectId, 'system', 'Build resumed')
       }
 
-      const batch = storyQueue.splice(0, DEFAULT_PARALLEL_LIMIT)
-      appendLog(projectId, 'system', `Starting batch of ${batch.length} stories`)
+      const ready = getReadyStories()
+      const remainingPendingOrInProgress = Array.from(statusMap.values())
+        .some(st => st === 'pending' || st === 'in-progress')
 
-      const results = await runBatch(batch)
-      const failedCount = results.filter(r => !r).length
+      if (ready.length === 0 && activeCount === 0) {
+        // Nothing running, nothing ready
+        if (remainingPendingOrInProgress) {
+          const pendingCount = Array.from(statusMap.values()).filter(st => st === 'pending').length
+          if (pendingCount > 0) {
+            appendLog(projectId, 'system', `⚠️ ${pendingCount} stories blocked by unmet prerequisites`)
+          }
+        }
+        if (resolveLoop) resolveLoop()
+        return
+      }
 
-      if (failedCount > 0) {
-        hasFailures = true
-        appendLog(projectId, 'system', `${failedCount} stories failed in this batch`)
+      // Fill capacity with ready stories (sorted by priority)
+      ready.sort((a, b) => a.priority - b.priority)
+      
+      while (activeCount < maxParallelAgents && ready.length > 0) {
+        const story = ready.shift()!
+        statusMap.set(story.id, 'in-progress')
+        activeCount++
+
+        // Run story async, schedule next when done
+        runStoryParallel(story)
+          .then((success) => {
+            if (success) {
+              statusMap.set(story.id, 'complete')
+            } else {
+              statusMap.set(story.id, 'failed')
+            }
+          })
+          .catch(() => {
+            statusMap.set(story.id, 'failed')
+          })
+          .finally(() => {
+            activeCount--
+            checkCancelled()
+            scheduleNext()
+          })
       }
     }
 
-    if (hasFailures) {
-      appendLog(projectId, 'system', '⚠️ Build completed with some failures')
-    }
+    // Start scheduling
+    await scheduleNext()
+    await loopPromise
 
+    // Finalization
     const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    const failedCount = Array.from(statusMap.values()).filter(st => st === 'failed').length
+    const blockedCount = Array.from(statusMap.values()).filter(st => st === 'pending').length
+
     if (allComplete) {
       appendLog(projectId, 'system', '🎉 All stories completed successfully!')
+      notify.success('Build complete', 'All stories completed successfully')
+    } else if (cancelled) {
+      appendLog(projectId, 'system', 'Build cancelled')
+    } else {
+      const incompleteCount = failedCount + blockedCount
+      appendLog(projectId, 'system', `Build finished: ${failedCount} failed, ${blockedCount} blocked`)
+      notify.warning('Build finished', `${incompleteCount} ${incompleteCount === 1 ? 'story' : 'stories'} still incomplete`)
     }
 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
     isRunningRef.current = false
-  }, [projectPath, projectId, stories, runStoryParallel, clearLogs, resetStoryStatuses, startBuild, cancelBuild, appendLog, setCurrentStory])
+  }, [projectPath, projectId, stories, runStoryParallel, clearLogs, resetStoryStatuses, startBuild, cancelBuild, appendLog, setCurrentStory, showBuildStatus])
 
   const waitWhilePaused = useCallback(async (): Promise<boolean> => {
     if (!projectId) return false
@@ -392,7 +622,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     if (!projectPath || !projectId || isRunningRef.current) return
 
     const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
-    const buildMode = settings?.build_mode || 'ralph'
+    const buildMode = settings?.buildMode || 'ralph'
+    const autonomy = settings?.autonomy || 'autonomous'
 
     if (buildMode === 'none') {
       appendLog(projectId, 'system', 'Build mode is set to "None" - no automatic building')
@@ -413,6 +644,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     const incompleteStories = stories
       .filter((s) => !s.passes)
       .sort((a, b) => a.priority - b.priority)
+
+    // Auto-navigate to Build Status, except for manual mode with single story
+    const shouldAutoNavigate = !(autonomy === 'manual' && incompleteStories.length === 1)
+    if (shouldAutoNavigate) {
+      showBuildStatus(projectId)
+    }
 
     for (let i = 0; i < incompleteStories.length; i++) {
       const story = incompleteStories[i]
@@ -475,7 +712,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
     isRunningRef.current = false
-  }, [projectPath, projectId, stories, runStory, runParallelBuildLoop, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStory, setStoryStatus])
+  }, [projectPath, projectId, stories, runStory, runParallelBuildLoop, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStory, setStoryStatus, showBuildStatus])
 
   const handleStart = useCallback(() => {
     runBuildLoop()
@@ -574,11 +811,18 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     }
     activeProcessesRef.current.clear()
 
+    // Cleanup all worktrees for parallel builds
+    if (projectPath && worktreeRef.current.size > 0) {
+      appendLog(projectId, 'system', 'Cleaning up worktrees...')
+      await invoke('cleanup_all_story_worktrees', { projectPath }).catch(() => {})
+      worktreeRef.current.clear()
+    }
+
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
     isRunningRef.current = false
     appendLog(projectId, 'system', 'Build cancelled by user')
-  }, [projectId, cancelBuild, appendLog, setCurrentStory, unregisterProcess])
+  }, [projectId, projectPath, cancelBuild, appendLog, setCurrentStory, unregisterProcess])
 
   useEffect(() => {
     const handleSidebarStart = (event: Event) => {

@@ -313,6 +313,8 @@ pub struct Preferences {
     pub default_build_mode: String,
     #[serde(default = "default_log_buffer_size")]
     pub log_buffer_size: i32,
+    #[serde(default = "default_max_parallel_agents")]
+    pub max_parallel_agents: i32,
     #[serde(default)]
     pub agent_paths: Vec<AgentCliPath>,
     #[serde(default = "default_theme")]
@@ -323,6 +325,8 @@ pub struct Preferences {
     pub prompt_overrides: HashMap<String, String>,
     #[serde(default)]
     pub has_seen_welcome_guide: bool,
+    #[serde(default)]
+    pub has_accepted_disclaimer: bool,
     #[serde(default)]
     pub outray: OutRayConfig,
 }
@@ -337,6 +341,10 @@ fn default_build_mode() -> String {
 
 fn default_log_buffer_size() -> i32 {
     1000
+}
+
+fn default_max_parallel_agents() -> i32 {
+    4
 }
 
 fn default_app_icon() -> String {
@@ -354,11 +362,13 @@ impl Default for Preferences {
             default_autonomy: default_autonomy(),
             default_build_mode: default_build_mode(),
             log_buffer_size: default_log_buffer_size(),
+            max_parallel_agents: default_max_parallel_agents(),
             agent_paths: Vec::new(),
             theme: default_theme(),
             app_icon: default_app_icon(),
             prompt_overrides: HashMap::new(),
             has_seen_welcome_guide: false,
+            has_accepted_disclaimer: false,
             outray: OutRayConfig::default(),
         }
     }

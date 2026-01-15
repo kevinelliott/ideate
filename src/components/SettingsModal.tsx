@@ -10,6 +10,7 @@ interface Preferences {
   defaultAutonomy: string;
   defaultBuildMode: string;
   logBufferSize: number;
+  maxParallelAgents: number;
   agentPaths: Array<{ agentId: string; path: string }>;
   theme: string;
   appIcon: string;
@@ -57,6 +58,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [defaultAutonomy, setDefaultAutonomy] = useState<string>("autonomous");
   const [defaultBuildMode, setDefaultBuildMode] = useState<string>("ralph");
   const [logBufferSize, setLogBufferSize] = useState<number>(1000);
+  const [maxParallelAgents, setMaxParallelAgents] = useState<number>(4);
   const [appIcon, setAppIcon] = useState<AppIconVariant>("transparent");
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
@@ -156,6 +158,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setDefaultAutonomy(prefs.defaultAutonomy || "autonomous");
         setDefaultBuildMode(prefs.defaultBuildMode || "ralph");
         setLogBufferSize(prefs.logBufferSize || 1000);
+        setMaxParallelAgents(prefs.maxParallelAgents || 4);
         setAppIcon((prefs.appIcon as AppIconVariant) || "transparent");
         setPromptOverrides(prefs.promptOverrides || {});
       }
@@ -185,6 +188,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         defaultAutonomy,
         defaultBuildMode,
         logBufferSize,
+        maxParallelAgents,
         agentPaths: [],
         theme: theme,
         appIcon,
@@ -583,6 +587,25 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     />
                     <p className="text-xs text-muted mt-1">
                       Maximum number of log entries to keep in memory.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Max Parallel Agents</label>
+                    <input
+                      type="number"
+                      value={maxParallelAgents}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        setMaxParallelAgents(Number.isFinite(v) && v > 0 ? Math.min(v, 8) : 4);
+                        setIsDirty(true);
+                      }}
+                      min={1}
+                      max={8}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <p className="text-xs text-muted mt-1">
+                      Maximum number of stories to build concurrently in Parallel mode.
                     </p>
                   </div>
                 </div>
