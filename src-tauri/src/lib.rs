@@ -15,6 +15,7 @@ mod terminal;
 mod ui_state;
 mod usage;
 mod utils;
+mod worktree;
 
 use tauri::Emitter;
 
@@ -32,6 +33,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             macos::apply_icon_from_preferences(&app.handle());
 
@@ -167,6 +169,10 @@ pub fn run() {
             ui_state::save_ui_state,
             ui_state::save_panel_states,
             ui_state::save_window_state,
+            // Worktree
+            worktree::prepare_story_worktree,
+            worktree::finalize_story_worktree,
+            worktree::cleanup_all_story_worktrees,
             // Utils
             utils::write_binary_file
         ])

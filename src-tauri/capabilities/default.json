@@ -11,6 +11,7 @@
     "fs:allow-download-write-recursive",
     "fs:allow-desktop-write-recursive",
     "fs:allow-home-write-recursive",
-    "shell:default"
+    "shell:default",
+    "opener:default"
   ]
 }
