@@ -22,6 +22,10 @@ const MIN_WIDTH = 180
 const MAX_WIDTH = 400
 const DEFAULT_WIDTH = 240
 
+const MIN_IDEAS_HEIGHT = 80
+const MAX_IDEAS_HEIGHT = 400
+const DEFAULT_IDEAS_HEIGHT = 160
+
 const statusColors: Record<ProjectStatus, string> = {
   idle: 'bg-muted',
   generating: 'bg-accent animate-pulse',
@@ -77,7 +81,6 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const removeProject = useProjectStore((state) => state.removeProject)
   
   const getProjectState = useBuildStore((state) => state.getProjectState)
-  const startBuild = useBuildStore((state) => state.startBuild)
   const pauseBuild = useBuildStore((state) => state.pauseBuild)
   const resumeBuild = useBuildStore((state) => state.resumeBuild)
   const resetBuildState = useBuildStore((state) => state.resetBuildState)
@@ -85,6 +88,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
 
   const clearPrd = usePrdStore((state) => state.clearPrd)
   const loadedProjectId = usePrdStore((state) => state.loadedProjectId)
+  const stories = usePrdStore((state) => state.stories)
 
   void useProcessStore((state) => state.processes) // Subscribe to process changes
   const getProcessesByProject = useProcessStore((state) => state.getProcessesByProject)
@@ -97,11 +101,19 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const addIdea = useIdeasStore((state) => state.addIdea)
 
   const showProcessHistory = useProjectStore((state) => state.showProcessHistory)
+  const processHistoryProjectId = useProjectStore((state) => state.processHistoryProjectId)
+  const showBuildStatus = useProjectStore((state) => state.showBuildStatus)
+  const buildStatusProjectId = useProjectStore((state) => state.buildStatusProjectId)
+  const showProjectOverview = useProjectStore((state) => state.showProjectOverview)
+  const projectOverviewProjectId = useProjectStore((state) => state.projectOverviewProjectId)
+  const showRequirements = useProjectStore((state) => state.showRequirements)
 
   const { theme, toggleTheme } = useTheme()
 
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [isResizing, setIsResizing] = useState(false)
+  const [ideasHeight, setIdeasHeight] = useState(DEFAULT_IDEAS_HEIGHT)
+  const [isResizingIdeas, setIsResizingIdeas] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCreateIdeaOpen, setIsCreateIdeaOpen] = useState(false)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
@@ -109,6 +121,8 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
+  const startYRef = useRef(0)
+  const startHeightRef = useRef(0)
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
@@ -150,6 +164,13 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     startWidthRef.current = width
   }, [width])
 
+  const handleIdeasResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizingIdeas(true)
+    startYRef.current = e.clientY
+    startHeightRef.current = ideasHeight
+  }, [ideasHeight])
+
   useEffect(() => {
     if (!isResizing) return
 
@@ -173,6 +194,28 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   }, [isResizing])
 
   useEffect(() => {
+    if (!isResizingIdeas) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = startYRef.current - e.clientY
+      const newHeight = Math.min(MAX_IDEAS_HEIGHT, Math.max(MIN_IDEAS_HEIGHT, startHeightRef.current + deltaY))
+      setIdeasHeight(newHeight)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizingIdeas(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizingIdeas])
+
+  useEffect(() => {
     if (editingProjectId && editInputRef.current) {
       editInputRef.current.focus()
       editInputRef.current.select()
@@ -186,6 +229,34 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     }
     window.addEventListener('open-settings', handleOpenSettings)
     return () => window.removeEventListener('open-settings', handleOpenSettings)
+  }, [])
+
+  // Listen for keyboard shortcut to toggle keyboard shortcuts (Cmd+/)
+  useEffect(() => {
+    const handleToggleKeyboardShortcuts = () => {
+      setIsKeyboardShortcutsOpen((prev) => !prev)
+    }
+    window.addEventListener('toggle-keyboard-shortcuts', handleToggleKeyboardShortcuts)
+    return () => window.removeEventListener('toggle-keyboard-shortcuts', handleToggleKeyboardShortcuts)
+  }, [])
+
+  // Listen for toggle-project-expand event from keyboard navigation
+  useEffect(() => {
+    const handleToggleProjectExpand = (e: Event) => {
+      const customEvent = e as CustomEvent<{ projectId: string }>
+      const { projectId } = customEvent.detail
+      setExpandedProjects((prev) => {
+        const next = new Set(prev)
+        if (next.has(projectId)) {
+          next.delete(projectId)
+        } else {
+          next.add(projectId)
+        }
+        return next
+      })
+    }
+    window.addEventListener('toggle-project-expand', handleToggleProjectExpand)
+    return () => window.removeEventListener('toggle-project-expand', handleToggleProjectExpand)
   }, [])
 
   const handleContextMenu = (e: React.MouseEvent, project: Project) => {
@@ -266,19 +337,52 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     notify.success('Project removed', projectName)
   }
 
+  const canStartBuild = (projectId: string) => {
+    const projectBuildState = getProjectState(projectId)
+    const buildStatus = projectBuildState.status
+    
+    // If already running or paused, can interact (pause/resume)
+    if (buildStatus === 'running' || buildStatus === 'paused') {
+      return true
+    }
+    
+    // For idle state, check if this is the active project with loaded stories
+    if (projectId === activeProjectId && loadedProjectId === projectId) {
+      // Check if there are incomplete stories
+      return stories.length > 0 && stories.some(s => !s.passes)
+    }
+    
+    // For non-active projects, allow click (will check when build starts)
+    return true
+  }
+
   const handlePlayPause = (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation()
     
     const projectBuildState = getProjectState(projectId)
     const buildStatus = projectBuildState.status
     
-    if (projectId !== activeProjectId) {
+    // Check if build can start for idle projects
+    if (buildStatus === 'idle' && !canStartBuild(projectId)) {
+      return
+    }
+    
+    const needsProjectSwitch = projectId !== activeProjectId
+    
+    if (needsProjectSwitch) {
       setActiveProject(projectId)
     }
     
     if (buildStatus === 'idle') {
-      window.dispatchEvent(new CustomEvent('sidebar-start-build', { detail: { projectId } }))
-      startBuild(projectId)
+      // If we need to switch projects, delay the build start until the component mounts
+      if (needsProjectSwitch) {
+        // Use setTimeout to allow React to render the new ProjectLayout
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('sidebar-start-build', { detail: { projectId } }))
+        }, 50)
+      } else {
+        window.dispatchEvent(new CustomEvent('sidebar-start-build', { detail: { projectId } }))
+      }
     } else if (buildStatus === 'running') {
       pauseBuild(projectId)
     } else if (buildStatus === 'paused') {
@@ -329,11 +433,14 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const getPlayButtonClass = (projectId: string) => {
     const projectBuildState = getProjectState(projectId)
     const buildStatus = projectBuildState.status
+    const canStart = canStartBuild(projectId)
     
     if (buildStatus === 'running') {
       return 'text-warning hover:bg-warning/10'
     } else if (buildStatus === 'paused') {
       return 'text-accent hover:bg-accent/10'
+    } else if (!canStart) {
+      return 'text-muted/50 cursor-not-allowed'
     } else {
       return 'text-muted hover:text-accent hover:bg-accent/10'
     }
@@ -521,12 +628,29 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                     {/* Expanded content */}
                     {isExpanded && (
                       <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-border pl-2">
+                        {/* Project item */}
+                        <li>
+                          <div
+                            onClick={() => { selectIdea(null); selectProcess(null); showProjectOverview(project.id); }}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+                              projectOverviewProjectId === project.id
+                                ? 'text-foreground font-medium hover:bg-card/50'
+                                : 'text-secondary hover:text-foreground hover:bg-card/50'
+                            }`}
+                          >
+                            <svg className="w-3.5 h-3.5 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                            <span>Overview</span>
+                          </div>
+                        </li>
+
                         {/* Requirements item */}
                         <li>
                           <div
-                          onClick={() => { selectIdea(null); selectProcess(null); setActiveProject(project.id); }}
+                            onClick={() => { selectIdea(null); selectProcess(null); showRequirements(project.id); }}
                             className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
-                              isActive && !selectedProcessId
+                              isActive && !selectedProcessId && buildStatusProjectId !== project.id && projectOverviewProjectId !== project.id && processHistoryProjectId !== project.id
                                 ? 'text-foreground font-medium hover:bg-card/50'
                                 : 'text-secondary hover:text-foreground hover:bg-card/50'
                             }`}
@@ -535,6 +659,46 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                             <span>Requirements</span>
+                          </div>
+                        </li>
+
+                        {/* Build Status item */}
+                        <li>
+                          <div
+                            onClick={() => { selectIdea(null); selectProcess(null); showBuildStatus(project.id); }}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+                              buildStatusProjectId === project.id
+                                ? 'text-foreground font-medium hover:bg-card/50'
+                                : 'text-secondary hover:text-foreground hover:bg-card/50'
+                            }`}
+                          >
+                            {isRunningOrPaused ? (
+                              <span className={`w-3.5 h-3.5 flex items-center justify-center`}>
+                                <span className={`w-2 h-2 rounded-full ${buildStatus === 'running' ? 'bg-accent animate-pulse' : 'bg-warning'}`} />
+                              </span>
+                            ) : (
+                              <svg className="w-3.5 h-3.5 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                              </svg>
+                            )}
+                            <span>Build Status</span>
+                          </div>
+                        </li>
+
+                        {/* Process History item */}
+                        <li>
+                          <div
+                            onClick={() => { selectIdea(null); selectProcess(null); showProcessHistory(project.id); }}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+                              processHistoryProjectId === project.id
+                                ? 'text-foreground font-medium hover:bg-card/50'
+                                : 'text-secondary hover:text-foreground hover:bg-card/50'
+                            }`}
+                          >
+                            <svg className="w-3.5 h-3.5 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Process History</span>
                           </div>
                         </li>
 
@@ -584,7 +748,12 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
         </div>
 
         {/* Ideas section */}
-        <div className="flex-shrink-0 border-t border-border">
+        <div className="flex-shrink-0 flex flex-col" style={{ height: ideasHeight }}>
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleIdeasResizeMouseDown}
+            className="h-1 border-t border-border cursor-ns-resize hover:bg-accent/20 transition-colors"
+          />
           <div className="flex items-center justify-between px-3 py-2">
             <h2 className="text-xs font-medium text-muted uppercase tracking-wider">
               Ideas
@@ -611,7 +780,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
             </button>
           </div>
           
-          <div className="max-h-40 overflow-y-auto px-2 pb-2 scrollbar-auto-hide">
+          <div className="flex-1 overflow-y-auto px-2 pb-2 scrollbar-auto-hide">
             {ideas.length === 0 ? (
               <p className="text-xs text-muted text-center py-4 px-2">
                 No ideas yet
