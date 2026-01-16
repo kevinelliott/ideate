@@ -130,10 +130,19 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   const buildStatus = useBuildStore((state) => state.projectStates[projectId]?.status ?? 'idle');
-  const startBuild = useBuildStore((state) => state.startBuild);
   const pauseBuild = useBuildStore((state) => state.pauseBuild);
-  const resumeBuild = useBuildStore((state) => state.resumeBuild);
-  const cancelBuild = useBuildStore((state) => state.cancelBuild);
+  
+  const handleStartBuild = () => {
+    window.dispatchEvent(new CustomEvent('sidebar-start-build', { detail: { projectId } }));
+  };
+  
+  const handleResumeBuild = () => {
+    window.dispatchEvent(new CustomEvent('resume-build', { detail: { projectId } }));
+  };
+  
+  const handleCancelBuild = () => {
+    window.dispatchEvent(new CustomEvent('cancel-build', { detail: { projectId } }));
+  };
   
   const stories = usePrdStore((state) => state.stories);
   const hasIncompleteStories = stories.some((s) => !s.passes);
@@ -367,7 +376,7 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
               <div className="flex items-center gap-1">
                 {buildStatus === "idle" && (
                   <button
-                    onClick={() => startBuild(projectId)}
+                    onClick={handleStartBuild}
                     disabled={!canStart}
                     className={`p-1.5 rounded transition-colors ${
                       canStart
@@ -394,7 +403,7 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
                 )}
                 {buildStatus === "paused" && (
                   <button
-                    onClick={() => resumeBuild(projectId)}
+                    onClick={handleResumeBuild}
                     className="p-1.5 rounded text-success hover:bg-success/10 transition-colors"
                     title="Resume build"
                   >
@@ -405,7 +414,7 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
                 )}
                 {(buildStatus === "running" || buildStatus === "paused") && (
                   <button
-                    onClick={() => cancelBuild(projectId)}
+                    onClick={handleCancelBuild}
                     className="p-1.5 rounded text-destructive hover:bg-destructive/10 transition-colors"
                     title="Stop build"
                   >

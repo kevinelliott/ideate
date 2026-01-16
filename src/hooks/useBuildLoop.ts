@@ -924,11 +924,29 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       }
     }
 
+    const handleResumeEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ projectId: string }>
+      if (customEvent.detail.projectId === projectId && status === 'paused') {
+        handleResume()
+      }
+    }
+
+    const handleCancelEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ projectId: string }>
+      if (customEvent.detail.projectId === projectId && status !== 'idle') {
+        handleCancel()
+      }
+    }
+
     window.addEventListener('sidebar-start-build', handleSidebarStart)
+    window.addEventListener('resume-build', handleResumeEvent)
+    window.addEventListener('cancel-build', handleCancelEvent)
     return () => {
       window.removeEventListener('sidebar-start-build', handleSidebarStart)
+      window.removeEventListener('resume-build', handleResumeEvent)
+      window.removeEventListener('cancel-build', handleCancelEvent)
     }
-  }, [projectId, status, stories, handleStart])
+  }, [projectId, status, stories, handleStart, handleResume, handleCancel])
 
   useEffect(() => {
     const handleStoryPlay = (event: Event) => {
