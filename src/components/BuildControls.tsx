@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useBuildStore } from "../stores/buildStore";
 import { usePrdStore } from "../stores/prdStore";
 import { useBuildLoop } from "../hooks/useBuildLoop";
+import { usePrdGeneration } from "../hooks/usePrdGeneration";
+import { useProjectStore } from "../stores/projectStore";
 
 interface BuildControlsProps {
   projectId: string;
@@ -16,12 +19,28 @@ export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
   const currentStoryId = projectState?.currentStoryId ?? null;
 
   const stories = usePrdStore((state) => state.stories);
+  const project = useProjectStore((state) => 
+    state.projects.find((p) => p.id === projectId)
+  );
 
   const { handleStart, handleResume, handleCancel } = useBuildLoop(projectId, projectPath);
+  const { breakdownStories } = usePrdGeneration();
+  
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
 
   const hasIncompleteStories = stories.some((s) => !s.passes);
   const hasStories = stories.length > 0;
   const canStart = hasStories && hasIncompleteStories && status === "idle";
+  
+  const handleBreakdownStories = async () => {
+    if (!project) return;
+    setIsBreakingDown(true);
+    try {
+      await breakdownStories(projectId, project.name, projectPath);
+    } finally {
+      setIsBreakingDown(false);
+    }
+  };
 
   const PlayIcon = () => (
     <svg
@@ -68,6 +87,31 @@ export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
           <PlayIcon />
           Start Build
         </button>
+        {hasStories && (
+          <button
+            onClick={handleBreakdownStories}
+            disabled={isBreakingDown}
+            className="btn btn-secondary"
+            title="Break down complex stories into smaller, more manageable pieces"
+          >
+            {isBreakingDown ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Breaking Down...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                </svg>
+                Refine Stories
+              </>
+            )}
+          </button>
+        )}
         {!hasStories && (
           <span className="text-sm text-muted">No stories to build</span>
         )}
