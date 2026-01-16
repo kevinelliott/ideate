@@ -40,6 +40,21 @@ fn sanitize_branch_name(story_id: &str) -> String {
 
 /// Get the current branch or HEAD ref.
 fn get_base_ref(project_path: &str) -> Result<String, String> {
+    // First check if there are any commits
+    let rev_output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(project_path)
+        .output()
+        .map_err(|e| format!("Failed to run git rev-parse: {}", e))?;
+
+    if !rev_output.status.success() {
+        let stderr = String::from_utf8_lossy(&rev_output.stderr);
+        if stderr.contains("unknown revision") || stderr.contains("bad revision") {
+            return Err("No commits in repository. Please create an initial commit first.".to_string());
+        }
+        return Err(format!("Failed to get HEAD: {}", stderr.trim()));
+    }
+
     let output = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(project_path)
@@ -53,12 +68,7 @@ fn get_base_ref(project_path: &str) -> Result<String, String> {
     let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if branch == "HEAD" {
         // Detached HEAD, use commit hash
-        let output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(project_path)
-            .output()
-            .map_err(|e| format!("Failed to get HEAD: {}", e))?;
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        Ok(String::from_utf8_lossy(&rev_output.stdout).trim().to_string())
     } else {
         Ok(branch)
     }

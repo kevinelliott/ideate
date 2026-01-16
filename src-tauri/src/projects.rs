@@ -90,6 +90,19 @@ npm-debug.log*
     fs::write(project_dir.join(".gitignore"), gitignore_content)
         .map_err(|e| format!("Failed to create .gitignore: {}", e))?;
     
+    // Stage and create initial commit (required for git worktrees)
+    Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|e| format!("Failed to stage files: {}", e))?;
+    
+    Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|e| format!("Failed to create initial commit: {}", e))?;
+    
     Ok(CreateProjectResult {
         path: project_dir.to_string_lossy().to_string(),
         config_path: config_path.to_string_lossy().to_string(),
