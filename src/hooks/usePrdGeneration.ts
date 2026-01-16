@@ -882,6 +882,7 @@ export function usePrdGeneration() {
           `Agent started (process ID: ${spawnResult.processId})`,
         );
 
+        console.log('[generatePrdFromIdea] About to call registerProcess for:', spawnResult.processId);
         registerProcess({
           processId: spawnResult.processId,
           agentId: plugin.id,
@@ -894,6 +895,7 @@ export function usePrdGeneration() {
           type: "prd",
           label: "PRD from Idea",
         });
+        console.log('[generatePrdFromIdea] registerProcess called');
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
           processId: spawnResult.processId,
