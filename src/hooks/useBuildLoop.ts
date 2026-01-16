@@ -919,21 +919,28 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   useEffect(() => {
     const handleSidebarStart = (event: Event) => {
       const customEvent = event as CustomEvent<{ projectId: string }>
-      if (customEvent.detail.projectId === projectId && status === 'idle' && stories.length > 0 && stories.some(s => !s.passes)) {
+      if (customEvent.detail.projectId !== projectId) return
+      const currentStatus = useBuildStore.getState().getProjectState(projectId || '').status
+      const currentStories = usePrdStore.getState().stories
+      if (currentStatus === 'idle' && currentStories.length > 0 && currentStories.some(s => !s.passes)) {
         handleStart()
       }
     }
 
     const handleResumeEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ projectId: string }>
-      if (customEvent.detail.projectId === projectId && status === 'paused') {
+      if (customEvent.detail.projectId !== projectId) return
+      const currentStatus = useBuildStore.getState().getProjectState(projectId || '').status
+      if (currentStatus === 'paused') {
         handleResume()
       }
     }
 
     const handleCancelEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ projectId: string }>
-      if (customEvent.detail.projectId === projectId && status !== 'idle') {
+      if (customEvent.detail.projectId !== projectId) return
+      const currentStatus = useBuildStore.getState().getProjectState(projectId || '').status
+      if (currentStatus !== 'idle') {
         handleCancel()
       }
     }
@@ -946,12 +953,14 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       window.removeEventListener('resume-build', handleResumeEvent)
       window.removeEventListener('cancel-build', handleCancelEvent)
     }
-  }, [projectId, status, stories, handleStart, handleResume, handleCancel])
+  }, [projectId, handleStart, handleResume, handleCancel])
 
   useEffect(() => {
     const handleStoryPlay = (event: Event) => {
       const customEvent = event as CustomEvent<{ projectId: string; storyId: string }>
-      if (customEvent.detail.projectId === projectId && status === 'idle') {
+      if (customEvent.detail.projectId !== projectId) return
+      const currentStatus = useBuildStore.getState().getProjectState(projectId || '').status
+      if (currentStatus === 'idle') {
         runFromStory(customEvent.detail.storyId)
       }
     }
@@ -960,7 +969,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     return () => {
       window.removeEventListener('story-play', handleStoryPlay)
     }
-  }, [projectId, status, runFromStory])
+  }, [projectId, runFromStory])
 
   const retryStoryWithAgent = useCallback(async (storyId: string, agentId?: string) => {
     if (!projectPath || !projectId) return
