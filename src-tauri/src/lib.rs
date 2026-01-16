@@ -177,8 +177,15 @@ pub fn run() {
             worktree::delete_story_branch,
             worktree::checkout_story_branch,
             worktree::force_merge_story_branch,
+            // Snapshot/Rollback
+            worktree::create_story_snapshot,
+            worktree::rollback_story_changes,
+            worktree::discard_story_snapshot,
+            worktree::get_story_diff,
             // Utils
-            utils::write_binary_file
+            utils::write_binary_file,
+            utils::list_project_files,
+            utils::read_project_file
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

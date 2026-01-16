@@ -48,6 +48,10 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
+  const [draggedStoryId, setDraggedStoryId] = useState<string | null>(null);
+  const [dragOverStoryId, setDragOverStoryId] = useState<string | null>(null);
+  
+  const reorderStories = usePrdStore((state) => state.reorderStories);
 
   const handleStoryClick = (storyId: string) => {
     selectStory(storyId === selectedStoryId ? null : storyId);
@@ -123,6 +127,56 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
       setSortDirection("asc");
     }
   };
+
+  const handleDragStart = (e: React.DragEvent, story: Story) => {
+    setDraggedStoryId(story.id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", story.id);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDragEnter = (storyId: string) => {
+    if (draggedStoryId && draggedStoryId !== storyId) {
+      setDragOverStoryId(storyId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverStoryId(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStory: Story) => {
+    e.preventDefault();
+    if (!draggedStoryId || draggedStoryId === targetStory.id) {
+      setDraggedStoryId(null);
+      setDragOverStoryId(null);
+      return;
+    }
+
+    const fromIndex = sortedStories.findIndex((s) => s.id === draggedStoryId);
+    const toIndex = sortedStories.findIndex((s) => s.id === targetStory.id);
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      const actualFromIndex = stories.findIndex((s) => s.id === draggedStoryId);
+      const actualToIndex = stories.findIndex((s) => s.id === targetStory.id);
+      reorderStories(actualFromIndex, actualToIndex);
+      await savePrd(projectPath);
+    }
+
+    setDraggedStoryId(null);
+    setDragOverStoryId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedStoryId(null);
+    setDragOverStoryId(null);
+  };
+
+  const isDragEnabled = sortField === "priority" && sortDirection === "asc";
 
   const handleOpenGenerateModal = () => {
     setIsGenerateModalOpen(true);
@@ -234,6 +288,14 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
           <SortButton field="priority" label="Priority" />
           <SortButton field="id" label="ID" />
           <SortButton field="title" label="Title" />
+          {isDragEnabled && (
+            <span className="text-xs text-muted ml-2 flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+              Drag to reorder
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -290,17 +352,27 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
           const hasPreviousLogs = retryInfo && retryInfo.previousLogs.length > 0;
           
           return (
-            <div key={story.id}>
+            <div 
+              key={story.id}
+              onDragEnter={() => handleDragEnter(story.id)}
+            >
               <StoryCard
                 projectId={projectId}
                 story={story}
                 isSelected={story.id === selectedStoryId}
+                isDragging={draggedStoryId === story.id}
+                isDragOver={dragOverStoryId === story.id}
                 onClick={handleStoryClick}
                 onEdit={handleEditStory}
                 onDelete={handleDeleteStory}
                 onRetry={handleRetryStory}
                 onPlay={handlePlayStory}
                 onPause={handlePauseBuild}
+                onDragStart={isDragEnabled ? handleDragStart : undefined}
+                onDragOver={isDragEnabled ? handleDragOver : undefined}
+                onDragLeave={isDragEnabled ? handleDragLeave : undefined}
+                onDrop={isDragEnabled ? handleDrop : undefined}
+                onDragEnd={isDragEnabled ? handleDragEnd : undefined}
               />
               {hasPreviousLogs && (
                 <div className="mt-1 ml-4">

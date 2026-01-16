@@ -6,12 +6,19 @@ interface StoryCardProps {
   projectId: string;
   story: Story;
   isSelected?: boolean;
+  isDragging?: boolean;
+  isDragOver?: boolean;
   onClick: (storyId: string) => void;
   onEdit: (story: Story) => void;
   onDelete: (story: Story) => void;
   onRetry?: (story: Story) => void;
   onPlay?: (story: Story) => void;
   onPause?: () => void;
+  onDragStart?: (e: React.DragEvent, story: Story) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent, story: Story) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }
 
 function getStoryStatus(story: Story, buildStatus: StoryBuildStatus | undefined): StoryBuildStatus {
@@ -42,12 +49,19 @@ export function StoryCard({
   projectId, 
   story, 
   isSelected = false, 
+  isDragging = false,
+  isDragOver = false,
   onClick, 
   onEdit, 
   onDelete, 
   onRetry,
   onPlay,
   onPause,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: StoryCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   
@@ -111,14 +125,24 @@ export function StoryCard({
   return (
     <div
       ref={cardRef}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? (e) => onDragStart(e, story) : undefined}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop ? (e) => onDrop(e, story) : undefined}
+      onDragEnd={onDragEnd}
       className={`group border rounded-lg p-3 cursor-pointer transition-all ${
-        isInProgress 
-          ? "border-accent bg-accent/5" 
-          : isFailed
-            ? "border-destructive bg-card"
-            : isSelected 
-              ? "border-secondary bg-card" 
-              : "border-border bg-card hover:border-secondary/50"
+        isDragging
+          ? "opacity-50 border-dashed border-accent"
+          : isDragOver
+            ? "border-accent bg-accent/10 ring-2 ring-accent/30"
+            : isInProgress 
+              ? "border-accent bg-accent/5" 
+              : isFailed
+                ? "border-destructive bg-card"
+                : isSelected 
+                  ? "border-secondary bg-card" 
+                  : "border-border bg-card hover:border-secondary/50"
       }`}
       onClick={handleClick}
     >

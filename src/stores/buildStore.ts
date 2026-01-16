@@ -29,6 +29,11 @@ export interface ConflictInfo {
   branchName: string
 }
 
+export interface SnapshotInfo {
+  snapshotRef: string
+  snapshotType: 'stash' | 'commit'
+}
+
 export interface ProjectBuildState {
   status: BuildStatus
   currentStoryId: string | null
@@ -36,6 +41,7 @@ export interface ProjectBuildState {
   currentProcessId: string | null
   storyStatuses: Record<string, StoryBuildStatus>
   storyRetries: Record<string, StoryRetryInfo>
+  storySnapshots: Record<string, SnapshotInfo>
   logs: LogEntry[]
   lastExitInfo: ProcessExitInfo | null
   conflictedBranches: ConflictInfo[]
@@ -48,6 +54,7 @@ const createEmptyProjectState = (): ProjectBuildState => ({
   currentProcessId: null,
   storyStatuses: {},
   storyRetries: {},
+  storySnapshots: {},
   logs: [],
   lastExitInfo: null,
   conflictedBranches: [],
@@ -78,6 +85,11 @@ interface BuildStore {
   resetBuildState: (projectId: string) => void
   addConflictedBranch: (projectId: string, conflict: ConflictInfo) => void
   clearConflictedBranches: (projectId: string) => void
+  
+  // Snapshot management
+  setStorySnapshot: (projectId: string, storyId: string, snapshot: SnapshotInfo) => void
+  getStorySnapshot: (projectId: string, storyId: string) => SnapshotInfo | undefined
+  clearStorySnapshot: (projectId: string, storyId: string) => void
   
   // Get all running projects
   getRunningProjects: () => string[]
@@ -380,6 +392,42 @@ export const useBuildStore = create<BuildStore>((set, get) => ({
         },
       },
     }))
+  },
+
+  setStorySnapshot: (projectId, storyId, snapshot) => {
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            storySnapshots: { ...projectState.storySnapshots, [storyId]: snapshot },
+          },
+        },
+      }
+    })
+  },
+
+  getStorySnapshot: (projectId, storyId) => {
+    const projectState = get().projectStates[projectId]
+    return projectState?.storySnapshots[storyId]
+  },
+
+  clearStorySnapshot: (projectId, storyId) => {
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      const { [storyId]: _, ...rest } = projectState.storySnapshots
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            storySnapshots: rest,
+          },
+        },
+      }
+    })
   },
 
   getRunningProjects: () => {

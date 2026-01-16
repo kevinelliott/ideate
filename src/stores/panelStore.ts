@@ -10,6 +10,8 @@ export interface ProjectPanelState {
   terminalPanelHeight: number
   agentPanelCollapsed: boolean
   agentPanelHeight: number
+  splitViewEnabled: boolean
+  splitViewWidth: number
 }
 
 const DEFAULT_PANEL_STATE: ProjectPanelState = {
@@ -21,6 +23,8 @@ const DEFAULT_PANEL_STATE: ProjectPanelState = {
   terminalPanelHeight: 300,
   agentPanelCollapsed: true,
   agentPanelHeight: 200,
+  splitViewEnabled: false,
+  splitViewWidth: 450,
 }
 
 interface UiState {
@@ -51,10 +55,13 @@ interface PanelStore {
   setTerminalPanelHeight: (projectId: string, height: number) => void
   setAgentPanelCollapsed: (projectId: string, collapsed: boolean) => void
   setAgentPanelHeight: (projectId: string, height: number) => void
+  setSplitViewEnabled: (projectId: string, enabled: boolean) => void
+  setSplitViewWidth: (projectId: string, width: number) => void
   toggleLogPanel: (projectId: string) => void
   toggleTerminalPanel: (projectId: string) => void
   toggleAgentPanel: (projectId: string) => void
   togglePreviewPanel: (projectId: string) => void
+  toggleSplitView: (projectId: string) => void
 }
 
 // Debounce timer for saving
@@ -233,5 +240,38 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   togglePreviewPanel: (projectId) => {
     const current = get().getPanelState(projectId)
     get().setPreviewPanelCollapsed(projectId, !current.previewPanelCollapsed)
+  },
+
+  setSplitViewEnabled: (projectId, enabled) => {
+    set((state) => {
+      const newStates = {
+        ...state.panelStates,
+        [projectId]: {
+          ...(state.panelStates[projectId] || DEFAULT_PANEL_STATE),
+          splitViewEnabled: enabled,
+        },
+      }
+      debouncedSave(newStates)
+      return { panelStates: newStates }
+    })
+  },
+
+  setSplitViewWidth: (projectId, width) => {
+    set((state) => {
+      const newStates = {
+        ...state.panelStates,
+        [projectId]: {
+          ...(state.panelStates[projectId] || DEFAULT_PANEL_STATE),
+          splitViewWidth: width,
+        },
+      }
+      debouncedSave(newStates)
+      return { panelStates: newStates }
+    })
+  },
+
+  toggleSplitView: (projectId) => {
+    const current = get().getPanelState(projectId)
+    get().setSplitViewEnabled(projectId, !current.splitViewEnabled)
   },
 }))

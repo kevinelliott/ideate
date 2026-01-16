@@ -10,6 +10,7 @@ import { defaultPlugins } from '../types'
 import { usePromptStore } from '../stores/promptStore'
 import { notify } from '../utils/notify'
 import { analyzeStoryDependencies } from '../utils/storyDependencies'
+import { estimateStoryComplexity, checkBudgetLimits, formatTokenEstimate, type BudgetLimits } from '../utils/storyComplexity'
 import type { AutonomyLevel, BuildMode } from '../components/ProjectTopBar'
 
 interface SpawnAgentResult {
@@ -35,8 +36,17 @@ interface WorktreeResult {
   branchName: string
 }
 
+interface SnapshotResult {
+  snapshotRef: string
+  snapshotType: 'stash' | 'commit'
+}
+
 interface GlobalPreferences {
   maxParallelAgents?: number
+  buildNotifications?: boolean
+  maxTokensPerStory?: number | null
+  maxCostPerBuild?: number | null
+  warnOnLargeStory?: boolean
 }
 
 function formatRetryContext(retryInfo: StoryRetryInfo): string {
@@ -110,16 +120,57 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     })
   }, [getPrompt])
 
-  const runStory = useCallback(async (story: typeof stories[0]): Promise<boolean> => {
+  const runStory = useCallback(async (story: typeof stories[0], overrideAgentId?: string): Promise<boolean> => {
     if (!projectPath || !projectId) return false
 
     setCurrentStory(projectId, story.id, story.title)
     setStoryStatus(projectId, story.id, 'in-progress')
     appendLog(projectId, 'system', `Starting story ${story.id}: ${story.title}`)
 
+    // Check budget limits before running
+    try {
+      const prefs = await invoke<GlobalPreferences | null>('load_preferences')
+      if (prefs) {
+        const budgetLimits: BudgetLimits = {
+          maxTokensPerStory: prefs.maxTokensPerStory ?? null,
+          maxCostPerBuild: prefs.maxCostPerBuild ?? null,
+          warnOnLargeStory: prefs.warnOnLargeStory ?? true,
+        }
+        const depGraph = analyzeStoryDependencies(usePrdStore.getState().stories)
+        const deps = depGraph[story.id]?.prerequisites.length || 0
+        const estimate = estimateStoryComplexity(story, deps)
+        const budgetCheck = checkBudgetLimits(estimate, budgetLimits)
+        
+        if (budgetCheck.exceedsLimit || budgetCheck.warningMessage) {
+          appendLog(projectId, 'system', `⚠ Budget warning: ${budgetCheck.warningMessage || `Estimated ~${formatTokenEstimate(estimate.estimatedTokens)} tokens`}`)
+          if (estimate.suggestions.length > 0) {
+            appendLog(projectId, 'system', `  Suggestion: ${estimate.suggestions[0]}`)
+          }
+        }
+      }
+    } catch {
+      // Ignore budget check errors - proceed anyway
+    }
+
+    // Create a snapshot before running the story for potential rollback
+    let snapshot: SnapshotResult | null = null
+    try {
+      snapshot = await invoke<SnapshotResult>('create_story_snapshot', {
+        projectPath,
+        storyId: story.id,
+      })
+      useBuildStore.getState().setStorySnapshot(projectId, story.id, {
+        snapshotRef: snapshot.snapshotRef,
+        snapshotType: snapshot.snapshotType,
+      })
+      appendLog(projectId, 'system', `Created snapshot for rollback (${snapshot.snapshotType})`)
+    } catch (snapshotError) {
+      appendLog(projectId, 'system', `Warning: Could not create snapshot: ${snapshotError}`)
+    }
+
     try {
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
-      const agentId = settings?.agent || defaultAgentId
+      const agentId = overrideAgentId || settings?.agent || defaultAgentId
 
       const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
       const retryInfo = useBuildStore.getState().getStoryRetryInfo(projectId, story.id)
@@ -172,14 +223,39 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         setStoryStatus(projectId, story.id, 'complete')
         updateStory(story.id, { passes: true })
         await savePrd(projectPath)
+        
+        // Discard snapshot on success
+        if (snapshot) {
+          try {
+            await invoke('discard_story_snapshot', {
+              projectPath,
+              snapshotRef: snapshot.snapshotRef,
+              snapshotType: snapshot.snapshotType,
+            })
+            useBuildStore.getState().clearStorySnapshot(projectId, story.id)
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+        
+        const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
+        if (prefs?.buildNotifications !== false) {
+          notify.success('Story Complete', story.title)
+        }
         return true
       } else {
         appendLog(projectId, 'system', `✗ Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
+        appendLog(projectId, 'system', `  Rollback available - use the Rollback button to revert changes`)
         setStoryStatus(projectId, story.id, 'failed')
+        const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
+        if (prefs?.buildNotifications !== false) {
+          notify.error('Story Failed', story.title)
+        }
         return false
       }
     } catch (error) {
       appendLog(projectId, 'system', `✗ Error running story ${story.id}: ${error}`)
+      appendLog(projectId, 'system', `  Rollback available - use the Rollback button to revert changes`)
       setStoryStatus(projectId, story.id, 'failed')
       setCurrentProcessId(projectId, null)
       return false
@@ -270,10 +346,18 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           setStoryStatus(projectId, story.id, 'complete')
           updateStory(story.id, { passes: true })
           await savePrd(projectPath)
+          const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
+          if (prefs?.buildNotifications !== false) {
+            notify.success('Story Complete', story.title)
+          }
           return true
         } else {
           appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
           setStoryStatus(projectId, story.id, 'failed')
+          const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
+          if (prefs?.buildNotifications !== false) {
+            notify.error('Story Failed', story.title)
+          }
           return false
         }
       } catch (finalizeError) {
@@ -490,15 +574,22 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     const failedCount = Array.from(statusMap.values()).filter(st => st === 'failed').length
     const blockedCount = Array.from(statusMap.values()).filter(st => st === 'pending').length
 
+    const finalPrefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
+    const notificationsEnabled = finalPrefs?.buildNotifications !== false
+
     if (allComplete) {
       appendLog(projectId, 'system', '🎉 All stories completed successfully!')
-      notify.success('Build complete', 'All stories completed successfully')
+      if (notificationsEnabled) {
+        notify.success('Build Complete', 'All stories completed successfully')
+      }
     } else if (cancelled) {
       appendLog(projectId, 'system', 'Build cancelled')
     } else {
       const incompleteCount = failedCount + blockedCount
       appendLog(projectId, 'system', `Build finished: ${failedCount} failed, ${blockedCount} blocked`)
-      notify.warning('Build finished', `${incompleteCount} ${incompleteCount === 1 ? 'story' : 'stories'} still incomplete`)
+      if (notificationsEnabled) {
+        notify.warning('Build Finished', `${incompleteCount} ${incompleteCount === 1 ? 'story' : 'stories'} still incomplete`)
+      }
     }
 
     setCurrentStory(projectId, null)
@@ -682,12 +773,19 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     }
 
     const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    const buildPrefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
+    const buildNotificationsEnabled = buildPrefs?.buildNotifications !== false
+
     if (allComplete) {
       appendLog(projectId, 'system', '🎉 All stories completed successfully!')
-      notify.success('Build complete', 'All stories completed successfully')
+      if (buildNotificationsEnabled) {
+        notify.success('Build Complete', 'All stories completed successfully')
+      }
     } else {
       const failedCount = usePrdStore.getState().stories.filter((s) => !s.passes).length
-      notify.warning('Build finished', `${failedCount} ${failedCount === 1 ? 'story' : 'stories'} still incomplete`)
+      if (buildNotificationsEnabled) {
+        notify.warning('Build Finished', `${failedCount} ${failedCount === 1 ? 'story' : 'stories'} still incomplete`)
+      }
     }
 
     setCurrentStory(projectId, null)
@@ -832,6 +930,46 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       window.removeEventListener('story-play', handleStoryPlay)
     }
   }, [projectId, status, runFromStory])
+
+  const retryStoryWithAgent = useCallback(async (storyId: string, agentId?: string) => {
+    if (!projectPath || !projectId || isRunningRef.current) return
+
+    const story = usePrdStore.getState().stories.find(s => s.id === storyId)
+    if (!story) {
+      appendLog(projectId, 'system', `Story ${storyId} not found`)
+      return
+    }
+
+    isRunningRef.current = true
+    startBuild(projectId)
+    appendLog(projectId, 'system', `Retrying story ${storyId}${agentId ? ` with ${agentId}` : ''}`)
+
+    const success = await runStory(story, agentId)
+
+    if (!success) {
+      appendLog(projectId, 'system', 'Retry paused due to story failure')
+      pauseBuild(projectId)
+    } else {
+      cancelBuild(projectId)
+    }
+
+    setCurrentStory(projectId, null)
+    isRunningRef.current = false
+  }, [projectPath, projectId, runStory, startBuild, pauseBuild, cancelBuild, appendLog, setCurrentStory])
+
+  useEffect(() => {
+    const handleRetryWithAgent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ projectId: string; storyId: string; agentId?: string }>
+      if (customEvent.detail.projectId === projectId && status !== 'running') {
+        retryStoryWithAgent(customEvent.detail.storyId, customEvent.detail.agentId)
+      }
+    }
+
+    window.addEventListener('retry-story-with-agent', handleRetryWithAgent)
+    return () => {
+      window.removeEventListener('retry-story-with-agent', handleRetryWithAgent)
+    }
+  }, [projectId, status, retryStoryWithAgent])
 
   useEffect(() => {
     return () => {

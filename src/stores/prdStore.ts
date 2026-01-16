@@ -32,6 +32,7 @@ interface PrdState {
   updateStory: (id: string, updates: Partial<Story>) => void
   addStory: (story: Omit<Story, 'id'>) => Story
   removeStory: (id: string) => void
+  reorderStories: (fromIndex: number, toIndex: number) => void
   setStatus: (status: PrdStatus) => void
   selectStory: (id: string | null) => void
   savePrd: (projectPath: string) => Promise<void>
@@ -91,6 +92,19 @@ export const usePrdStore = create<PrdState>((set, get) => ({
       stories: state.stories.filter((s) => s.id !== id),
       selectedStoryId: state.selectedStoryId === id ? null : state.selectedStoryId,
     }))
+  },
+
+  reorderStories: (fromIndex, toIndex) => {
+    set((state) => {
+      const stories = [...state.stories]
+      const [removed] = stories.splice(fromIndex, 1)
+      stories.splice(toIndex, 0, removed)
+      const reorderedStories = stories.map((story, index) => ({
+        ...story,
+        priority: index + 1,
+      }))
+      return { stories: reorderedStories }
+    })
   },
 
   setStatus: (status) => {

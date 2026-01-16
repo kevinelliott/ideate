@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import type { Story } from "../stores/prdStore";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
+import {
+  storyTemplates,
+  getTemplateById,
+  applyTemplatePlaceholders,
+} from "../utils/storyTemplates";
 
 interface CreateStoryModalProps {
   isOpen: boolean;
@@ -18,6 +23,8 @@ export function CreateStoryModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [criteria, setCriteria] = useState<string[]>([""]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateName, setTemplateName] = useState("");
 
   useModalKeyboard(isOpen, onClose);
 
@@ -26,8 +33,36 @@ export function CreateStoryModal({
       setTitle("");
       setDescription("");
       setCriteria([""]);
+      setSelectedTemplateId("");
+      setTemplateName("");
     }
   }, [isOpen]);
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) {
+      return;
+    }
+    const template = getTemplateById(templateId);
+    if (template) {
+      const placeholders = { name: templateName || "{name}" };
+      setTitle(applyTemplatePlaceholders(template.titleTemplate, placeholders));
+      setDescription(applyTemplatePlaceholders(template.descriptionTemplate, placeholders));
+      setCriteria([...template.acceptanceCriteria]);
+    }
+  };
+
+  const handleTemplateNameChange = (name: string) => {
+    setTemplateName(name);
+    if (selectedTemplateId) {
+      const template = getTemplateById(selectedTemplateId);
+      if (template) {
+        const placeholders = { name: name || "{name}" };
+        setTitle(applyTemplatePlaceholders(template.titleTemplate, placeholders));
+        setDescription(applyTemplatePlaceholders(template.descriptionTemplate, placeholders));
+      }
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -81,6 +116,40 @@ export function CreateStoryModal({
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-secondary mb-1">
+              Template
+            </label>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => handleTemplateChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value="">No template (blank story)</option>
+              {storyTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} — {template.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {selectedTemplateId && (
+            <div>
+              <label className="block text-sm font-medium text-secondary mb-1">
+                Name <span className="text-secondary/60">(replaces {"{name}"} in template)</span>
+              </label>
+              <input
+                type="text"
+                value={templateName}
+                onChange={(e) => handleTemplateNameChange(e.target.value)}
+                placeholder="e.g., User, Product, Settings"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent"
+                autoFocus
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-secondary mb-1">
               Title
             </label>
             <input
@@ -89,7 +158,7 @@ export function CreateStoryModal({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Story title"
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent"
-              autoFocus
+              autoFocus={!selectedTemplateId}
             />
           </div>
 

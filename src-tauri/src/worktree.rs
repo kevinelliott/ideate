@@ -1,11 +1,20 @@
 //! Git worktree management for parallel story builds.
 //!
 //! Each story in parallel mode gets its own git worktree to avoid file conflicts.
+//! Also provides snapshot/rollback functionality for undo on build failures.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::AppHandle;
+
+/// Result of creating a story snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotResult {
+    pub snapshot_ref: String,
+    pub snapshot_type: String, // "stash" or "commit"
+}
 
 /// Result of preparing a worktree for a story.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,6 +437,324 @@ pub async fn force_merge_story_branch(
         return Err(format!("Failed to force merge: {}", stderr));
     }
 
+    Ok(())
+}
+
+/// Information about a file change in a diff.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDiff {
+    pub file_path: String,
+    pub diff_content: String,
+    pub additions: u32,
+    pub deletions: u32,
+    pub status: String, // "added", "modified", "deleted", "renamed"
+}
+
+/// Result of getting diff for a story branch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoryDiffResult {
+    pub story_id: String,
+    pub branch_name: String,
+    pub files: Vec<FileDiff>,
+    pub total_additions: u32,
+    pub total_deletions: u32,
+}
+
+/// Get the diff for a story branch compared to main.
+#[tauri::command]
+pub async fn get_story_diff(
+    _app: AppHandle,
+    project_path: String,
+    story_id: String,
+) -> Result<StoryDiffResult, String> {
+    let branch_name = format!("story/{}", sanitize_branch_name(&story_id));
+    let main_branch = get_main_branch(&project_path);
+
+    // Get the merge base between main and the story branch
+    let merge_base_output = Command::new("git")
+        .args(["merge-base", &main_branch, &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get merge base: {}", e))?;
+
+    if !merge_base_output.status.success() {
+        return Err(format!(
+            "Branch {} not found or has no common ancestor with {}",
+            branch_name, main_branch
+        ));
+    }
+
+    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
+        .trim()
+        .to_string();
+
+    // Get list of changed files with stats
+    let diff_stat_output = Command::new("git")
+        .args(["diff", "--numstat", &merge_base, &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get diff stats: {}", e))?;
+
+    if !diff_stat_output.status.success() {
+        return Err("Failed to get diff stats".to_string());
+    }
+
+    // Get the diff name-status for file status (added, modified, deleted, renamed)
+    let name_status_output = Command::new("git")
+        .args(["diff", "--name-status", &merge_base, &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get name status: {}", e))?;
+
+    let name_status_str = String::from_utf8_lossy(&name_status_output.stdout);
+    let mut file_statuses: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    for line in name_status_str.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 2 {
+            let status = match parts[0].chars().next() {
+                Some('A') => "added",
+                Some('M') => "modified",
+                Some('D') => "deleted",
+                Some('R') => "renamed",
+                Some('C') => "copied",
+                _ => "modified",
+            };
+            // For renamed files, use the new name
+            let file_path = if parts.len() >= 3 {
+                parts[2]
+            } else {
+                parts[1]
+            };
+            file_statuses.insert(file_path.to_string(), status.to_string());
+        }
+    }
+
+    let diff_stat_str = String::from_utf8_lossy(&diff_stat_output.stdout);
+    let mut files = Vec::new();
+    let mut total_additions: u32 = 0;
+    let mut total_deletions: u32 = 0;
+
+    for line in diff_stat_str.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 3 {
+            let additions: u32 = parts[0].parse().unwrap_or(0);
+            let deletions: u32 = parts[1].parse().unwrap_or(0);
+            let file_path = parts[2].to_string();
+
+            // Get the diff content for this specific file
+            let file_diff_output = Command::new("git")
+                .args(["diff", &merge_base, &branch_name, "--", &file_path])
+                .current_dir(&project_path)
+                .output()
+                .ok();
+
+            let diff_content = file_diff_output
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
+
+            let status = file_statuses
+                .get(&file_path)
+                .cloned()
+                .unwrap_or_else(|| "modified".to_string());
+
+            total_additions += additions;
+            total_deletions += deletions;
+
+            files.push(FileDiff {
+                file_path,
+                diff_content,
+                additions,
+                deletions,
+                status,
+            });
+        }
+    }
+
+    Ok(StoryDiffResult {
+        story_id,
+        branch_name,
+        files,
+        total_additions,
+        total_deletions,
+    })
+}
+
+/// Create a snapshot of the current state before running a story.
+/// Uses git stash if there are uncommitted changes, otherwise creates a lightweight marker.
+#[tauri::command]
+pub async fn create_story_snapshot(
+    _app: AppHandle,
+    project_path: String,
+    story_id: String,
+) -> Result<SnapshotResult, String> {
+    // Check if there are uncommitted changes
+    let status_output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to check git status: {}", e))?;
+
+    let has_changes = !String::from_utf8_lossy(&status_output.stdout).trim().is_empty();
+
+    if has_changes {
+        // Create a stash with a unique message
+        let stash_message = format!("ideate-snapshot-{}", story_id);
+        let output = Command::new("git")
+            .args(["stash", "push", "-m", &stash_message, "--include-untracked"])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to create stash: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to create stash: {}", stderr));
+        }
+
+        // Apply the stash immediately to restore working state (but keep the stash)
+        Command::new("git")
+            .args(["stash", "apply"])
+            .current_dir(&project_path)
+            .output()
+            .ok();
+
+        Ok(SnapshotResult {
+            snapshot_ref: stash_message,
+            snapshot_type: "stash".to_string(),
+        })
+    } else {
+        // No uncommitted changes - record current HEAD as the snapshot
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+
+        if !output.status.success() {
+            return Err("Failed to get HEAD commit".to_string());
+        }
+
+        let commit_ref = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(SnapshotResult {
+            snapshot_ref: commit_ref,
+            snapshot_type: "commit".to_string(),
+        })
+    }
+}
+
+/// Rollback to a story snapshot, discarding all changes made since.
+#[tauri::command]
+pub async fn rollback_story_changes(
+    _app: AppHandle,
+    project_path: String,
+    snapshot_ref: String,
+    snapshot_type: String,
+) -> Result<(), String> {
+    if snapshot_type == "stash" {
+        // First, discard all current changes
+        Command::new("git")
+            .args(["reset", "--hard", "HEAD"])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to reset: {}", e))?;
+
+        // Clean untracked files
+        Command::new("git")
+            .args(["clean", "-fd"])
+            .current_dir(&project_path)
+            .output()
+            .ok();
+
+        // Find and apply the stash
+        let list_output = Command::new("git")
+            .args(["stash", "list"])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to list stashes: {}", e))?;
+
+        let stash_list = String::from_utf8_lossy(&list_output.stdout);
+        let mut stash_index: Option<usize> = None;
+
+        for (idx, line) in stash_list.lines().enumerate() {
+            if line.contains(&snapshot_ref) {
+                stash_index = Some(idx);
+                break;
+            }
+        }
+
+        if let Some(idx) = stash_index {
+            let stash_ref = format!("stash@{{{}}}", idx);
+            
+            // Pop the stash to restore original state
+            let output = Command::new("git")
+                .args(["stash", "pop", &stash_ref])
+                .current_dir(&project_path)
+                .output()
+                .map_err(|e| format!("Failed to pop stash: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("Failed to restore from stash: {}", stderr));
+            }
+        }
+    } else {
+        // Commit-based snapshot - reset to that commit
+        let output = Command::new("git")
+            .args(["reset", "--hard", &snapshot_ref])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to reset to snapshot: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to reset to snapshot: {}", stderr));
+        }
+
+        // Clean untracked files
+        Command::new("git")
+            .args(["clean", "-fd"])
+            .current_dir(&project_path)
+            .output()
+            .ok();
+    }
+
+    Ok(())
+}
+
+/// Discard a story snapshot after successful completion.
+#[tauri::command]
+pub async fn discard_story_snapshot(
+    _app: AppHandle,
+    project_path: String,
+    snapshot_ref: String,
+    snapshot_type: String,
+) -> Result<(), String> {
+    if snapshot_type == "stash" {
+        // Find and drop the stash
+        let list_output = Command::new("git")
+            .args(["stash", "list"])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to list stashes: {}", e))?;
+
+        let stash_list = String::from_utf8_lossy(&list_output.stdout);
+        
+        for (idx, line) in stash_list.lines().enumerate() {
+            if line.contains(&snapshot_ref) {
+                let stash_ref = format!("stash@{{{}}}", idx);
+                Command::new("git")
+                    .args(["stash", "drop", &stash_ref])
+                    .current_dir(&project_path)
+                    .output()
+                    .ok();
+                break;
+            }
+        }
+    }
+    // For commit-based snapshots, nothing to clean up
     Ok(())
 }
 

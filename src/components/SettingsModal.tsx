@@ -19,6 +19,10 @@ interface Preferences {
   appIcon: string;
   promptOverrides: Record<string, string>;
   outray?: OutRayConfig;
+  buildNotifications: boolean;
+  maxTokensPerStory: number | null;
+  maxCostPerBuild: number | null;
+  warnOnLargeStory: boolean;
 }
 
 interface AgentModel {
@@ -63,12 +67,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [logBufferSize, setLogBufferSize] = useState<number>(1000);
   const [maxParallelAgents, setMaxParallelAgents] = useState<number>(4);
   const [appIcon, setAppIcon] = useState<AppIconVariant>("transparent");
+  const [buildNotifications, setBuildNotifications] = useState<boolean>(true);
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [editingPromptValue, setEditingPromptValue] = useState<string>("");
   const [_isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [iconChanged, setIconChanged] = useState(false);
+  const [maxTokensPerStory, setMaxTokensPerStory] = useState<number | null>(null);
+  const [maxCostPerBuild, setMaxCostPerBuild] = useState<number | null>(null);
+  const [warnOnLargeStory, setWarnOnLargeStory] = useState<boolean>(true);
   
   // Agent detection state
   const [agentStatuses, setAgentStatuses] = useState<AgentPluginStatus[]>([]);
@@ -163,7 +171,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setLogBufferSize(prefs.logBufferSize || 1000);
         setMaxParallelAgents(prefs.maxParallelAgents || 4);
         setAppIcon((prefs.appIcon as AppIconVariant) || "transparent");
+        setBuildNotifications(prefs.buildNotifications ?? true);
         setPromptOverrides(prefs.promptOverrides || {});
+        setMaxTokensPerStory(prefs.maxTokensPerStory ?? null);
+        setMaxCostPerBuild(prefs.maxCostPerBuild ?? null);
+        setWarnOnLargeStory(prefs.warnOnLargeStory ?? true);
       }
       setIsDirty(false);
     } catch (error) {
@@ -199,6 +211,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         appIcon,
         promptOverrides,
         outray: outrayConfig,
+        buildNotifications,
+        maxTokensPerStory,
+        maxCostPerBuild,
+        warnOnLargeStory,
       };
       await invoke("save_preferences", { preferences: prefs });
       setIsDirty(false);
@@ -669,6 +685,106 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <p className="text-xs text-muted mt-1">
                       Maximum number of stories to build concurrently in Parallel mode.
                     </p>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium text-foreground">
+                        Build Notifications
+                      </label>
+                      <p className="text-xs text-muted mt-0.5">
+                        Show native notifications for story completion and build status
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setBuildNotifications(!buildNotifications);
+                        setIsDirty(true);
+                      }}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                        buildNotifications ? "bg-accent" : "bg-muted/30"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          buildNotifications ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Budget Limits Section */}
+              <section>
+                <h3 className="text-sm font-medium text-secondary uppercase tracking-wider mb-3">
+                  Budget Limits
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Max Tokens Per Story</label>
+                    <input
+                      type="number"
+                      value={maxTokensPerStory ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value ? parseInt(e.target.value) : null;
+                        setMaxTokensPerStory(val);
+                        setIsDirty(true);
+                      }}
+                      min={1000}
+                      step={1000}
+                      placeholder="Unlimited"
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-secondary/60"
+                    />
+                    <p className="text-xs text-muted mt-1">
+                      Warn when a story&apos;s estimated tokens exceed this limit. Leave empty for no limit.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Max Cost Per Build ($)</label>
+                    <input
+                      type="number"
+                      value={maxCostPerBuild ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value ? parseFloat(e.target.value) : null;
+                        setMaxCostPerBuild(val);
+                        setIsDirty(true);
+                      }}
+                      min={0.01}
+                      step={0.5}
+                      placeholder="Unlimited"
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-secondary/60"
+                    />
+                    <p className="text-xs text-muted mt-1">
+                      Soft limit on total estimated cost per build. Leave empty for no limit.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium text-foreground">
+                        Warn on Large Stories
+                      </label>
+                      <p className="text-xs text-muted mt-0.5">
+                        Show complexity warnings for stories that may use significant tokens
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setWarnOnLargeStory(!warnOnLargeStory);
+                        setIsDirty(true);
+                      }}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${
+                        warnOnLargeStory ? "bg-accent" : "bg-muted/30"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          warnOnLargeStory ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               </section>

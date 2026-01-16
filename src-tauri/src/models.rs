@@ -334,6 +334,18 @@ pub struct Preferences {
     pub has_accepted_disclaimer: bool,
     #[serde(default)]
     pub outray: OutRayConfig,
+    #[serde(default = "default_build_notifications")]
+    pub build_notifications: bool,
+    #[serde(default)]
+    pub max_tokens_per_story: Option<i64>,
+    #[serde(default)]
+    pub max_cost_per_build: Option<f64>,
+    #[serde(default = "default_warn_on_large_story")]
+    pub warn_on_large_story: bool,
+}
+
+fn default_warn_on_large_story() -> bool {
+    true
 }
 
 fn default_autonomy() -> String {
@@ -354,6 +366,10 @@ fn default_max_parallel_agents() -> i32 {
 
 fn default_app_icon() -> String {
     "transparent".to_string()
+}
+
+fn default_build_notifications() -> bool {
+    true
 }
 
 fn default_theme_id() -> String {
@@ -381,6 +397,10 @@ impl Default for Preferences {
             has_seen_welcome_guide: false,
             has_accepted_disclaimer: false,
             outray: OutRayConfig::default(),
+            build_notifications: default_build_notifications(),
+            max_tokens_per_story: None,
+            max_cost_per_build: None,
+            warn_on_large_story: default_warn_on_large_story(),
         }
     }
 }
