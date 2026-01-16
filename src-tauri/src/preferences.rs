@@ -77,12 +77,11 @@ pub fn open_full_disk_access_settings() -> Result<(), String> {
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
             .spawn()
             .map_err(|e| format!("Failed to open System Settings: {}", e))?;
+        Ok(())
     }
     
     #[cfg(not(target_os = "macos"))]
     {
-        return Err("Full Disk Access settings are only available on macOS".to_string());
+        Err("Full Disk Access settings are only available on macOS".to_string())
     }
-    
-    Ok(())
 }
