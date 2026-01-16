@@ -44,9 +44,12 @@ pub fn kill_all_processes() {
             #[cfg(unix)]
             {
                 let pid = child.id();
-                // Send SIGTERM first for graceful shutdown
+                // Use negative pid to kill the entire process group
+                let pgid = -(pid as i32);
+                
+                // Send SIGTERM first for graceful shutdown to process group
                 unsafe {
-                    libc::kill(pid as i32, libc::SIGTERM);
+                    libc::kill(pgid, libc::SIGTERM);
                 }
                 
                 // Give processes a short time to terminate gracefully
@@ -58,9 +61,9 @@ pub fn kill_all_processes() {
                         Ok(Some(_)) => break,
                         Ok(None) => {
                             if start.elapsed() >= timeout {
-                                // Force kill if still running
+                                // Force kill process group if still running
                                 unsafe {
-                                    libc::kill(pid as i32, libc::SIGKILL);
+                                    libc::kill(pgid, libc::SIGKILL);
                                 }
                                 let _ = child.wait();
                                 break;
@@ -109,6 +112,13 @@ pub async fn spawn_agent(
             for (key, value) in env_vars {
                 cmd.env(key, value);
             }
+        }
+
+        // On Unix, create a new process group so we can kill all child processes
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0); // Create new process group with pgid = pid
         }
 
         cmd.spawn()
@@ -256,9 +266,12 @@ fn kill_agent_blocking(process_id: &str) -> Result<KillAgentResult, String> {
     #[cfg(unix)]
     {
         let pid = child.id();
+        // Use negative pid to kill the entire process group
+        let pgid = -(pid as i32);
 
         unsafe {
-            libc::kill(pid as i32, libc::SIGTERM);
+            // Send SIGTERM to the entire process group
+            libc::kill(pgid, libc::SIGTERM);
         }
 
         let start = std::time::Instant::now();
@@ -270,19 +283,20 @@ fn kill_agent_blocking(process_id: &str) -> Result<KillAgentResult, String> {
                     processes.remove(process_id);
                     return Ok(KillAgentResult {
                         success: true,
-                        message: "Process terminated gracefully with SIGTERM".to_string(),
+                        message: "Process group terminated gracefully with SIGTERM".to_string(),
                     });
                 }
                 Ok(None) => {
                     if start.elapsed() >= timeout {
                         unsafe {
-                            libc::kill(pid as i32, libc::SIGKILL);
+                            // Force kill the entire process group
+                            libc::kill(pgid, libc::SIGKILL);
                         }
                         let _ = child.wait();
                         processes.remove(process_id);
                         return Ok(KillAgentResult {
                             success: true,
-                            message: "Process killed with SIGKILL after timeout".to_string(),
+                            message: "Process group killed with SIGKILL after timeout".to_string(),
                         });
                     }
                     thread::sleep(Duration::from_millis(100));
