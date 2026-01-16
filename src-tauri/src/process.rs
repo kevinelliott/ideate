@@ -176,40 +176,58 @@ pub async fn spawn_agent(
 }
 
 /// Waits for an agent process to complete.
+/// Uses try_wait in a loop to avoid holding the mutex lock, allowing kill_agent to work.
 #[tauri::command(rename_all = "camelCase")]
 pub async fn wait_agent(app: AppHandle, process_id: String) -> Result<WaitAgentResult, String> {
     let result = tokio::task::spawn_blocking(move || {
-        let mut processes = PROCESSES
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
+        loop {
+            // Acquire lock, check process status, then release lock
+            let wait_result = {
+                let mut processes = PROCESSES
+                    .lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
 
-        let child = match processes.get_mut(&process_id) {
-            Some(child) => child,
-            None => {
-                return Ok(WaitAgentResult {
-                    process_id: process_id.clone(),
-                    exit_code: None,
-                    success: false,
-                });
-            }
-        };
-
-        match child.wait() {
-            Ok(status) => {
-                let exit_code = status.code();
-                let success = status.success();
-                let result = WaitAgentResult {
-                    process_id: process_id.clone(),
-                    exit_code,
-                    success,
+                let child = match processes.get_mut(&process_id) {
+                    Some(child) => child,
+                    None => {
+                        // Process was removed (likely killed by kill_agent)
+                        return Ok(WaitAgentResult {
+                            process_id: process_id.clone(),
+                            exit_code: None,
+                            success: false,
+                        });
+                    }
                 };
-                processes.remove(&process_id);
-                Ok(result)
+
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        // Process has exited
+                        let exit_code = status.code();
+                        let success = status.success();
+                        processes.remove(&process_id);
+                        Some(Ok(WaitAgentResult {
+                            process_id: process_id.clone(),
+                            exit_code,
+                            success,
+                        }))
+                    }
+                    Ok(None) => {
+                        // Process still running, will check again after sleep
+                        None
+                    }
+                    Err(e) => {
+                        processes.remove(&process_id);
+                        Some(Err(format!("Failed to wait for process: {}", e)))
+                    }
+                }
+            }; // Lock is released here
+
+            if let Some(result) = wait_result {
+                return result;
             }
-            Err(e) => {
-                processes.remove(&process_id);
-                Err(format!("Failed to wait for process: {}", e))
-            }
+
+            // Sleep before checking again - this allows kill_agent to acquire the lock
+            thread::sleep(Duration::from_millis(50));
         }
     })
     .await
