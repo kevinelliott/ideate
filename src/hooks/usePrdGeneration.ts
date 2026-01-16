@@ -727,6 +727,27 @@ export function usePrdGeneration() {
           return false;
         }
 
+        // Check for agent-side errors that still return exit code 0
+        const agentErrorPatterns = [
+          "stream ended without producing",
+          "Error: stream ended",
+          "connection refused",
+          "authentication failed",
+          "rate limit exceeded",
+        ];
+        const hasAgentError = agentErrorPatterns.some((pattern) =>
+          recentLogs.toLowerCase().includes(pattern.toLowerCase())
+        );
+
+        if (hasAgentError) {
+          appendLog(
+            projectId,
+            "system",
+            "Agent encountered an error during story breakdown. Stories may not have been refined.",
+          );
+          // Continue anyway - the original PRD is still valid
+        }
+
         appendLog(
           projectId,
           "system",
@@ -764,6 +785,12 @@ export function usePrdGeneration() {
                 projectId,
                 "system",
                 `Story breakdown complete: ${initialCount} → ${stories.length} stories (+${delta} from breakdown)`,
+              );
+            } else if (hasAgentError) {
+              appendLog(
+                projectId,
+                "system",
+                `Story breakdown incomplete: ${stories.length} stories unchanged due to agent error. You can manually re-run breakdown from Settings.`,
               );
             } else {
               appendLog(
