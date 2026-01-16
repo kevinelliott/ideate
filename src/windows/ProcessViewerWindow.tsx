@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { listen, emitTo } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useThemeStore } from "../stores/themeStore";
 import type { RunningProcess } from "../stores/processStore";
@@ -281,9 +281,9 @@ export function ProcessViewerWindow() {
       setLocalLogs(logs);
     });
 
-    // Request the current process list from main window
-    console.log('[ProcessViewer] emitting request-process-list to main window');
-    emitTo('main', "request-process-list", {}).catch((err) => {
+    // Request the current process list (emitted globally, main window will respond)
+    console.log('[ProcessViewer] emitting request-process-list');
+    emit("request-process-list", {}).catch((err) => {
       console.error('[ProcessViewer] Failed to emit request-process-list:', err);
     });
 

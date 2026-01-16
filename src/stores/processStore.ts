@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import { emit, emitTo, listen } from '@tauri-apps/api/event'
-
-const PROCESS_VIEWER_WINDOW = 'process-viewer'
+import { emit, listen } from '@tauri-apps/api/event'
 
 export type ProcessType = 'build' | 'chat' | 'prd' | 'dev-server' | 'detection' | 'tunnel'
 
@@ -158,7 +156,7 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
       },
     }))
     
-    // Emit event for Process Viewer window
+    // Emit event globally (received by all windows including Process Viewer)
     console.log('[processStore] emitting process-registered event for:', process.processId)
     const payload = {
       process: {
@@ -166,11 +164,9 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
         startedAt: startedAt.toISOString(),
       },
     }
-    // Emit to Process Viewer window specifically, and also broadcast locally
-    emitTo(PROCESS_VIEWER_WINDOW, 'process-registered', payload).catch(() => {
-      // Window might not exist, ignore error
+    emit('process-registered', payload).catch((err) => {
+      console.error('[processStore] Failed to emit process-registered:', err)
     })
-    emit('process-registered', payload).catch(() => {})
   },
 
   updateProcessUrl: (processId, url) => {
@@ -250,10 +246,8 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
       return { processes: rest, selectedProcessId: newSelectedProcessId }
     })
     
-    // Emit event for Process Viewer window
-    const payload = { processId, exitCode, success }
-    emitTo(PROCESS_VIEWER_WINDOW, 'process-unregistered', payload).catch(() => {})
-    emit('process-unregistered', payload).catch(() => {})
+    // Emit event globally
+    emit('process-unregistered', { processId, exitCode, success }).catch(() => {})
   },
 
   getProcessesByProject: (projectId) => {
@@ -385,9 +379,8 @@ listen('request-process-list', () => {
   for (const [processId, entries] of Object.entries(state.processLogs)) {
     logs[processId] = entries.map(e => ({ type: e.type, content: e.content }))
   }
-  const payload = { processes, logs }
-  // Send to Process Viewer window specifically
-  emitTo(PROCESS_VIEWER_WINDOW, 'process-list-sync', payload).catch((err) => {
+  // Send globally (Process Viewer will receive this)
+  emit('process-list-sync', { processes, logs }).catch((err) => {
     console.error('[processStore] Failed to emit process-list-sync:', err)
   })
 }).catch((err) => {
