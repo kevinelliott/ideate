@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 use tauri::{AppHandle, Manager};
 
 use crate::models::{
@@ -52,6 +53,42 @@ pub fn create_project(
     
     fs::write(&config_path, config_json)
         .map_err(|e| format!("Failed to write config: {}", e))?;
+    
+    // Initialize git repository
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|e| format!("Failed to initialize git repository: {}", e))?;
+    
+    // Create .gitignore with common patterns
+    let gitignore_content = r#"# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+"#;
+    fs::write(project_dir.join(".gitignore"), gitignore_content)
+        .map_err(|e| format!("Failed to create .gitignore: {}", e))?;
     
     Ok(CreateProjectResult {
         path: project_dir.to_string_lossy().to_string(),
