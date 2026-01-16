@@ -370,7 +370,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
               <span className="ml-2 text-foreground capitalize">{process.agentId}</span>
             </div>
           )}
-          {projectState.currentStoryId && useBuildLogs && (
+          {projectState?.currentStoryId && useBuildLogs && (
             <div>
               <span className="text-muted">Story:</span>
               <span className="ml-2 text-foreground">{projectState.currentStoryTitle || projectState.currentStoryId}</span>

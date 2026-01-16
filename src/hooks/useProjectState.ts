@@ -12,7 +12,6 @@ export interface ProjectState {
 
 export function useProjectState(projectPath: string | undefined) {
   const activeProjectId = useProjectStore((state) => state.activeProjectId)
-  const getProjectState = useBuildStore((state) => state.getProjectState)
   const setCurrentStory = useBuildStore((state) => state.setCurrentStory)
   const setStoryStatus = useBuildStore((state) => state.setStoryStatus)
   const restoreRetryInfo = useBuildStore((state) => state.restoreRetryInfo)
@@ -59,8 +58,10 @@ export function useProjectState(projectPath: string | undefined) {
     loadState()
   }, [projectPath, activeProjectId, setCurrentStory, setStoryStatus, restoreRetryInfo])
 
-  // Subscribe to the actual project state to trigger saves on changes
-  const projectState = activeProjectId ? getProjectState(activeProjectId) : null
+  // Subscribe directly to the project state for reactivity
+  const projectState = useBuildStore((state) => 
+    activeProjectId ? state.projectStates[activeProjectId] : null
+  )
   const storyStatuses = projectState?.storyStatuses
   const currentStoryId = projectState?.currentStoryId
   const buildStatus = projectState?.status
