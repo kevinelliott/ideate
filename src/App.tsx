@@ -24,6 +24,7 @@ const ImportProjectModal = lazy(() => import("./components/ImportProjectModal").
 const PermissionsModal = lazy(() => import("./components/PermissionsModal").then(m => ({ default: m.PermissionsModal })));
 const WelcomeGuideModal = lazy(() => import("./components/WelcomeGuideModal").then(m => ({ default: m.WelcomeGuideModal })));
 const DisclaimerModal = lazy(() => import("./components/DisclaimerModal").then(m => ({ default: m.DisclaimerModal })));
+const CommandPalette = lazy(() => import("./components/CommandPalette").then(m => ({ default: m.CommandPalette })));
 
 interface CreateProjectResult {
   path: string;
@@ -69,6 +70,7 @@ function App() {
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [pendingPrdGeneration, setPendingPrdGeneration] = useState<{projectId: string, projectPath: string, projectName: string} | null>(null);
   
@@ -93,17 +95,19 @@ function App() {
   // Track and persist window state
   useWindowState();
 
-  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide || showDisclaimer;
+  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide || showDisclaimer || showCommandPalette;
 
   useKeyboardNavigation({
     onNewProject: () => setShowNewProjectModal(true),
     onOpenSettings: () => window.dispatchEvent(new CustomEvent('open-settings')),
+    onOpenCommandPalette: () => setShowCommandPalette(true),
     isModalOpen: isAnyModalOpen,
     onCloseModal: () => {
       setShowNewProjectModal(false);
       setShowImportProjectModal(false);
       setShowPermissionsModal(false);
       setShowWelcomeGuide(false);
+      setShowCommandPalette(false);
     },
   });
 
@@ -397,6 +401,14 @@ function App() {
           <DisclaimerModal
             isOpen={showDisclaimer}
             onAccept={handleAcceptDisclaimer}
+          />
+        )}
+        {showCommandPalette && (
+          <CommandPalette
+            isOpen={showCommandPalette}
+            onClose={() => setShowCommandPalette(false)}
+            onNewProject={handleNewProject}
+            onImportProject={handleImportProject}
           />
         )}
       </Suspense>

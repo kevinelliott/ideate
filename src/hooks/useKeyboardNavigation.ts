@@ -8,6 +8,7 @@ type NavigationContext = "projects" | "stories";
 interface UseKeyboardNavigationProps {
   onNewProject: () => void;
   onOpenSettings: () => void;
+  onOpenCommandPalette: () => void;
   isModalOpen: boolean;
   onCloseModal: () => void;
 }
@@ -15,6 +16,7 @@ interface UseKeyboardNavigationProps {
 export function useKeyboardNavigation({
   onNewProject,
   onOpenSettings,
+  onOpenCommandPalette,
   isModalOpen,
   onCloseModal,
 }: UseKeyboardNavigationProps) {
@@ -52,6 +54,13 @@ export function useKeyboardNavigation({
       if ((e.metaKey || e.ctrlKey) && e.key === "," && !isModalOpen) {
         e.preventDefault();
         onOpenSettings();
+        return;
+      }
+
+      // Cmd+K to open command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === "k" && !isModalOpen) {
+        e.preventDefault();
+        onOpenCommandPalette();
         return;
       }
 
@@ -201,6 +210,7 @@ export function useKeyboardNavigation({
       isModalOpen,
       onNewProject,
       onOpenSettings,
+      onOpenCommandPalette,
       onCloseModal,
       toggleLogPanel,
       toggleTerminalPanel,

@@ -122,7 +122,18 @@ body {
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: 
+    background-color 150ms ease, 
+    border-color 150ms ease, 
+    color 150ms ease,
+    padding 150ms ease,
+    margin 150ms ease,
+    gap 150ms ease,
+    height 150ms ease,
+    min-height 150ms ease,
+    max-height 150ms ease,
+    border-radius 150ms ease,
+    box-shadow 150ms ease;
 }
 
 /* Re-enable selection for input fields */
@@ -656,6 +667,50 @@ code,
   -moz-user-select: text;
   -ms-user-select: text;
   user-select: text;
+}
+
+/* ============================================================================
+   Panel Styles (using theme variables)
+   ============================================================================ */
+.panel {
+  padding: var(--panel-padding);
+  gap: var(--panel-gap);
+  border-width: var(--panel-border-width);
+}
+
+.panel-header {
+  height: var(--panel-header-height);
+  min-height: var(--panel-header-height);
+  padding: var(--panel-title-padding);
+  display: flex;
+  align-items: center;
+  gap: var(--panel-gap);
+}
+
+.panel-content {
+  padding: var(--panel-padding);
+  gap: var(--panel-gap);
+}
+
+/* ============================================================================
+   Modal Styles (using theme variables)
+   ============================================================================ */
+.modal-content {
+  padding: var(--modal-padding);
+}
+
+.modal-body {
+  padding: var(--modal-padding);
+}
+
+.modal-header {
+  padding: var(--modal-padding);
+  padding-bottom: calc(var(--modal-padding) / 2);
+}
+
+.modal-footer {
+  padding: var(--modal-padding);
+  padding-top: calc(var(--modal-padding) / 2);
 }
 
 /* ============================================================================

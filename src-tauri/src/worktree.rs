@@ -217,6 +217,220 @@ pub async fn finalize_story_worktree(
     Ok(())
 }
 
+/// Information about a story branch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoryBranchInfo {
+    pub branch_name: String,
+    pub story_id: String,
+    pub status: String, // "merged", "unmerged", "conflicted"
+    pub is_current: bool,
+}
+
+/// List all story branches for a project.
+#[tauri::command]
+pub async fn list_story_branches(
+    _app: AppHandle,
+    project_path: String,
+) -> Result<Vec<StoryBranchInfo>, String> {
+    let output = Command::new("git")
+        .args(["branch", "--list", "story/*"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to list branches: {}", e))?;
+
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    let branches_output = String::from_utf8_lossy(&output.stdout);
+    let mut branches = Vec::new();
+
+    // Get current branch
+    let current_output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(&project_path)
+        .output()
+        .ok();
+    let current_branch = current_output
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+
+    // Get main/master branch name
+    let main_branch = get_main_branch(&project_path);
+
+    for line in branches_output.lines() {
+        let branch = line.trim().trim_start_matches("* ").to_string();
+        if branch.is_empty() {
+            continue;
+        }
+
+        let story_id = branch.strip_prefix("story/").unwrap_or(&branch).to_string();
+        let is_current = branch == current_branch;
+
+        // Check if branch is merged into main
+        let merged_output = Command::new("git")
+            .args(["branch", "--merged", &main_branch])
+            .current_dir(&project_path)
+            .output()
+            .ok();
+
+        let is_merged = merged_output
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .any(|l| l.trim().trim_start_matches("* ") == branch)
+            })
+            .unwrap_or(false);
+
+        // Check for conflicts by attempting a dry-run merge
+        let status = if is_merged {
+            "merged".to_string()
+        } else {
+            // Check if there would be conflicts
+            let merge_base = Command::new("git")
+                .args(["merge-base", &main_branch, &branch])
+                .current_dir(&project_path)
+                .output()
+                .ok();
+
+            if let Some(base_output) = merge_base {
+                if base_output.status.success() {
+                    let base = String::from_utf8_lossy(&base_output.stdout).trim().to_string();
+                    let merge_tree = Command::new("git")
+                        .args(["merge-tree", &base, &main_branch, &branch])
+                        .current_dir(&project_path)
+                        .output()
+                        .ok();
+
+                    if let Some(tree_output) = merge_tree {
+                        let tree_result = String::from_utf8_lossy(&tree_output.stdout);
+                        if tree_result.contains("<<<<<<") || tree_result.contains("changed in both") {
+                            "conflicted".to_string()
+                        } else {
+                            "unmerged".to_string()
+                        }
+                    } else {
+                        "unmerged".to_string()
+                    }
+                } else {
+                    "unmerged".to_string()
+                }
+            } else {
+                "unmerged".to_string()
+            }
+        };
+
+        branches.push(StoryBranchInfo {
+            branch_name: branch,
+            story_id,
+            status,
+            is_current,
+        });
+    }
+
+    Ok(branches)
+}
+
+/// Get the main branch name (main or master).
+fn get_main_branch(project_path: &str) -> String {
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", "main"])
+        .current_dir(project_path)
+        .output()
+        .ok();
+
+    if let Some(o) = output {
+        if o.status.success() {
+            return "main".to_string();
+        }
+    }
+
+    "master".to_string()
+}
+
+/// Delete a story branch.
+#[tauri::command]
+pub async fn delete_story_branch(
+    _app: AppHandle,
+    project_path: String,
+    branch_name: String,
+    force: bool,
+) -> Result<(), String> {
+    let flag = if force { "-D" } else { "-d" };
+    let output = Command::new("git")
+        .args(["branch", flag, &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to delete branch: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to delete branch: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Checkout a story branch.
+#[tauri::command]
+pub async fn checkout_story_branch(
+    _app: AppHandle,
+    project_path: String,
+    branch_name: String,
+) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["checkout", &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to checkout branch: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to checkout branch: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Force merge a story branch into the current branch.
+#[tauri::command]
+pub async fn force_merge_story_branch(
+    _app: AppHandle,
+    project_path: String,
+    branch_name: String,
+) -> Result<(), String> {
+    // First try normal merge
+    let output = Command::new("git")
+        .args(["merge", &branch_name, "--no-edit"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to merge: {}", e))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    // If conflicts, force accept theirs
+    let _ = Command::new("git")
+        .args(["merge", "--abort"])
+        .current_dir(&project_path)
+        .output();
+
+    let output = Command::new("git")
+        .args(["merge", &branch_name, "-X", "theirs", "--no-edit"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to force merge: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to force merge: {}", stderr));
+    }
+
+    Ok(())
+}
+
 /// Clean up all story worktrees for a project.
 #[tauri::command]
 pub async fn cleanup_all_story_worktrees(

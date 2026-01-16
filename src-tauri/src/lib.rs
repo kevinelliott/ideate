@@ -173,6 +173,10 @@ pub fn run() {
             worktree::prepare_story_worktree,
             worktree::finalize_story_worktree,
             worktree::cleanup_all_story_worktrees,
+            worktree::list_story_branches,
+            worktree::delete_story_branch,
+            worktree::checkout_story_branch,
+            worktree::force_merge_story_branch,
             // Utils
             utils::write_binary_file
         ])

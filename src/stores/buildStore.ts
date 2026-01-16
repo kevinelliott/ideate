@@ -23,6 +23,12 @@ export interface StoryRetryInfo {
   previousLogs: LogEntry[][]
 }
 
+export interface ConflictInfo {
+  storyId: string
+  storyTitle: string
+  branchName: string
+}
+
 export interface ProjectBuildState {
   status: BuildStatus
   currentStoryId: string | null
@@ -32,6 +38,7 @@ export interface ProjectBuildState {
   storyRetries: Record<string, StoryRetryInfo>
   logs: LogEntry[]
   lastExitInfo: ProcessExitInfo | null
+  conflictedBranches: ConflictInfo[]
 }
 
 const createEmptyProjectState = (): ProjectBuildState => ({
@@ -43,6 +50,7 @@ const createEmptyProjectState = (): ProjectBuildState => ({
   storyRetries: {},
   logs: [],
   lastExitInfo: null,
+  conflictedBranches: [],
 })
 
 interface BuildStore {
@@ -68,6 +76,8 @@ interface BuildStore {
   getStoryRetryInfo: (projectId: string, storyId: string) => StoryRetryInfo | undefined
   restoreRetryInfo: (projectId: string, storyId: string, retryCount: number) => void
   resetBuildState: (projectId: string) => void
+  addConflictedBranch: (projectId: string, conflict: ConflictInfo) => void
+  clearConflictedBranches: (projectId: string) => void
   
   // Get all running projects
   getRunningProjects: () => string[]
@@ -339,6 +349,35 @@ export const useBuildStore = create<BuildStore>((set, get) => ({
       projectStates: {
         ...state.projectStates,
         [projectId]: createEmptyProjectState(),
+      },
+    }))
+  },
+
+  addConflictedBranch: (projectId, conflict) => {
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      const existing = projectState.conflictedBranches.find(c => c.branchName === conflict.branchName)
+      if (existing) return state
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            conflictedBranches: [...projectState.conflictedBranches, conflict],
+          },
+        },
+      }
+    })
+  },
+
+  clearConflictedBranches: (projectId) => {
+    set((state) => ({
+      projectStates: {
+        ...state.projectStates,
+        [projectId]: {
+          ...(state.projectStates[projectId] || createEmptyProjectState()),
+          conflictedBranches: [],
+        },
       },
     }))
   },

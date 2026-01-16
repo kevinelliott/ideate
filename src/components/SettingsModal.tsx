@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTheme, type ColorMode, type ThemeId } from "../hooks/useTheme";
+import { getTheme } from "../themes";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
 import { DEFAULT_PROMPTS, PROMPT_CATEGORIES, getPromptsByCategory, type PromptCategory } from "../utils/prompts";
 import { useIntegrationsStore, type OutRayConfig } from "../stores/integrationsStore";
@@ -53,7 +54,7 @@ type SettingsTab = "general" | "agents" | "prompts" | "integrations";
 type AppIconVariant = "transparent" | "light" | "dark";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { themeId, colorMode, setThemeId, setColorMode, availableThemes } = useTheme();
+  const { themeId, colorMode, resolvedMode, setThemeId, setColorMode, availableThemes } = useTheme();
   
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [defaultAgent, setDefaultAgent] = useState<string>("claude-code");
@@ -393,24 +394,50 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <div>
                     <label className="block text-sm text-foreground mb-2">Theme</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {availableThemes.map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => handleThemeIdChange(t.id as ThemeId)}
-                          className={`flex flex-col items-start p-3 rounded-lg border transition-colors text-left ${
-                            themeId === t.id
-                              ? "border-accent bg-accent/10"
-                              : "border-border hover:border-secondary"
-                          }`}
-                        >
-                          <span className={`text-sm font-medium ${themeId === t.id ? "text-accent" : "text-foreground"}`}>
-                            {t.name}
-                          </span>
-                          <span className="text-xs text-muted mt-0.5 line-clamp-2">
-                            {t.description}
-                          </span>
-                        </button>
-                      ))}
+                      {availableThemes.map((t) => {
+                        const themeDef = getTheme(t.id);
+                        const colors = resolvedMode === 'dark' ? themeDef.dark : themeDef.light;
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => handleThemeIdChange(t.id as ThemeId)}
+                            className={`flex flex-col items-start p-3 rounded-lg border transition-colors text-left ${
+                              themeId === t.id
+                                ? "border-accent bg-accent/10"
+                                : "border-border hover:border-secondary"
+                            }`}
+                          >
+                            <div className="flex gap-1 mb-2">
+                              <div
+                                className="w-4 h-4 rounded-full border border-black/10"
+                                style={{ backgroundColor: `rgb(${colors.background})` }}
+                                title="Background"
+                              />
+                              <div
+                                className="w-4 h-4 rounded-full border border-black/10"
+                                style={{ backgroundColor: `rgb(${colors.accent})` }}
+                                title="Accent"
+                              />
+                              <div
+                                className="w-4 h-4 rounded-full border border-black/10"
+                                style={{ backgroundColor: `rgb(${colors.foreground})` }}
+                                title="Foreground"
+                              />
+                              <div
+                                className="w-4 h-4 rounded-full border border-black/10"
+                                style={{ backgroundColor: `rgb(${colors.card})` }}
+                                title="Card"
+                              />
+                            </div>
+                            <span className={`text-sm font-medium ${themeId === t.id ? "text-accent" : "text-foreground"}`}>
+                              {t.name}
+                            </span>
+                            <span className="text-xs text-muted mt-0.5 line-clamp-2">
+                              {t.description}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

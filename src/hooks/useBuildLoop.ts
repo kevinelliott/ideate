@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { useBuildStore } from '../stores/buildStore'
-import { usePrdStore, type Story } from '../stores/prdStore'
+import { useBuildStore, type LogEntry, type StoryRetryInfo, type ConflictInfo } from '../stores/buildStore'
+import { usePrdStore } from '../stores/prdStore'
 import { useCostStore } from '../stores/costStore'
 import { useProcessStore } from '../stores/processStore'
 import { useAgentStore } from '../stores/agentStore'
@@ -9,6 +9,7 @@ import { useProjectStore } from '../stores/projectStore'
 import { defaultPlugins } from '../types'
 import { usePromptStore } from '../stores/promptStore'
 import { notify } from '../utils/notify'
+import { analyzeStoryDependencies } from '../utils/storyDependencies'
 import type { AutonomyLevel, BuildMode } from '../components/ProjectTopBar'
 
 interface SpawnAgentResult {
@@ -29,14 +30,6 @@ interface ProjectSettings {
 
 const DEFAULT_PARALLEL_LIMIT = 4
 
-interface StoryDeps {
-  storyId: string
-  prerequisites: string[]
-  conflicts: string[]
-}
-
-type StoryDepGraph = Record<string, StoryDeps>
-
 interface WorktreeResult {
   worktreePath: string
   branchName: string
@@ -46,61 +39,20 @@ interface GlobalPreferences {
   maxParallelAgents?: number
 }
 
-function analyzeStoryDependencies(stories: Story[]): StoryDepGraph {
-  const graph: StoryDepGraph = {}
-
-  for (const story of stories) {
-    const text = [
-      story.title,
-      story.description,
-      story.acceptanceCriteria.join('\n'),
-      story.notes ?? '',
-    ].join('\n').toLowerCase()
-
-    const prerequisites = new Set<string>()
-
-    for (const other of stories) {
-      if (other.id === story.id) continue
-      
-      // Check if this story references another story by ID
-      if (text.includes(other.id.toLowerCase())) {
-        prerequisites.add(other.id)
-      }
-      
-      // Check for keywords like "after", "depends on", "requires"
-      const otherTitle = other.title.toLowerCase()
-      const dependencyPatterns = [
-        `after ${otherTitle}`,
-        `depends on ${otherTitle}`,
-        `requires ${otherTitle}`,
-        `following ${otherTitle}`,
-        `once ${otherTitle}`,
-      ]
-      
-      for (const pattern of dependencyPatterns) {
-        if (text.includes(pattern)) {
-          prerequisites.add(other.id)
-          break
-        }
-      }
-      
-      // Check notes for explicit dependency mentions
-      const notes = (story.notes ?? '').toLowerCase()
-      if (notes.includes(other.id.toLowerCase()) || 
-          notes.includes(`prerequisite: ${otherTitle}`) ||
-          notes.includes(`depends: ${otherTitle}`)) {
-        prerequisites.add(other.id)
-      }
-    }
-
-    graph[story.id] = {
-      storyId: story.id,
-      prerequisites: Array.from(prerequisites),
-      conflicts: [], // Could be extended for mutual exclusion
-    }
+function formatRetryContext(retryInfo: StoryRetryInfo): string {
+  if (retryInfo.previousLogs.length === 0) return ''
+  
+  const lastAttemptLogs = retryInfo.previousLogs[retryInfo.previousLogs.length - 1]
+  const relevantLogs = lastAttemptLogs
+    .filter((log: LogEntry) => log.type === 'stderr' || log.content.includes('error') || log.content.includes('Error') || log.content.includes('failed') || log.content.includes('Failed'))
+    .slice(-25)
+  
+  if (relevantLogs.length === 0) {
+    const fallbackLogs = lastAttemptLogs.slice(-20)
+    return fallbackLogs.map((log: LogEntry) => log.content).join('\n')
   }
-
-  return graph
+  
+  return relevantLogs.map((log: LogEntry) => log.content).join('\n')
 }
 
 export function useBuildLoop(projectId: string | undefined, projectPath: string | undefined) {
@@ -137,16 +89,24 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   const currentStoryId = projectState?.currentStoryId || null
   const currentProcessId = projectState?.currentProcessId || null
 
-  const generatePrompt = useCallback((story: typeof stories[0]): string => {
+  const generatePrompt = useCallback((story: typeof stories[0], retryInfo?: StoryRetryInfo): string => {
     const criteria = story.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
     const notesSection = story.notes ? `### Notes:\n${story.notes}` : ''
+    
+    let retrySection = ''
+    if (retryInfo && retryInfo.retryCount > 0 && retryInfo.previousLogs.length > 0) {
+      const errorContext = formatRetryContext(retryInfo)
+      if (errorContext) {
+        retrySection = `\n\n### Previous Attempt Failed (Attempt ${retryInfo.retryCount}):\nThe previous implementation attempt failed. Here are the relevant error logs:\n\`\`\`\n${errorContext}\n\`\`\`\nPlease analyze these errors and fix the issues in your implementation.`
+      }
+    }
     
     return getPrompt('storyImplementation', {
       '{{storyId}}': story.id,
       '{{storyTitle}}': story.title,
       '{{storyDescription}}': story.description,
       '{{acceptanceCriteria}}': criteria,
-      '{{notes}}': notesSection,
+      '{{notes}}': notesSection + retrySection,
     })
   }, [getPrompt])
 
@@ -162,7 +122,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const agentId = settings?.agent || defaultAgentId
 
       const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
-      const prompt = generatePrompt(story)
+      const retryInfo = useBuildStore.getState().getStoryRetryInfo(projectId, story.id)
+      const prompt = generatePrompt(story, retryInfo)
       const args = plugin.argsTemplate.map((arg) =>
         arg.replace('{{prompt}}', prompt)
       )
@@ -249,7 +210,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const agentId = settings?.agent || defaultAgentId
 
       const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
-      const prompt = generatePrompt(story)
+      const retryInfo = useBuildStore.getState().getStoryRetryInfo(projectId, story.id)
+      const prompt = generatePrompt(story, retryInfo)
       const args = plugin.argsTemplate.map((arg) =>
         arg.replace('{{prompt}}', prompt)
       )
@@ -293,25 +255,43 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
       // Finalize worktree (merge if successful, cleanup)
-      await invoke('finalize_story_worktree', {
-        projectPath,
-        storyId: story.id,
-        worktreePath,
-        branchName,
-        success: waitResult.success,
-      })
-      worktreeRef.current.delete(story.id)
+      try {
+        await invoke('finalize_story_worktree', {
+          projectPath,
+          storyId: story.id,
+          worktreePath,
+          branchName,
+          success: waitResult.success,
+        })
+        worktreeRef.current.delete(story.id)
 
-      if (waitResult.success) {
-        appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed and merged`)
-        setStoryStatus(projectId, story.id, 'complete')
-        updateStory(story.id, { passes: true })
-        await savePrd(projectPath)
-        return true
-      } else {
-        appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
-        setStoryStatus(projectId, story.id, 'failed')
-        return false
+        if (waitResult.success) {
+          appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed and merged`)
+          setStoryStatus(projectId, story.id, 'complete')
+          updateStory(story.id, { passes: true })
+          await savePrd(projectPath)
+          return true
+        } else {
+          appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
+          setStoryStatus(projectId, story.id, 'failed')
+          return false
+        }
+      } catch (finalizeError) {
+        const errorStr = String(finalizeError)
+        if (errorStr.includes('Merge conflict')) {
+          const conflict: ConflictInfo = {
+            storyId: story.id,
+            storyTitle: story.title,
+            branchName: branchName,
+          }
+          useBuildStore.getState().addConflictedBranch(projectId, conflict)
+          appendLog(projectId, 'system', `⚠ [Parallel] Merge conflict for story ${story.id} - changes kept in branch: ${branchName}`)
+          notify.warning('Merge Conflict', `Story ${story.id} has conflicts. Resolve manually in branch: ${branchName}`)
+          setStoryStatus(projectId, story.id, 'failed')
+          worktreeRef.current.delete(story.id)
+          return false
+        }
+        throw finalizeError
       }
     } catch (error) {
       appendLog(projectId, 'system', `✗ [Parallel] Error running story ${story.id}: ${error}`)
@@ -340,6 +320,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     isRunningRef.current = true
     clearLogs(projectId)
     resetStoryStatuses(projectId)
+    useBuildStore.getState().clearConflictedBranches(projectId)
     startBuild(projectId)
     appendLog(projectId, 'system', '🚀 Parallel build started')
 

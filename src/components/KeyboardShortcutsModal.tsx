@@ -19,6 +19,7 @@ const shortcutCategories: ShortcutCategory[] = [
   {
     title: "General",
     shortcuts: [
+      { keys: "⌘ + K", description: "Command Palette" },
       { keys: "⌘ + ,", description: "Open Settings" },
       { keys: "⌘ + /", description: "Toggle Keyboard Shortcuts" },
       { keys: "⌘ + N", description: "New Project" },
