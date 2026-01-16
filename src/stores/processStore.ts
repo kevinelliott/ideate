@@ -20,6 +20,7 @@ export interface ProcessCommand {
 export interface RunningProcess {
   processId: string
   projectId: string
+  projectName?: string
   type: ProcessType
   label: string
   startedAt: Date

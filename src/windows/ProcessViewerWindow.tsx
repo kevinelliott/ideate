@@ -24,6 +24,7 @@ interface ProcessRegisteredPayload {
   process: {
     processId: string;
     projectId: string;
+    projectName?: string;
     type: string;
     label: string;
     startedAt: string;
@@ -47,6 +48,7 @@ interface ProcessListSyncPayload {
   processes: Array<{
     processId: string;
     projectId: string;
+    projectName?: string;
     type: string;
     label: string;
     startedAt: string;
@@ -140,6 +142,12 @@ function ProcessRow({ process, isSelected, onSelect }: ProcessRowProps) {
           {process.label}
         </div>
         <div className="text-xs text-muted flex items-center gap-2">
+          {process.projectName && (
+            <>
+              <span className="truncate max-w-[100px]" title={process.projectName}>{process.projectName}</span>
+              <span>•</span>
+            </>
+          )}
           <span className="capitalize">{process.type}</span>
           <span>•</span>
           <span>{formatDuration(elapsed)}</span>

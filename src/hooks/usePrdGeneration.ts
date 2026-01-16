@@ -152,6 +152,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId: activeProjectId,
+          projectName,
           type: "prd",
           label: "PRD Generation",
         });
@@ -330,6 +331,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "Codebase Analysis",
         });
@@ -518,6 +520,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "Story Generation",
         });
@@ -690,6 +693,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "Story Breakdown",
         });
@@ -909,7 +913,6 @@ export function usePrdGeneration() {
           `Agent started (process ID: ${spawnResult.processId})`,
         );
 
-        console.log('[generatePrdFromIdea] About to call registerProcess for:', spawnResult.processId);
         registerProcess({
           processId: spawnResult.processId,
           agentId: plugin.id,
@@ -919,10 +922,10 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "PRD from Idea",
         });
-        console.log('[generatePrdFromIdea] registerProcess called');
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
           processId: spawnResult.processId,
