@@ -890,10 +890,13 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     
     if (processId) {
       try {
-        await invoke('kill_agent', { processId: processId })
+        console.log('[useBuildLoop] calling kill_agent for processId:', processId)
+        const result = await invoke('kill_agent', { processId: processId })
+        console.log('[useBuildLoop] kill_agent result:', result)
         unregisterProcess(processId, null, false)
         state.appendLog(targetProjectId, 'system', 'Agent process terminated')
       } catch (error) {
+        console.error('[useBuildLoop] kill_agent error:', error)
         state.appendLog(targetProjectId, 'system', `Failed to kill agent: ${error}`)
       }
     }
@@ -916,10 +919,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       worktreeRef.current.clear()
     }
 
+    console.log('[useBuildLoop] updating build state - cancelling build')
     state.setCurrentStory(targetProjectId, null)
     state.cancelBuild(targetProjectId)
     releaseBuildLoop(targetProjectId)
     state.appendLog(targetProjectId, 'system', 'Build cancelled by user')
+    console.log('[useBuildLoop] build cancelled, new status:', state.getProjectState(targetProjectId).status)
   }, [projectId, projectPath, unregisterProcess, releaseBuildLoop])
 
   useEffect(() => {
