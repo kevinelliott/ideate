@@ -605,17 +605,97 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                 Open Folder
               </button>
             </div>
-            <div className="px-4 py-2 space-y-2 max-h-40 overflow-y-auto">
+            <div className="px-4 py-2 space-y-3 max-h-64 overflow-y-auto">
               {conflictedBranches.map((conflict: ConflictInfo) => (
-                <div key={conflict.branchName} className="flex items-start gap-2 text-sm">
-                  <span className="text-destructive font-mono text-xs bg-destructive/10 px-1.5 py-0.5 rounded">
-                    {conflict.storyId}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-foreground truncate">{conflict.storyTitle}</p>
-                    <p className="text-xs text-muted mt-0.5">
-                      Resolve in branch: <code className="text-destructive">{conflict.branchName}</code>
-                    </p>
+                <div key={conflict.branchName} className="bg-background rounded-lg p-3 border border-destructive/20">
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-destructive font-mono text-xs bg-destructive/10 px-1.5 py-0.5 rounded flex-shrink-0">
+                      {conflict.storyId}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-foreground truncate font-medium">{conflict.storyTitle}</p>
+                      <p className="text-xs text-muted mt-0.5">
+                        Branch: <code className="text-destructive">{conflict.branchName}</code>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      onClick={() => {
+                        setDiffViewerStory({ id: conflict.storyId, title: conflict.storyTitle });
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      View Diff
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Force merge "${conflict.branchName}"? This will accept all changes from the story branch, overwriting any conflicts.`)) return;
+                        try {
+                          await invoke("force_merge_story_branch", {
+                            projectPath: project?.path,
+                            branchName: conflict.branchName,
+                          });
+                          useBuildStore.getState().removeConflictedBranch(projectId, conflict.branchName);
+                          loadBranches();
+                        } catch (e) {
+                          console.error("Failed to force merge:", e);
+                          alert(`Failed to force merge: ${e}`);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-warning/10 text-warning hover:bg-warning/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Force Merge
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Delete branch "${conflict.branchName}"? This will discard all changes from this story.`)) return;
+                        try {
+                          await invoke("delete_story_branch", {
+                            projectPath: project?.path,
+                            branchName: conflict.branchName,
+                            force: true,
+                          });
+                          useBuildStore.getState().removeConflictedBranch(projectId, conflict.branchName);
+                          loadBranches();
+                        } catch (e) {
+                          console.error("Failed to delete branch:", e);
+                          alert(`Failed to delete branch: ${e}`);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Discard
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await invoke("checkout_story_branch", {
+                            projectPath: project?.path,
+                            branchName: conflict.branchName,
+                          });
+                          handleOpenProjectFolder();
+                        } catch (e) {
+                          console.error("Failed to checkout:", e);
+                          alert(`Failed to checkout: ${e}`);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                      </svg>
+                      Checkout
+                    </button>
                   </div>
                 </div>
               ))}
