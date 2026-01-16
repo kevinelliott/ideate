@@ -170,33 +170,20 @@ pub fn open_process_viewer(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     
-    // Create new window
+    // Create new window without a menu bar
     let url = WebviewUrl::App("/process-viewer".into());
     
-    #[cfg(target_os = "macos")]
-    {
-        use tauri::menu::MenuBuilder;
-        let empty_menu = MenuBuilder::new(&app).build().map_err(|e| format!("Failed to build menu: {}", e))?;
-        WebviewWindowBuilder::new(&app, WINDOW_LABEL, url)
-            .title("Process Viewer")
-            .inner_size(900.0, 600.0)
-            .min_inner_size(600.0, 400.0)
-            .resizable(true)
-            .menu(empty_menu)
-            .build()
-            .map_err(|e| format!("Failed to create process viewer window: {}", e))?;
-    }
+    use tauri::menu::MenuBuilder;
+    let empty_menu = MenuBuilder::new(&app).build().map_err(|e| format!("Failed to build menu: {}", e))?;
     
-    #[cfg(not(target_os = "macos"))]
-    {
-        WebviewWindowBuilder::new(&app, WINDOW_LABEL, url)
-            .title("Process Viewer")
-            .inner_size(900.0, 600.0)
-            .min_inner_size(600.0, 400.0)
-            .resizable(true)
-            .build()
-            .map_err(|e| format!("Failed to create process viewer window: {}", e))?;
-    }
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, url)
+        .title("Process Viewer")
+        .inner_size(900.0, 600.0)
+        .min_inner_size(600.0, 400.0)
+        .resizable(true)
+        .menu(empty_menu)
+        .build()
+        .map_err(|e| format!("Failed to create process viewer window: {}", e))?;
     
     Ok(())
 }
