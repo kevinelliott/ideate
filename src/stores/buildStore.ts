@@ -64,10 +64,16 @@ interface BuildStore {
   // Per-project state
   projectStates: Record<string, ProjectBuildState>
   
+  // Track which projects have an active build loop (prevents duplicate starts)
+  activeBuildLoops: Set<string>
+  
   // Get state for a specific project
   getProjectState: (projectId: string) => ProjectBuildState
   
   // Per-project actions
+  // Atomically try to start a build - returns true if successful, false if already running
+  tryStartBuild: (projectId: string) => boolean
+  releaseBuildLoop: (projectId: string) => void
   startBuild: (projectId: string) => void
   pauseBuild: (projectId: string) => void
   resumeBuild: (projectId: string) => void
@@ -97,9 +103,30 @@ interface BuildStore {
 
 export const useBuildStore = create<BuildStore>((set, get) => ({
   projectStates: {},
+  activeBuildLoops: new Set<string>(),
 
   getProjectState: (projectId) => {
     return get().projectStates[projectId] || createEmptyProjectState()
+  },
+
+  tryStartBuild: (projectId) => {
+    const { activeBuildLoops } = get()
+    if (activeBuildLoops.has(projectId)) {
+      return false
+    }
+    const newSet = new Set(activeBuildLoops)
+    newSet.add(projectId)
+    set({ activeBuildLoops: newSet })
+    return true
+  },
+
+  releaseBuildLoop: (projectId) => {
+    const { activeBuildLoops } = get()
+    if (activeBuildLoops.has(projectId)) {
+      const newSet = new Set(activeBuildLoops)
+      newSet.delete(projectId)
+      set({ activeBuildLoops: newSet })
+    }
   },
 
   startBuild: (projectId) => {

@@ -67,6 +67,8 @@ function formatRetryContext(retryInfo: StoryRetryInfo): string {
 
 export function useBuildLoop(projectId: string | undefined, projectPath: string | undefined) {
   const getProjectState = useBuildStore((state) => state.getProjectState)
+  const tryStartBuild = useBuildStore((state) => state.tryStartBuild)
+  const releaseBuildLoop = useBuildStore((state) => state.releaseBuildLoop)
   const startBuild = useBuildStore((state) => state.startBuild)
   const pauseBuild = useBuildStore((state) => state.pauseBuild)
   const cancelBuild = useBuildStore((state) => state.cancelBuild)
@@ -89,7 +91,6 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   const defaultAgentId = useAgentStore((state) => state.defaultAgentId)
   const showBuildStatus = useProjectStore((state) => state.showBuildStatus)
 
-  const isRunningRef = useRef(false)
   const storyIndexRef = useRef(0)
   const activeProcessesRef = useRef<Map<string, string>>(new Map())
   const worktreeRef = useRef<Map<string, { path: string; branch: string }>>(new Map())
@@ -399,9 +400,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   }, [projectPath, projectId, generatePrompt, setStoryStatus, appendLog, updateStory, savePrd, parseAndAddFromOutput, registerProcess, unregisterProcess, defaultAgentId])
 
   const runParallelBuildLoop = useCallback(async () => {
-    if (!projectPath || !projectId || isRunningRef.current) return
+    if (!projectPath || !projectId) return
+    
+    if (!tryStartBuild(projectId)) {
+      return
+    }
 
-    isRunningRef.current = true
     clearLogs(projectId)
     resetStoryStatuses(projectId)
     useBuildStore.getState().clearConflictedBranches(projectId)
@@ -416,7 +420,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     if (incompleteStories.length === 0) {
       appendLog(projectId, 'system', 'No stories to build')
       cancelBuild(projectId)
-      isRunningRef.current = false
+      releaseBuildLoop(projectId)
       return
     }
 
@@ -594,8 +598,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
-    isRunningRef.current = false
-  }, [projectPath, projectId, stories, runStoryParallel, clearLogs, resetStoryStatuses, startBuild, cancelBuild, appendLog, setCurrentStory, showBuildStatus])
+    releaseBuildLoop(projectId)
+  }, [projectPath, projectId, stories, runStoryParallel, clearLogs, resetStoryStatuses, startBuild, cancelBuild, appendLog, setCurrentStory, showBuildStatus, tryStartBuild, releaseBuildLoop])
 
   const waitWhilePaused = useCallback(async (): Promise<boolean> => {
     if (!projectId) return false
@@ -616,9 +620,12 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   }, [])
 
   const runFromStory = useCallback(async (storyId: string) => {
-    if (!projectPath || !projectId || isRunningRef.current) return
+    if (!projectPath || !projectId) return
+    
+    if (!tryStartBuild(projectId)) {
+      return
+    }
 
-    isRunningRef.current = true
     clearLogs(projectId)
     resetStoryStatuses(projectId)
     startBuild(projectId)
@@ -631,7 +638,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     if (startIndex === -1) {
       appendLog(projectId, 'system', `Story ${storyId} not found`)
       cancelBuild(projectId)
-      isRunningRef.current = false
+      releaseBuildLoop(projectId)
       return
     }
 
@@ -650,7 +657,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const shouldContinue = await waitWhilePaused()
       if (!shouldContinue) {
         appendLog(projectId, 'system', 'Build cancelled while paused')
-        isRunningRef.current = false
+        releaseBuildLoop(projectId)
         return
       }
 
@@ -659,7 +666,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       if (!success) {
         appendLog(projectId, 'system', 'Build paused due to story failure')
         pauseBuild(projectId)
-        isRunningRef.current = false
+        releaseBuildLoop(projectId)
         return
       }
 
@@ -674,7 +681,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           setStoryStatus(projectId, nextStory.id, 'pending')
           appendLog(projectId, 'system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)
           pauseBuild(projectId)
-          isRunningRef.current = false
+          releaseBuildLoop(projectId)
           return
         }
       }
@@ -687,11 +694,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
-    isRunningRef.current = false
-  }, [projectPath, projectId, runStory, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus, stories, clearLogs, resetStoryStatuses])
+    releaseBuildLoop(projectId)
+  }, [projectPath, projectId, runStory, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus, stories, clearLogs, resetStoryStatuses, tryStartBuild, releaseBuildLoop])
 
   const runBuildLoop = useCallback(async () => {
-    if (!projectPath || !projectId || isRunningRef.current) return
+    if (!projectPath || !projectId) return
 
     const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
     const buildMode = settings?.buildMode || 'ralph'
@@ -706,7 +713,10 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       return runParallelBuildLoop()
     }
 
-    isRunningRef.current = true
+    if (!tryStartBuild(projectId)) {
+      return
+    }
+    
     storyIndexRef.current = 0
     clearLogs(projectId)
     resetStoryStatuses(projectId)
@@ -741,14 +751,14 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         setStoryStatus(projectId, story.id, 'pending')
         appendLog(projectId, 'system', `Pausing before story ${story.id} (${autonomy} mode) - Resume to continue`)
         pauseBuild(projectId)
-        isRunningRef.current = false
+        releaseBuildLoop(projectId)
         return
       }
 
       const shouldContinue = await waitWhilePaused()
       if (!shouldContinue) {
         appendLog(projectId, 'system', 'Build cancelled while paused')
-        isRunningRef.current = false
+        releaseBuildLoop(projectId)
         return
       }
 
@@ -757,7 +767,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       if (!success) {
         appendLog(projectId, 'system', 'Build paused due to story failure')
         pauseBuild(projectId)
-        isRunningRef.current = false
+        releaseBuildLoop(projectId)
         return
       }
 
@@ -766,7 +776,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         if (autonomy === 'pause-between') {
           appendLog(projectId, 'system', 'Pausing for review (pause-between mode)')
           pauseBuild(projectId)
-          isRunningRef.current = false
+          releaseBuildLoop(projectId)
           return
         }
       }
@@ -790,17 +800,20 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
-    isRunningRef.current = false
-  }, [projectPath, projectId, stories, runStory, runParallelBuildLoop, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStory, setStoryStatus, showBuildStatus])
+    releaseBuildLoop(projectId)
+  }, [projectPath, projectId, stories, runStory, runParallelBuildLoop, clearLogs, resetStoryStatuses, startBuild, pauseBuild, cancelBuild, appendLog, waitWhilePaused, shouldPauseForAutonomy, setCurrentStory, setStoryStatus, showBuildStatus, tryStartBuild, releaseBuildLoop])
 
   const handleStart = useCallback(() => {
     runBuildLoop()
   }, [runBuildLoop])
 
   const handleResume = useCallback(() => {
-    if (!projectPath || !projectId || isRunningRef.current) return
+    if (!projectPath || !projectId) return
+    
+    if (!tryStartBuild(projectId)) {
+      return
+    }
 
-    isRunningRef.current = true
     useBuildStore.getState().resumeBuild(projectId)
     appendLog(projectId, 'system', 'Build resumed')
 
@@ -822,7 +835,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         const shouldContinue = await waitWhilePaused()
         if (!shouldContinue) {
           appendLog(projectId, 'system', 'Build cancelled while paused')
-          isRunningRef.current = false
+          releaseBuildLoop(projectId)
           return
         }
 
@@ -831,7 +844,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         if (!success) {
           appendLog(projectId, 'system', 'Build paused due to story failure')
           pauseBuild(projectId)
-          isRunningRef.current = false
+          releaseBuildLoop(projectId)
           return
         }
 
@@ -846,7 +859,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
             setStoryStatus(projectId, nextStory.id, 'pending')
             appendLog(projectId, 'system', `Pausing ${autonomy === 'manual' ? 'before next story' : 'for review'} (${autonomy} mode)`)
             pauseBuild(projectId)
-            isRunningRef.current = false
+            releaseBuildLoop(projectId)
             return
           }
         }
@@ -859,11 +872,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
       setCurrentStory(projectId, null)
       cancelBuild(projectId)
-      isRunningRef.current = false
+      releaseBuildLoop(projectId)
     }
 
     runRemaining()
-  }, [projectPath, projectId, runStory, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus])
+  }, [projectPath, projectId, runStory, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus, tryStartBuild, releaseBuildLoop])
 
   const handleCancel = useCallback(async () => {
     if (!projectId) return
@@ -899,9 +912,9 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     setCurrentStory(projectId, null)
     cancelBuild(projectId)
-    isRunningRef.current = false
+    releaseBuildLoop(projectId)
     appendLog(projectId, 'system', 'Build cancelled by user')
-  }, [projectId, projectPath, cancelBuild, appendLog, setCurrentStory, unregisterProcess])
+  }, [projectId, projectPath, cancelBuild, appendLog, setCurrentStory, unregisterProcess, releaseBuildLoop])
 
   useEffect(() => {
     const handleSidebarStart = (event: Event) => {
@@ -932,15 +945,19 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   }, [projectId, status, runFromStory])
 
   const retryStoryWithAgent = useCallback(async (storyId: string, agentId?: string) => {
-    if (!projectPath || !projectId || isRunningRef.current) return
+    if (!projectPath || !projectId) return
+    
+    if (!tryStartBuild(projectId)) {
+      return
+    }
 
     const story = usePrdStore.getState().stories.find(s => s.id === storyId)
     if (!story) {
       appendLog(projectId, 'system', `Story ${storyId} not found`)
+      releaseBuildLoop(projectId)
       return
     }
 
-    isRunningRef.current = true
     startBuild(projectId)
     appendLog(projectId, 'system', `Retrying story ${storyId}${agentId ? ` with ${agentId}` : ''}`)
 
@@ -954,8 +971,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     }
 
     setCurrentStory(projectId, null)
-    isRunningRef.current = false
-  }, [projectPath, projectId, runStory, startBuild, pauseBuild, cancelBuild, appendLog, setCurrentStory])
+    releaseBuildLoop(projectId)
+  }, [projectPath, projectId, runStory, startBuild, pauseBuild, cancelBuild, appendLog, setCurrentStory, tryStartBuild, releaseBuildLoop])
 
   useEffect(() => {
     const handleRetryWithAgent = (event: Event) => {
@@ -973,9 +990,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
   useEffect(() => {
     return () => {
-      isRunningRef.current = false
+      if (projectId) {
+        releaseBuildLoop(projectId)
+      }
     }
-  }, [])
+  }, [projectId, releaseBuildLoop])
 
   return {
     status,
