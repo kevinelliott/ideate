@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { homeDir } from '@tauri-apps/api/path'
 import { defaultPlugins, type AgentPlugin } from '../types'
 import { usePromptStore } from '../stores/promptStore'
+import { useProcessStore } from '../stores/processStore'
 
 interface SpawnAgentResult {
   processId: string
@@ -57,6 +58,8 @@ export function useIdeaGeneration() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationType, setGenerationType] = useState<GenerationType | null>(null)
   const getPrompt = usePromptStore((state) => state.getPrompt)
+  const registerProcess = useProcessStore((state) => state.registerProcess)
+  const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
 
   const generateDescription = useCallback(async (
     type: GenerationType,
@@ -101,6 +104,20 @@ export function useIdeaGeneration() {
         workingDirectory
       })
 
+      // Register process so it appears in Process Viewer and can be stopped
+      registerProcess({
+        processId: spawnResult.processId,
+        projectId: 'ideas', // Use 'ideas' as pseudo-project for idea generation
+        type: 'prd',
+        label: `Idea: ${type} description`,
+        agentId: plugin.id,
+        command: {
+          executable: plugin.command,
+          args,
+          workingDirectory,
+        },
+      })
+
       const lines: string[] = []
       
       const unlistenOutput = await listen<AgentOutputPayload>('agent-output', (event) => {
@@ -116,6 +133,7 @@ export function useIdeaGeneration() {
       })
 
       unlistenOutput()
+      unregisterProcess(spawnResult.processId, waitResult.exitCode, waitResult.success)
 
       if (!waitResult.success) {
         console.error('Agent failed with exit code:', waitResult.exitCode)
@@ -133,7 +151,7 @@ export function useIdeaGeneration() {
       setIsGenerating(false)
       setGenerationType(null)
     }
-  }, [getPrompt])
+  }, [getPrompt, registerProcess, unregisterProcess])
 
   return {
     generateDescription,

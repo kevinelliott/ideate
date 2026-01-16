@@ -353,8 +353,9 @@ fn kill_agent_blocking(process_id: &str) -> Result<KillAgentResult, String> {
 }
 
 /// Saves process logs to a file in the app data directory.
+/// Uses spawn_blocking to avoid blocking the main thread.
 #[tauri::command(rename_all = "camelCase")]
-pub fn save_process_log(
+pub async fn save_process_log(
     app: AppHandle,
     process_id: String,
     project_id: String,
@@ -366,6 +367,22 @@ pub fn save_process_log(
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    tokio::task::spawn_blocking(move || {
+        save_process_log_blocking(app_data_dir, process_id, project_id, process_type, label, logs)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+fn save_process_log_blocking(
+    app_data_dir: std::path::PathBuf,
+    process_id: String,
+    project_id: String,
+    process_type: String,
+    label: String,
+    logs: Vec<ProcessLogEntry>,
+) -> Result<String, String> {
 
     let logs_dir = app_data_dir.join("logs");
     if !logs_dir.exists() {
@@ -425,8 +442,9 @@ pub fn save_process_log(
 }
 
 /// Saves a process history entry.
+/// Uses spawn_blocking to avoid blocking the main thread.
 #[tauri::command(rename_all = "camelCase")]
-pub fn save_process_history_entry(
+pub async fn save_process_history_entry(
     app: AppHandle,
     entry: ProcessHistoryEntry,
 ) -> Result<(), String> {
@@ -435,42 +453,47 @@ pub fn save_process_history_entry(
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
-    let history_path = app_data_dir.join("process-history.json");
+    tokio::task::spawn_blocking(move || {
+        let history_path = app_data_dir.join("process-history.json");
 
-    // Load existing history
-    let mut history = if history_path.exists() {
-        let content = fs::read_to_string(&history_path)
-            .map_err(|e| format!("Failed to read process history: {}", e))?;
-        serde_json::from_str::<ProcessHistory>(&content).unwrap_or(ProcessHistory {
-            entries: Vec::new(),
-        })
-    } else {
-        ProcessHistory {
-            entries: Vec::new(),
+        // Load existing history
+        let mut history = if history_path.exists() {
+            let content = fs::read_to_string(&history_path)
+                .map_err(|e| format!("Failed to read process history: {}", e))?;
+            serde_json::from_str::<ProcessHistory>(&content).unwrap_or(ProcessHistory {
+                entries: Vec::new(),
+            })
+        } else {
+            ProcessHistory {
+                entries: Vec::new(),
+            }
+        };
+
+        // Add new entry at the beginning (most recent first)
+        history.entries.insert(0, entry);
+
+        // Keep only the last 500 entries
+        if history.entries.len() > 500 {
+            history.entries.truncate(500);
         }
-    };
 
-    // Add new entry at the beginning (most recent first)
-    history.entries.insert(0, entry);
+        // Save back
+        let json = serde_json::to_string_pretty(&history)
+            .map_err(|e| format!("Failed to serialize process history: {}", e))?;
 
-    // Keep only the last 500 entries
-    if history.entries.len() > 500 {
-        history.entries.truncate(500);
-    }
+        fs::write(&history_path, json)
+            .map_err(|e| format!("Failed to write process history: {}", e))?;
 
-    // Save back
-    let json = serde_json::to_string_pretty(&history)
-        .map_err(|e| format!("Failed to serialize process history: {}", e))?;
-
-    fs::write(&history_path, json)
-        .map_err(|e| format!("Failed to write process history: {}", e))?;
-
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Loads process history for a specific project.
+/// Uses spawn_blocking to avoid blocking the main thread.
 #[tauri::command(rename_all = "camelCase")]
-pub fn load_process_history(
+pub async fn load_process_history(
     app: AppHandle,
     project_id: String,
 ) -> Result<ProcessHistory, String> {
@@ -479,35 +502,44 @@ pub fn load_process_history(
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
-    let history_path = app_data_dir.join("process-history.json");
+    tokio::task::spawn_blocking(move || {
+        let history_path = app_data_dir.join("process-history.json");
 
-    if !history_path.exists() {
-        return Ok(ProcessHistory {
-            entries: Vec::new(),
-        });
-    }
+        if !history_path.exists() {
+            return Ok(ProcessHistory {
+                entries: Vec::new(),
+            });
+        }
 
-    let content = fs::read_to_string(&history_path)
-        .map_err(|e| format!("Failed to read process history: {}", e))?;
+        let content = fs::read_to_string(&history_path)
+            .map_err(|e| format!("Failed to read process history: {}", e))?;
 
-    let history: ProcessHistory = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse process history: {}", e))?;
+        let history: ProcessHistory = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse process history: {}", e))?;
 
-    // Filter by project ID
-    let filtered = ProcessHistory {
-        entries: history
-            .entries
-            .into_iter()
-            .filter(|e| e.project_id == project_id)
-            .collect(),
-    };
+        // Filter by project ID
+        let filtered = ProcessHistory {
+            entries: history
+                .entries
+                .into_iter()
+                .filter(|e| e.project_id == project_id)
+                .collect(),
+        };
 
-    Ok(filtered)
+        Ok(filtered)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Reads a log file's contents.
+/// Uses spawn_blocking to avoid blocking the main thread.
 #[tauri::command(rename_all = "camelCase")]
-pub fn read_process_log_file(log_file_path: String) -> Result<String, String> {
-    fs::read_to_string(&log_file_path)
-        .map_err(|e| format!("Failed to read log file: {}", e))
+pub async fn read_process_log_file(log_file_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        fs::read_to_string(&log_file_path)
+            .map_err(|e| format!("Failed to read log file: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }

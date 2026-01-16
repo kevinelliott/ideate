@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
+import { useProcessStore } from './processStore'
 
 export interface OutRayConfig {
   enabled: boolean
@@ -112,6 +113,19 @@ export const useIntegrationsStore = create<IntegrationsStore>((set, get) => ({
         workingDirectory: '.',
       })
 
+      // Register with processStore for Process Viewer visibility and stop control
+      useProcessStore.getState().registerProcess({
+        processId: result.processId,
+        projectId,
+        type: 'tunnel',
+        label: `Tunnel (port ${localPort})`,
+        command: {
+          executable: cliPath,
+          args,
+          workingDirectory: '.',
+        },
+      })
+
       set((state) => ({
         tunnels: {
           ...state.tunnels,
@@ -154,6 +168,7 @@ export const useIntegrationsStore = create<IntegrationsStore>((set, get) => ({
 
     try {
       await invoke('kill_agent', { processId: tunnel.processId })
+      useProcessStore.getState().unregisterProcess(tunnel.processId, null, true)
       set((state) => ({
         tunnels: {
           ...state.tunnels,
