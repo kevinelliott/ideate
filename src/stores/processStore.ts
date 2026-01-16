@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import { emit } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 
 export type ProcessType = 'build' | 'chat' | 'prd' | 'dev-server' | 'detection' | 'tunnel'
 
@@ -360,6 +360,21 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
     }
   },
 }))
+
+// Listen for process list sync requests from other windows (e.g., Process Viewer)
+// and respond with current process list
+listen('request-process-list', () => {
+  const state = useProcessStore.getState()
+  const processes = Object.values(state.processes).map(p => ({
+    ...p,
+    startedAt: p.startedAt.toISOString(),
+  }))
+  const logs: Record<string, { type: string; content: string }[]> = {}
+  for (const [processId, entries] of Object.entries(state.processLogs)) {
+    logs[processId] = entries.map(e => ({ type: e.type, content: e.content }))
+  }
+  emit('process-list-sync', { processes, logs }).catch(() => {})
+}).catch(() => {})
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000)

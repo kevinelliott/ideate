@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useThemeStore } from "../stores/themeStore";
 import type { RunningProcess } from "../stores/processStore";
@@ -41,6 +41,24 @@ interface ProcessUnregisteredPayload {
   processId: string;
   exitCode?: number | null;
   success?: boolean;
+}
+
+interface ProcessListSyncPayload {
+  processes: Array<{
+    processId: string;
+    projectId: string;
+    type: string;
+    label: string;
+    startedAt: string;
+    agentId?: string;
+    command?: {
+      executable: string;
+      args: string[];
+      workingDirectory: string;
+    };
+    url?: string;
+  }>;
+  logs: Record<string, { type: string; content: string }[]>;
 }
 
 function formatDuration(ms: number): string {
@@ -245,6 +263,30 @@ export function ProcessViewerWindow() {
   useEffect(() => {
     loadTheme();
   }, [loadTheme]);
+
+  // Request current process list from main window on mount
+  useEffect(() => {
+    const unlistenSyncPromise = listen<ProcessListSyncPayload>("process-list-sync", (event) => {
+      const { processes, logs } = event.payload;
+      const processMap: Record<string, RunningProcess> = {};
+      for (const p of processes) {
+        processMap[p.processId] = {
+          ...p,
+          type: p.type as RunningProcess["type"],
+          startedAt: new Date(p.startedAt),
+        };
+      }
+      setLocalProcesses(processMap);
+      setLocalLogs(logs);
+    });
+
+    // Request the current process list
+    emit("request-process-list", {}).catch(() => {});
+
+    return () => {
+      unlistenSyncPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   // Listen for process registration/unregistration events from main window
   useEffect(() => {
