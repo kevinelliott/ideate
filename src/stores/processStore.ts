@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 
 export type ProcessType = 'build' | 'chat' | 'prd' | 'dev-server' | 'detection' | 'tunnel'
 
@@ -138,19 +139,29 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
       content: `───────────────────────────────────────────────────────────────`,
     })
     
+    const newProcess: RunningProcess = {
+      ...process,
+      startedAt,
+    }
+    
     set((state) => ({
       processes: {
         ...state.processes,
-        [process.processId]: {
-          ...process,
-          startedAt,
-        },
+        [process.processId]: newProcess,
       },
       processLogs: {
         ...state.processLogs,
         [process.processId]: initialLogs,
       },
     }))
+    
+    // Emit event for other windows (e.g., Process Viewer)
+    emit('process-registered', {
+      process: {
+        ...newProcess,
+        startedAt: startedAt.toISOString(),
+      },
+    }).catch(() => {})
   },
 
   updateProcessUrl: (processId, url) => {
@@ -229,6 +240,9 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
       const newSelectedProcessId = s.selectedProcessId === processId ? null : s.selectedProcessId
       return { processes: rest, selectedProcessId: newSelectedProcessId }
     })
+    
+    // Emit event for other windows (e.g., Process Viewer)
+    emit('process-unregistered', { processId, exitCode, success }).catch(() => {})
   },
 
   getProcessesByProject: (projectId) => {

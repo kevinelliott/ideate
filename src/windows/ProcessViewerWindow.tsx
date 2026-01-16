@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useThemeStore } from "../stores/themeStore";
-import { useProcessStore, type RunningProcess } from "../stores/processStore";
+import type { RunningProcess } from "../stores/processStore";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getTerminalTheme } from "../utils/terminalThemes";
@@ -18,6 +18,29 @@ interface AgentExitPayload {
   processId: string;
   exitCode: number | null;
   success: boolean;
+}
+
+interface ProcessRegisteredPayload {
+  process: {
+    processId: string;
+    projectId: string;
+    type: string;
+    label: string;
+    startedAt: string;
+    agentId?: string;
+    command?: {
+      executable: string;
+      args: string[];
+      workingDirectory: string;
+    };
+    url?: string;
+  };
+}
+
+interface ProcessUnregisteredPayload {
+  processId: string;
+  exitCode?: number | null;
+  success?: boolean;
 }
 
 function formatDuration(ms: number): string {
@@ -111,15 +134,15 @@ function ProcessRow({ process, isSelected, onSelect }: ProcessRowProps) {
 
 interface ProcessDetailProps {
   process: RunningProcess;
+  logs: { type: string; content: string }[];
   onStop: () => void;
 }
 
-function ProcessDetail({ process, onStop }: ProcessDetailProps) {
+function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
   const { resolvedMode } = useThemeStore();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const logs = useProcessStore((state) => state.processLogs[process.processId] || []);
   const lastLogCountRef = useRef(0);
   const [isStopping, setIsStopping] = useState(false);
 
@@ -210,28 +233,73 @@ function ProcessDetail({ process, onStop }: ProcessDetailProps) {
 
 export function ProcessViewerWindow() {
   const loadTheme = useThemeStore((state) => state.loadTheme);
-  const processes = useProcessStore((state) => state.processes);
-  const appendProcessLog = useProcessStore((state) => state.appendProcessLog);
-  const unregisterProcess = useProcessStore((state) => state.unregisterProcess);
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
+  
+  // Local state for processes in this window (synced via events from main window)
+  const [localProcesses, setLocalProcesses] = useState<Record<string, RunningProcess>>({});
+  const [localLogs, setLocalLogs] = useState<Record<string, { type: string; content: string }[]>>({});
 
-  const processList = Object.values(processes);
-  const selectedProcess = selectedProcessId ? processes[selectedProcessId] : null;
+  const processList = Object.values(localProcesses);
+  const selectedProcess = selectedProcessId ? localProcesses[selectedProcessId] : null;
 
   useEffect(() => {
     loadTheme();
   }, [loadTheme]);
 
+  // Listen for process registration/unregistration events from main window
+  useEffect(() => {
+    const unlistenRegisterPromise = listen<ProcessRegisteredPayload>("process-registered", (event) => {
+      const { process } = event.payload;
+      const runningProcess: RunningProcess = {
+        ...process,
+        type: process.type as RunningProcess["type"],
+        startedAt: new Date(process.startedAt),
+      };
+      setLocalProcesses((prev) => ({
+        ...prev,
+        [process.processId]: runningProcess,
+      }));
+      // Initialize logs for this process
+      setLocalLogs((prev) => ({
+        ...prev,
+        [process.processId]: [],
+      }));
+    });
+
+    const unlistenUnregisterPromise = listen<ProcessUnregisteredPayload>("process-unregistered", (event) => {
+      const { processId } = event.payload;
+      setLocalProcesses((prev) => {
+        const { [processId]: _, ...rest } = prev;
+        return rest;
+      });
+      if (selectedProcessId === processId) {
+        setSelectedProcessId(null);
+      }
+    });
+
+    return () => {
+      unlistenRegisterPromise.then((unlisten) => unlisten());
+      unlistenUnregisterPromise.then((unlisten) => unlisten());
+    };
+  }, [selectedProcessId]);
+
   // Listen for agent output and exit events
   useEffect(() => {
     const unlistenOutputPromise = listen<AgentOutputPayload>("agent-output", (event) => {
       const { processId, streamType, content } = event.payload;
-      appendProcessLog(processId, streamType, content);
+      setLocalLogs((prev) => ({
+        ...prev,
+        [processId]: [...(prev[processId] || []), { type: streamType, content }],
+      }));
     });
 
     const unlistenExitPromise = listen<AgentExitPayload>("agent-exit", (event) => {
-      const { processId, exitCode, success } = event.payload;
-      unregisterProcess(processId, exitCode, success);
+      const { processId } = event.payload;
+      // The process-unregistered event handles removal, but we can handle exit here too
+      setLocalProcesses((prev) => {
+        const { [processId]: _, ...rest } = prev;
+        return rest;
+      });
       if (selectedProcessId === processId) {
         setSelectedProcessId(null);
       }
@@ -241,7 +309,7 @@ export function ProcessViewerWindow() {
       unlistenOutputPromise.then((unlisten) => unlisten());
       unlistenExitPromise.then((unlisten) => unlisten());
     };
-  }, [appendProcessLog, unregisterProcess, selectedProcessId]);
+  }, [selectedProcessId]);
 
   // Auto-select first process if none selected
   useEffect(() => {
@@ -282,6 +350,7 @@ export function ProcessViewerWindow() {
           <ProcessDetail
             key={selectedProcess.processId}
             process={selectedProcess}
+            logs={localLogs[selectedProcess.processId] || []}
             onStop={() => setSelectedProcessId(null)}
           />
         ) : (
