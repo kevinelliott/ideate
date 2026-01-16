@@ -42,6 +42,12 @@ pub fn run() {
                 .id("show_welcome_guide")
                 .build(app)?;
 
+            // Create custom menu item for process viewer
+            let process_viewer = MenuItemBuilder::new("Process Viewer")
+                .id("show_process_viewer")
+                .accelerator("Cmd+Shift+P")
+                .build(app)?;
+
             // Create About metadata
             let about_metadata = AboutMetadata {
                 version: Some("0.1.0".into()),
@@ -84,6 +90,8 @@ pub fn run() {
                 .minimize()
                 .maximize()
                 .separator()
+                .item(&process_viewer)
+                .separator()
                 .close_window()
                 .build()?;
 
@@ -109,6 +117,8 @@ pub fn run() {
             app.on_menu_event(move |app, event| {
                 if event.id().as_ref() == "show_welcome_guide" {
                     let _ = app.emit("show-welcome-guide", ());
+                } else if event.id().as_ref() == "show_process_viewer" {
+                    let _ = ui_state::open_process_viewer(app.clone());
                 }
             });
 
@@ -169,6 +179,7 @@ pub fn run() {
             ui_state::save_ui_state,
             ui_state::save_panel_states,
             ui_state::save_window_state,
+            ui_state::open_process_viewer_command,
             // Worktree
             worktree::prepare_story_worktree,
             worktree::finalize_story_worktree,

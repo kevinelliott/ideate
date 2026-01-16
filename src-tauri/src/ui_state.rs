@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Panel state for a single project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,4 +157,35 @@ pub fn save_window_state(app: AppHandle, window_state: WindowState) -> Result<()
     fs::write(&path, json).map_err(|e| format!("Failed to write ui-state.json: {}", e))?;
 
     Ok(())
+}
+
+/// Opens or focuses the Process Viewer window.
+pub fn open_process_viewer(app: AppHandle) -> Result<(), String> {
+    const WINDOW_LABEL: &str = "process-viewer";
+    
+    // Check if window already exists
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        // Focus existing window
+        window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
+        return Ok(());
+    }
+    
+    // Create new window
+    let url = WebviewUrl::App("/process-viewer".into());
+    
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, url)
+        .title("Process Viewer")
+        .inner_size(900.0, 600.0)
+        .min_inner_size(600.0, 400.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| format!("Failed to create process viewer window: {}", e))?;
+    
+    Ok(())
+}
+
+/// Tauri command to open the process viewer from frontend.
+#[tauri::command]
+pub fn open_process_viewer_command(app: AppHandle) -> Result<(), String> {
+    open_process_viewer(app)
 }
