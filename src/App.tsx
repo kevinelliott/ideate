@@ -14,6 +14,7 @@ import { useProcessStore } from "./stores/processStore";
 import { useIntegrationsStore } from "./stores/integrationsStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { useWindowState } from "./hooks/useWindowState";
+import { usePrdGeneration } from "./hooks/usePrdGeneration";
 
 import { notify } from "./utils/notify";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -88,6 +89,9 @@ function App() {
 
   // Track and persist window state
   useWindowState();
+  
+  // Initialize PRD generation hook at App level so event listeners are always mounted
+  usePrdGeneration();
 
   const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide || showDisclaimer || showCommandPalette;
 
