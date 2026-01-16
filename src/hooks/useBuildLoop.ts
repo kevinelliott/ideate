@@ -880,23 +880,18 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
   const handleCancel = useCallback(async (overrideProjectId?: string) => {
     const targetProjectId = overrideProjectId || projectId
-    console.log('[useBuildLoop] handleCancel called, targetProjectId:', targetProjectId, 'hookProjectId:', projectId)
     if (!targetProjectId) return
     
     const state = useBuildStore.getState()
     const projectState = state.getProjectState(targetProjectId)
     const processId = projectState.currentProcessId
-    console.log('[useBuildLoop] currentProcessId:', processId, 'status:', projectState.status)
     
     if (processId) {
       try {
-        console.log('[useBuildLoop] calling kill_agent for processId:', processId)
-        const result = await invoke('kill_agent', { processId: processId })
-        console.log('[useBuildLoop] kill_agent result:', result)
+        await invoke('kill_agent', { processId: processId })
         unregisterProcess(processId, null, false)
         state.appendLog(targetProjectId, 'system', 'Agent process terminated')
       } catch (error) {
-        console.error('[useBuildLoop] kill_agent error:', error)
         state.appendLog(targetProjectId, 'system', `Failed to kill agent: ${error}`)
       }
     }
@@ -919,12 +914,10 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       worktreeRef.current.clear()
     }
 
-    console.log('[useBuildLoop] updating build state - cancelling build')
     state.setCurrentStory(targetProjectId, null)
     state.cancelBuild(targetProjectId)
     releaseBuildLoop(targetProjectId)
     state.appendLog(targetProjectId, 'system', 'Build cancelled by user')
-    console.log('[useBuildLoop] build cancelled, new status:', state.getProjectState(targetProjectId).status)
   }, [projectId, projectPath, unregisterProcess, releaseBuildLoop])
 
   useEffect(() => {
@@ -950,16 +943,9 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     const handleCancelEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ projectId: string }>
       const eventProjectId = customEvent.detail.projectId
-      console.log('[useBuildLoop] cancel-build event received', {
-        eventProjectId,
-        hookProjectId: projectId,
-        match: eventProjectId === projectId,
-      })
       if (eventProjectId !== projectId) return
       const currentStatus = useBuildStore.getState().getProjectState(eventProjectId).status
-      console.log('[useBuildLoop] currentStatus:', currentStatus)
       if (currentStatus !== 'idle') {
-        console.log('[useBuildLoop] calling handleCancel() with projectId:', eventProjectId)
         handleCancel(eventProjectId)
       }
     }

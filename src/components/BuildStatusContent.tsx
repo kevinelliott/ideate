@@ -409,9 +409,12 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         : ""
                   }`}
                 >
-                  <button
+                  <div
                     onClick={() => handleStoryClick(story.id)}
-                    className={`w-full px-4 py-3 text-left hover:bg-card/50 transition-colors ${
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleStoryClick(story.id); }}
+                    className={`w-full px-4 py-3 text-left hover:bg-card/50 transition-colors cursor-pointer ${
                       story.id === currentStoryId ? "bg-card/50" : ""
                     }`}
                   >
@@ -571,7 +574,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         )}
                       </div>
                     </div>
-                  </button>
+                  </div>
                 </li>
               );
             })}
