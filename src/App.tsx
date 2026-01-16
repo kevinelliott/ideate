@@ -78,9 +78,6 @@ function App() {
   const setActiveProject = useProjectStore((state) => state.setActiveProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const isLoaded = useProjectStore((state) => state.isLoaded);
-  const appendLog = useBuildStore((state) => state.appendLog);
-  const handleProcessExit = useBuildStore((state) => state.handleProcessExit);
-  const projectStates = useBuildStore((state) => state.projectStates);
   const loadTheme = useThemeStore((state) => state.loadTheme);
   const isThemeLoaded = useThemeStore((state) => state.isLoaded);
   const setDefaultAgentId = useAgentStore((state) => state.setDefaultAgentId);
@@ -88,9 +85,6 @@ function App() {
   const loadPromptOverrides = usePromptStore((state) => state.loadOverrides);
   const loadPanelStates = usePanelStore((state) => state.loadPanelStates);
   const isPanelStatesLoaded = usePanelStore((state) => state.isLoaded);
-  const appendProcessLog = useProcessStore((state) => state.appendProcessLog);
-  const getProcess = useProcessStore((state) => state.getProcess);
-  const unregisterProcess = useProcessStore((state) => state.unregisterProcess);
 
   // Track and persist window state
   useWindowState();
@@ -158,10 +152,13 @@ function App() {
 
   // Global listener for agent output and exit events
   // This handles both buildStore processes (build/chat/prd) and processStore processes (detection/dev-server)
+  // Note: We set up the listener once and use getState() inside to get fresh state on each event
   useEffect(() => {
     // Helper to find which project a process belongs to in buildStore
+    // Uses getState() to always get the current state, not a stale closure
     const findProjectByProcessId = (processId: string): string | null => {
-      for (const [projectId, state] of Object.entries(projectStates)) {
+      const currentProjectStates = useBuildStore.getState().projectStates;
+      for (const [projectId, state] of Object.entries(currentProjectStates)) {
         if (state.currentProcessId === processId) {
           return projectId;
         }
@@ -176,13 +173,13 @@ function App() {
       // This ensures process history has complete logs
       const processStoreProcess = useProcessStore.getState().getProcess(processId);
       if (processStoreProcess) {
-        appendProcessLog(processId, streamType, content);
+        useProcessStore.getState().appendProcessLog(processId, streamType, content);
       }
       
       // Also append to buildStore if this is a build process (for the build log panel)
       const buildProjectId = findProjectByProcessId(processId);
       if (buildProjectId) {
-        appendLog(buildProjectId, streamType, content, processId);
+        useBuildStore.getState().appendLog(buildProjectId, streamType, content, processId);
       }
     });
 
@@ -192,7 +189,7 @@ function App() {
       // Check if this is a buildStore process and update build state
       const buildProjectId = findProjectByProcessId(processId);
       if (buildProjectId) {
-        handleProcessExit(buildProjectId, {
+        useBuildStore.getState().handleProcessExit(buildProjectId, {
           processId: processId,
           exitCode: exitCode,
           success,
@@ -207,7 +204,7 @@ function App() {
       // cleanup even if the hook is unmounted
       const processStoreProcess = useProcessStore.getState().getProcess(processId);
       if (processStoreProcess) {
-        unregisterProcess(processId, exitCode, success);
+        useProcessStore.getState().unregisterProcess(processId, exitCode, success);
       }
     });
 
@@ -215,7 +212,7 @@ function App() {
       unlistenOutputPromise.then((unlisten) => unlisten());
       unlistenExitPromise.then((unlisten) => unlisten());
     };
-  }, [appendLog, handleProcessExit, projectStates, appendProcessLog, getProcess, unregisterProcess]);
+  }, []); // Empty deps - we use getState() to always get fresh state
 
   // Trigger PRD generation after import if needed
   useEffect(() => {
