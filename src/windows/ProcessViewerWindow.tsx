@@ -74,6 +74,14 @@ function formatDuration(ms: number): string {
   return `${hours}h ${remainingMinutes}m`;
 }
 
+function formatProcessType(type: string): string {
+  switch (type) {
+    case "prd": return "PRD";
+    case "dev-server": return "Dev Server";
+    default: return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+}
+
 function ProcessTypeIcon({ type }: { type: string }) {
   switch (type) {
     case "build":
@@ -148,7 +156,7 @@ function ProcessRow({ process, isSelected, onSelect }: ProcessRowProps) {
               <span>•</span>
             </>
           )}
-          <span className="capitalize">{process.type}</span>
+          <span>{formatProcessType(process.type)}</span>
           <span>•</span>
           <span>{formatDuration(elapsed)}</span>
         </div>
@@ -235,7 +243,7 @@ function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
         <div>
           <h2 className="text-lg font-semibold text-foreground">{process.label}</h2>
           <div className="text-sm text-muted flex items-center gap-2">
-            <span className="capitalize">{process.type}</span>
+            <span>{formatProcessType(process.type)}</span>
             {process.agentId && (
               <>
                 <span>•</span>
