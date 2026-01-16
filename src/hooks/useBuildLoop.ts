@@ -878,17 +878,23 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     runRemaining()
   }, [projectPath, projectId, runStory, pauseBuild, cancelBuild, appendLog, waitWhilePaused, setCurrentStory, setStoryStatus, tryStartBuild, releaseBuildLoop])
 
-  const handleCancel = useCallback(async () => {
-    if (!projectId) return
+  const handleCancel = useCallback(async (overrideProjectId?: string) => {
+    const targetProjectId = overrideProjectId || projectId
+    console.log('[useBuildLoop] handleCancel called, targetProjectId:', targetProjectId, 'hookProjectId:', projectId)
+    if (!targetProjectId) return
     
-    const processId = useBuildStore.getState().getProjectState(projectId).currentProcessId
+    const state = useBuildStore.getState()
+    const projectState = state.getProjectState(targetProjectId)
+    const processId = projectState.currentProcessId
+    console.log('[useBuildLoop] currentProcessId:', processId, 'status:', projectState.status)
+    
     if (processId) {
       try {
         await invoke('kill_agent', { processId: processId })
         unregisterProcess(processId, null, false)
-        appendLog(projectId, 'system', 'Agent process terminated')
+        state.appendLog(targetProjectId, 'system', 'Agent process terminated')
       } catch (error) {
-        appendLog(projectId, 'system', `Failed to kill agent: ${error}`)
+        state.appendLog(targetProjectId, 'system', `Failed to kill agent: ${error}`)
       }
     }
 
@@ -896,25 +902,25 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       try {
         await invoke('kill_agent', { processId: pid })
         unregisterProcess(pid, null, false)
-        appendLog(projectId, 'system', `Terminated parallel agent for story ${storyId}`)
+        state.appendLog(targetProjectId, 'system', `Terminated parallel agent for story ${storyId}`)
       } catch (error) {
-        appendLog(projectId, 'system', `Failed to kill parallel agent: ${error}`)
+        state.appendLog(targetProjectId, 'system', `Failed to kill parallel agent: ${error}`)
       }
     }
     activeProcessesRef.current.clear()
 
     // Cleanup all worktrees for parallel builds
     if (projectPath && worktreeRef.current.size > 0) {
-      appendLog(projectId, 'system', 'Cleaning up worktrees...')
+      state.appendLog(targetProjectId, 'system', 'Cleaning up worktrees...')
       await invoke('cleanup_all_story_worktrees', { projectPath }).catch(() => {})
       worktreeRef.current.clear()
     }
 
-    setCurrentStory(projectId, null)
-    cancelBuild(projectId)
-    releaseBuildLoop(projectId)
-    appendLog(projectId, 'system', 'Build cancelled by user')
-  }, [projectId, projectPath, cancelBuild, appendLog, setCurrentStory, unregisterProcess, releaseBuildLoop])
+    state.setCurrentStory(targetProjectId, null)
+    state.cancelBuild(targetProjectId)
+    releaseBuildLoop(targetProjectId)
+    state.appendLog(targetProjectId, 'system', 'Build cancelled by user')
+  }, [projectId, projectPath, unregisterProcess, releaseBuildLoop])
 
   useEffect(() => {
     const handleSidebarStart = (event: Event) => {
@@ -938,10 +944,18 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
 
     const handleCancelEvent = (event: Event) => {
       const customEvent = event as CustomEvent<{ projectId: string }>
-      if (customEvent.detail.projectId !== projectId) return
-      const currentStatus = useBuildStore.getState().getProjectState(projectId || '').status
+      const eventProjectId = customEvent.detail.projectId
+      console.log('[useBuildLoop] cancel-build event received', {
+        eventProjectId,
+        hookProjectId: projectId,
+        match: eventProjectId === projectId,
+      })
+      if (eventProjectId !== projectId) return
+      const currentStatus = useBuildStore.getState().getProjectState(eventProjectId).status
+      console.log('[useBuildLoop] currentStatus:', currentStatus)
       if (currentStatus !== 'idle') {
-        handleCancel()
+        console.log('[useBuildLoop] calling handleCancel() with projectId:', eventProjectId)
+        handleCancel(eventProjectId)
       }
     }
 

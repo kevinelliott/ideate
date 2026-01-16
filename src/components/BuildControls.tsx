@@ -94,7 +94,7 @@ export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
           Pause
         </button>
         <button
-          onClick={handleCancel}
+          onClick={() => handleCancel()}
           className="btn btn-ghost text-destructive hover:bg-destructive/10"
         >
           <StopIcon />
@@ -120,7 +120,7 @@ export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
           Resume
         </button>
         <button
-          onClick={handleCancel}
+          onClick={() => handleCancel()}
           className="btn btn-ghost text-destructive hover:bg-destructive/10"
         >
           <StopIcon />
