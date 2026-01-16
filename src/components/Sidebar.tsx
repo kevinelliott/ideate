@@ -159,6 +159,20 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
       return next
     })
   }
+  
+  // Auto-expand projects when they have running processes
+  useEffect(() => {
+    const projectsWithProcesses = new Set(
+      Object.values(processes).map((p) => p.projectId)
+    )
+    if (projectsWithProcesses.size > 0) {
+      setExpandedProjects((prev) => {
+        const next = new Set(prev)
+        projectsWithProcesses.forEach((projectId) => next.add(projectId))
+        return next
+      })
+    }
+  }, [processes])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
