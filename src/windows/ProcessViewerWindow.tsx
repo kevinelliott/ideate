@@ -267,6 +267,7 @@ export function ProcessViewerWindow() {
   // Request current process list from main window on mount
   useEffect(() => {
     const unlistenSyncPromise = listen<ProcessListSyncPayload>("process-list-sync", (event) => {
+      console.log('[ProcessViewer] received process-list-sync:', event.payload.processes.length, 'processes');
       const { processes, logs } = event.payload;
       const processMap: Record<string, RunningProcess> = {};
       for (const p of processes) {
@@ -281,7 +282,10 @@ export function ProcessViewerWindow() {
     });
 
     // Request the current process list
-    emit("request-process-list", {}).catch(() => {});
+    console.log('[ProcessViewer] emitting request-process-list');
+    emit("request-process-list", {}).catch((err) => {
+      console.error('[ProcessViewer] Failed to emit request-process-list:', err);
+    });
 
     return () => {
       unlistenSyncPromise.then((unlisten) => unlisten());
@@ -291,6 +295,7 @@ export function ProcessViewerWindow() {
   // Listen for process registration/unregistration events from main window
   useEffect(() => {
     const unlistenRegisterPromise = listen<ProcessRegisteredPayload>("process-registered", (event) => {
+      console.log('[ProcessViewer] received process-registered:', event.payload.process.label, event.payload.process.processId);
       const { process } = event.payload;
       const runningProcess: RunningProcess = {
         ...process,

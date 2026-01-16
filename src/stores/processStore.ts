@@ -68,6 +68,7 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
   selectedProcessId: null,
 
   registerProcess: (process) => {
+    console.log('[processStore] registerProcess called:', process.label, process.type, process.processId)
     const startedAt = new Date()
     
     // Create initial log entries with process info
@@ -156,12 +157,17 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
     }))
     
     // Emit event for other windows (e.g., Process Viewer)
+    console.log('[processStore] emitting process-registered event for:', process.processId)
     emit('process-registered', {
       process: {
         ...newProcess,
         startedAt: startedAt.toISOString(),
       },
-    }).catch(() => {})
+    }).then(() => {
+      console.log('[processStore] process-registered event emitted successfully')
+    }).catch((err) => {
+      console.error('[processStore] Failed to emit process-registered:', err)
+    })
   },
 
   updateProcessUrl: (processId, url) => {
@@ -369,12 +375,17 @@ listen('request-process-list', () => {
     ...p,
     startedAt: p.startedAt.toISOString(),
   }))
+  console.log('[processStore] received request-process-list, sending', processes.length, 'processes')
   const logs: Record<string, { type: string; content: string }[]> = {}
   for (const [processId, entries] of Object.entries(state.processLogs)) {
     logs[processId] = entries.map(e => ({ type: e.type, content: e.content }))
   }
-  emit('process-list-sync', { processes, logs }).catch(() => {})
-}).catch(() => {})
+  emit('process-list-sync', { processes, logs }).catch((err) => {
+    console.error('[processStore] Failed to emit process-list-sync:', err)
+  })
+}).catch((err) => {
+  console.error('[processStore] Failed to set up request-process-list listener:', err)
+})
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000)
