@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { documentDir } from "@tauri-apps/api/path";
+import { documentDir, homeDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { Idea } from "../stores/ideasStore";
@@ -177,7 +177,18 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
 
   const handleStartCreateProject = async () => {
     try {
-      const defaultPath = await documentDir();
+      // Try documentDir first, fall back to homeDir (more reliable on WSL/Linux)
+      let defaultPath: string | undefined;
+      try {
+        defaultPath = await documentDir();
+      } catch {
+        try {
+          defaultPath = await homeDir();
+        } catch {
+          defaultPath = undefined;
+        }
+      }
+      
       const selected = await open({
         directory: true,
         multiple: false,
