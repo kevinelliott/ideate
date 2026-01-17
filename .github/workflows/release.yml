@@ -82,7 +82,7 @@ jobs:
           chmod +x ../../src-tauri/binaries/outray-*
 
       - name: Build Tauri app
-        run: pnpm tauri build --target ${{ matrix.target }}
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
 
       - name: Upload DMG to release
         uses: actions/upload-release-asset@v1
@@ -106,7 +106,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             libgtk-3-dev \
