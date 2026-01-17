@@ -651,7 +651,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                             onClick={() => { selectIdea(null); selectProcess(null); showProjectOverview(project.id); }}
                             className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
                               projectOverviewProjectId === project.id
-                                ? 'text-foreground font-medium hover:bg-card/50'
+                                ? 'bg-card text-foreground font-medium'
                                 : 'text-secondary hover:text-foreground hover:bg-card/50'
                             }`}
                           >
@@ -668,7 +668,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                             onClick={() => { selectIdea(null); selectProcess(null); showRequirements(project.id); }}
                             className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
                               isActive && !selectedProcessId && buildStatusProjectId !== project.id && projectOverviewProjectId !== project.id && processHistoryProjectId !== project.id
-                                ? 'text-foreground font-medium hover:bg-card/50'
+                                ? 'bg-card text-foreground font-medium'
                                 : 'text-secondary hover:text-foreground hover:bg-card/50'
                             }`}
                           >
@@ -685,7 +685,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                             onClick={() => { selectIdea(null); selectProcess(null); showBuildStatus(project.id); }}
                             className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
                               buildStatusProjectId === project.id
-                                ? 'text-foreground font-medium hover:bg-card/50'
+                                ? 'bg-card text-foreground font-medium'
                                 : 'text-secondary hover:text-foreground hover:bg-card/50'
                             }`}
                           >
@@ -708,7 +708,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                             onClick={() => { selectIdea(null); selectProcess(null); showProcessHistory(project.id); }}
                             className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
                               processHistoryProjectId === project.id
-                                ? 'text-foreground font-medium hover:bg-card/50'
+                                ? 'bg-card text-foreground font-medium'
                                 : 'text-secondary hover:text-foreground hover:bg-card/50'
                             }`}
                           >
@@ -728,7 +728,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                                 onClick={() => selectProcess(process.processId)}
                                 className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
                                   isProcessSelected
-                                    ? 'text-foreground font-medium hover:bg-card/50'
+                                    ? 'bg-card text-foreground font-medium'
                                     : 'text-secondary hover:text-foreground hover:bg-card/50'
                                 }`}
                               >

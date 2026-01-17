@@ -154,6 +154,22 @@ function App() {
     };
   }, []);
 
+  // Listen for story manager open event
+  useEffect(() => {
+    const handleOpenStoryManager = async () => {
+      try {
+        await invoke("open_story_manager_command");
+      } catch (error) {
+        console.error("Failed to open story manager:", error);
+      }
+    };
+
+    window.addEventListener("open-story-manager", handleOpenStoryManager);
+    return () => {
+      window.removeEventListener("open-story-manager", handleOpenStoryManager);
+    };
+  }, []);
+
   // Global listener for agent output and exit events
   // This handles both buildStore processes (build/chat/prd) and processStore processes (detection/dev-server)
   // Note: We set up the listener once and use getState() inside to get fresh state on each event
@@ -217,6 +233,9 @@ function App() {
       unlistenExitPromise.then((unlisten) => unlisten());
     };
   }, []); // Empty deps - we use getState() to always get fresh state
+
+  // Note: Story Manager event listeners are set up in prdStore.ts at module load time
+  // to ensure they're always available when the Story Manager window opens
 
   // Trigger PRD generation after import if needed
   useEffect(() => {

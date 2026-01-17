@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, emit } from '@tauri-apps/api/event'
 
 export interface Story {
   id: string
@@ -133,3 +134,84 @@ export const usePrdStore = create<PrdState>((set, get) => ({
 
   getLoadedProjectId: () => get().loadedProjectId,
 }))
+
+// Listen for story list sync requests from Story Manager window
+// This runs at module load time so it's always available
+listen('request-story-list', async () => {
+  // Import dynamically to avoid circular dependencies
+  const { useProjectStore } = await import('./projectStore')
+  const { useBuildStore } = await import('./buildStore')
+  
+  const currentActiveProjectId = useProjectStore.getState().activeProjectId
+  const currentProject = useProjectStore.getState().projects.find(p => p.id === currentActiveProjectId)
+  const currentStories = usePrdStore.getState().stories
+  const currentStoryStatuses = currentActiveProjectId 
+    ? useBuildStore.getState().getProjectState(currentActiveProjectId).storyStatuses 
+    : {}
+  
+  // Map stories to include status
+  const storiesWithStatus = currentStories.map(s => ({
+    id: s.id,
+    title: s.title,
+    status: currentStoryStatuses[s.id] || (s.passes ? 'complete' : 'pending'),
+    passes: s.passes,
+  }))
+
+  await emit('story-list-sync', {
+    stories: storiesWithStatus,
+    projectId: currentActiveProjectId || '',
+    projectName: currentProject?.name || '',
+  })
+}).catch((err) => {
+  console.error('[prdStore] Failed to set up request-story-list listener:', err)
+})
+
+// Listen for bulk status changes from Story Manager
+listen<{
+  projectId: string
+  storyIds: string[]
+  status: string
+  passes: boolean
+}>('bulk-story-status-change', async (event) => {
+  const { useProjectStore } = await import('./projectStore')
+  const { useBuildStore } = await import('./buildStore')
+  
+  const { projectId, storyIds, status, passes } = event.payload
+  
+  // Update each story
+  for (const storyId of storyIds) {
+    usePrdStore.getState().updateStory(storyId, { passes })
+    useBuildStore.getState().setStoryStatus(projectId, storyId, status as 'pending' | 'complete' | 'failed' | 'in-progress')
+  }
+  
+  // Save the PRD
+  const project = useProjectStore.getState().projects.find(p => p.id === projectId)
+  if (project?.path) {
+    await usePrdStore.getState().savePrd(project.path)
+  }
+}).catch((err) => {
+  console.error('[prdStore] Failed to set up bulk-story-status-change listener:', err)
+})
+
+// Listen for bulk delete from Story Manager
+listen<{
+  projectId: string
+  storyIds: string[]
+}>('bulk-story-delete', async (event) => {
+  const { useProjectStore } = await import('./projectStore')
+  
+  const { projectId, storyIds } = event.payload
+  
+  // Delete each story
+  for (const storyId of storyIds) {
+    usePrdStore.getState().removeStory(storyId)
+  }
+  
+  // Save the PRD
+  const project = useProjectStore.getState().projects.find(p => p.id === projectId)
+  if (project?.path) {
+    await usePrdStore.getState().savePrd(project.path)
+  }
+}).catch((err) => {
+  console.error('[prdStore] Failed to set up bulk-story-delete listener:', err)
+})

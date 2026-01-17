@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { open } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import { useBuildStore, type ConflictInfo } from "../stores/buildStore";
@@ -122,6 +122,8 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
   
   const [draggedStoryId, setDraggedStoryId] = useState<string | null>(null);
   const [dragOverStoryId, setDragOverStoryId] = useState<string | null>(null);
+  const storyRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+  const listContainerRef = useRef<HTMLDivElement>(null);
 
   const loadBranches = useCallback(async () => {
     if (!project?.path) return;
@@ -246,6 +248,20 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
   const totalCount = stories.length;
 
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Scroll to the current story when it starts building
+  useEffect(() => {
+    if (currentStoryId) {
+      const storyElement = storyRefs.current.get(currentStoryId);
+      if (storyElement && listContainerRef.current) {
+        // Scroll the story into view, centered in the list
+        storyElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    }
+  }, [currentStoryId]);
 
   const handleStoryClick = (storyId: string) => {
     selectStory(storyId);
@@ -389,7 +405,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-auto-hide">
+        <div ref={listContainerRef} className="flex-1 overflow-y-auto scrollbar-auto-hide">
           <ul className="divide-y divide-border">
             {storyProgress.map((story: StoryWithBuildStatus) => {
               const deps = dependencyGraph[story.id];
@@ -399,6 +415,13 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
               return (
                 <li 
                   key={story.id}
+                  ref={(el) => {
+                    if (el) {
+                      storyRefs.current.set(story.id, el);
+                    } else {
+                      storyRefs.current.delete(story.id);
+                    }
+                  }}
                   draggable={isDragEnabled}
                   onDragStart={(e) => handleDragStart(e, story.id)}
                   onDragOver={handleDragOver}
@@ -420,7 +443,11 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleStoryClick(story.id); }}
                     className={`w-full px-4 py-3 text-left hover:bg-card/50 transition-colors cursor-pointer ${
-                      story.id === currentStoryId ? "bg-card/50" : ""
+                      story.buildStatus === "in-progress" 
+                        ? "bg-accent/5 border-l-2 border-accent" 
+                        : story.id === currentStoryId 
+                          ? "bg-card/50" 
+                          : ""
                     }`}
                   >
                     <div className="flex items-start gap-3">

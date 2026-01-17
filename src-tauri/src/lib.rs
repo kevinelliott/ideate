@@ -180,6 +180,7 @@ pub fn run() {
             ui_state::save_panel_states,
             ui_state::save_window_state,
             ui_state::open_process_viewer_command,
+            ui_state::open_story_manager_command,
             // Worktree
             worktree::prepare_story_worktree,
             worktree::finalize_story_worktree,

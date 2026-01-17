@@ -193,3 +193,38 @@ pub fn open_process_viewer(app: AppHandle) -> Result<(), String> {
 pub fn open_process_viewer_command(app: AppHandle) -> Result<(), String> {
     open_process_viewer(app)
 }
+
+/// Opens or focuses the Story Manager window.
+pub fn open_story_manager(app: AppHandle) -> Result<(), String> {
+    const WINDOW_LABEL: &str = "story-manager";
+    
+    // Check if window already exists
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        // Focus existing window
+        window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
+        return Ok(());
+    }
+    
+    // Create new window without a menu bar
+    let url = WebviewUrl::App("/story-manager".into());
+    
+    use tauri::menu::MenuBuilder;
+    let empty_menu = MenuBuilder::new(&app).build().map_err(|e| format!("Failed to build menu: {}", e))?;
+    
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, url)
+        .title("Story Manager")
+        .inner_size(800.0, 500.0)
+        .min_inner_size(500.0, 300.0)
+        .resizable(true)
+        .menu(empty_menu)
+        .build()
+        .map_err(|e| format!("Failed to create story manager window: {}", e))?;
+    
+    Ok(())
+}
+
+/// Tauri command to open the story manager from frontend.
+#[tauri::command]
+pub fn open_story_manager_command(app: AppHandle) -> Result<(), String> {
+    open_story_manager(app)
+}

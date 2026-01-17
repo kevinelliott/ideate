@@ -71,6 +71,13 @@ export function useKeyboardNavigation({
         return;
       }
 
+      // Cmd+Shift+M to open story manager (hidden power-user feature)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "M" && !isModalOpen) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("open-story-manager"));
+        return;
+      }
+
       // Panel toggle shortcuts (only when a project is active)
       if ((e.metaKey || e.ctrlKey) && activeProjectId && !isModalOpen) {
         // Cmd+L to toggle log panel

@@ -222,7 +222,24 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const recentLogs = logs.slice(-50).map(l => l.content).join('\n')
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
-      if (waitResult.success) {
+      // Check for agent-side errors that still return exit code 0
+      const agentErrorPatterns = [
+        '❌ Failed',
+        'Failed: Unknown error',
+        'stream ended without producing any output',
+        'amp error:',
+        'claude error:',
+        'Error: stream ended',
+        'connection refused',
+        'authentication failed',
+        'rate limit exceeded',
+        'api key invalid',
+      ]
+      const hasAgentError = agentErrorPatterns.some((pattern) =>
+        recentLogs.toLowerCase().includes(pattern.toLowerCase())
+      )
+
+      if (waitResult.success && !hasAgentError) {
         appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exitCode})`)
         setStoryStatus(projectId, story.id, 'complete')
         updateStory(story.id, { passes: true })
@@ -248,7 +265,10 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         }
         return true
       } else {
-        appendLog(projectId, 'system', `✗ Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
+        const failReason = hasAgentError 
+          ? 'agent error detected in output' 
+          : `exit code: ${waitResult.exitCode}`
+        appendLog(projectId, 'system', `✗ Story ${story.id} failed (${failReason})`)
         appendLog(projectId, 'system', `  Rollback available - use the Rollback button to revert changes`)
         setStoryStatus(projectId, story.id, 'failed')
         const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
@@ -336,6 +356,24 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const recentLogs = logs.slice(-50).map(l => l.content).join('\n')
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
+      // Check for agent-side errors that still return exit code 0
+      const agentErrorPatterns = [
+        '❌ Failed',
+        'Failed: Unknown error',
+        'stream ended without producing any output',
+        'amp error:',
+        'claude error:',
+        'Error: stream ended',
+        'connection refused',
+        'authentication failed',
+        'rate limit exceeded',
+        'api key invalid',
+      ]
+      const hasAgentError = agentErrorPatterns.some((pattern) =>
+        recentLogs.toLowerCase().includes(pattern.toLowerCase())
+      )
+      const storySuccess = waitResult.success && !hasAgentError
+
       // Finalize worktree (merge if successful, cleanup)
       try {
         await invoke('finalize_story_worktree', {
@@ -343,11 +381,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           storyId: story.id,
           worktreePath,
           branchName,
-          success: waitResult.success,
+          success: storySuccess,
         })
         worktreeRef.current.delete(story.id)
 
-        if (waitResult.success) {
+        if (storySuccess) {
           appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed and merged`)
           setStoryStatus(projectId, story.id, 'complete')
           updateStory(story.id, { passes: true })
@@ -358,7 +396,10 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           }
           return true
         } else {
-          appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (exit code: ${waitResult.exitCode})`)
+          const failReason = hasAgentError 
+            ? 'agent error detected in output' 
+            : `exit code: ${waitResult.exitCode}`
+          appendLog(projectId, 'system', `✗ [Parallel] Story ${story.id} failed (${failReason})`)
           setStoryStatus(projectId, story.id, 'failed')
           const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
           if (prefs?.buildNotifications !== false) {
