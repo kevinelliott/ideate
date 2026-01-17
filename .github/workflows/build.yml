@@ -51,14 +51,14 @@ jobs:
       - name: Build OutRay sidecar
         run: |
           mkdir -p src-tauri/binaries
-          cd node_modules/outray
-          # Build for the target architecture
+          # Build for the target architecture using absolute paths
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            bun build ./dist/index.js --compile --target=bun-darwin-arm64 --outfile ../../src-tauri/binaries/outray-aarch64-apple-darwin
+            bun build node_modules/outray/dist/index.js --compile --target=bun-darwin-arm64 --outfile src-tauri/binaries/outray-aarch64-apple-darwin
           else
-            bun build ./dist/index.js --compile --target=bun-darwin-x64 --outfile ../../src-tauri/binaries/outray-x86_64-apple-darwin
+            bun build node_modules/outray/dist/index.js --compile --target=bun-darwin-x64 --outfile src-tauri/binaries/outray-x86_64-apple-darwin
           fi
-          chmod +x ../../src-tauri/binaries/outray-*
+          chmod +x src-tauri/binaries/outray-*
+          ls -la src-tauri/binaries/
 
       - name: Build Tauri app
         run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
@@ -117,9 +117,9 @@ jobs:
       - name: Build OutRay sidecar
         run: |
           mkdir -p src-tauri/binaries
-          cd node_modules/outray
-          bun build ./dist/index.js --compile --target=bun-linux-x64 --outfile ../../src-tauri/binaries/outray-x86_64-unknown-linux-gnu
-          chmod +x ../../src-tauri/binaries/outray-*
+          bun build node_modules/outray/dist/index.js --compile --target=bun-linux-x64 --outfile src-tauri/binaries/outray-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/outray-*
+          ls -la src-tauri/binaries/
 
       - name: Build Tauri app
         run: pnpm tauri build
@@ -170,8 +170,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
-          cd node_modules/outray
-          bun build ./dist/index.js --compile --target=bun-windows-x64 --outfile ../../src-tauri/binaries/outray-x86_64-pc-windows-msvc.exe
+          bun build node_modules/outray/dist/index.js --compile --target=bun-windows-x64 --outfile src-tauri/binaries/outray-x86_64-pc-windows-msvc.exe
+          ls -la src-tauri/binaries/
 
       - name: Build Tauri app
         run: pnpm tauri build
@@ -223,10 +223,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
-          cd node_modules/outray
           # Note: Bun doesn't have a windows-arm64 target yet, using x64 for now
           # Windows ARM can run x64 binaries via emulation
-          bun build ./dist/index.js --compile --target=bun-windows-x64 --outfile ../../src-tauri/binaries/outray-aarch64-pc-windows-msvc.exe
+          bun build node_modules/outray/dist/index.js --compile --target=bun-windows-x64 --outfile src-tauri/binaries/outray-aarch64-pc-windows-msvc.exe
+          ls -la src-tauri/binaries/
 
       - name: Build Tauri app
         run: pnpm tauri build --target aarch64-pc-windows-msvc
