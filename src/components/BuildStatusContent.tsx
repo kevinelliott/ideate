@@ -443,7 +443,11 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleStoryClick(story.id); }}
                     className={`w-full px-4 py-3 text-left hover:bg-card/50 transition-colors cursor-pointer ${
-                      story.id === currentStoryId ? "bg-card/50" : ""
+                      story.buildStatus === "in-progress" 
+                        ? "bg-accent/5 border-l-2 border-accent" 
+                        : story.id === currentStoryId 
+                          ? "bg-card/50" 
+                          : ""
                     }`}
                   >
                     <div className="flex items-start gap-3">
