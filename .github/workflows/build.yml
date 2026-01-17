@@ -134,67 +134,6 @@ jobs:
             src-tauri/target/release/bundle/rpm/*.rpm
           if-no-files-found: error
 
-  build-linux-arm64:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Setup Rust
-        uses: dtolnay/rust-action@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build OutRay sidecar
-        run: |
-          mkdir -p src-tauri/binaries
-          cd node_modules/outray
-          bun build ./dist/index.js --compile --target=bun-linux-arm64 --outfile ../../src-tauri/binaries/outray-aarch64-unknown-linux-gnu
-          chmod +x ../../src-tauri/binaries/outray-*
-
-      - name: Build Tauri app
-        run: pnpm tauri build
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ideate-linux-aarch64
-          path: |
-            src-tauri/target/release/bundle/deb/*.deb
-          if-no-files-found: error
-
   build-windows:
     runs-on: windows-latest
     steps:
