@@ -33,6 +33,8 @@ const PROMPT_IDS: Record<GenerationType, string> = {
 
 interface StreamJsonMessage {
   type: string
+  subtype?: string
+  result?: string
   message?: {
     content?: Array<{
       type: string
@@ -44,6 +46,24 @@ interface StreamJsonMessage {
 }
 
 function extractTextFromStreamJson(lines: string[]): string {
+  // Look for the result message with subtype 'success' - this contains the final output
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('{')) continue
+    
+    try {
+      const parsed: StreamJsonMessage = JSON.parse(trimmed)
+      
+      // Amp format: result message with subtype 'success' contains the final text
+      if (parsed.type === 'result' && parsed.subtype === 'success' && parsed.result) {
+        return parsed.result
+      }
+    } catch {
+      // Not JSON, skip
+    }
+  }
+  
+  // Fallback: collect text from assistant messages if no result found
   const textParts: string[] = []
   
   for (const line of lines) {
