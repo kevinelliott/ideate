@@ -279,7 +279,11 @@ pub async fn list_story_branches(
     let main_branch = get_main_branch(&project_path);
 
     for line in branches_output.lines() {
-        let branch = line.trim().trim_start_matches("* ").to_string();
+        // Git uses "* " for current branch and "+ " for worktree branches
+        let branch = line.trim()
+            .trim_start_matches("* ")
+            .trim_start_matches("+ ")
+            .to_string();
         if branch.is_empty() {
             continue;
         }
@@ -376,6 +380,41 @@ pub async fn delete_story_branch(
     branch_name: String,
     force: bool,
 ) -> Result<(), String> {
+    // First, check if there's a worktree using this branch and remove it
+    let worktree_list = Command::new("git")
+        .args(["worktree", "list", "--porcelain"])
+        .current_dir(&project_path)
+        .output()
+        .ok();
+
+    if let Some(output) = worktree_list {
+        let list_str = String::from_utf8_lossy(&output.stdout);
+        let mut current_worktree: Option<String> = None;
+        
+        for line in list_str.lines() {
+            if line.starts_with("worktree ") {
+                current_worktree = Some(line[9..].to_string());
+            } else if line.starts_with("branch ") {
+                let branch = line[7..].trim();
+                // Check if this worktree is using our branch (refs/heads/story/...)
+                if branch.ends_with(&branch_name) || branch == format!("refs/heads/{}", branch_name) {
+                    if let Some(ref wt_path) = current_worktree {
+                        // Remove the worktree first
+                        Command::new("git")
+                            .args(["worktree", "remove", "--force", wt_path])
+                            .current_dir(&project_path)
+                            .output()
+                            .ok();
+                        
+                        // Also try to delete the directory if git worktree remove didn't work
+                        let _ = std::fs::remove_dir_all(wt_path);
+                    }
+                }
+            }
+        }
+    }
+
+    // Now delete the branch
     let flag = if force { "-D" } else { "-d" };
     let output = Command::new("git")
         .args(["branch", flag, &branch_name])
@@ -398,6 +437,18 @@ pub async fn checkout_story_branch(
     project_path: String,
     branch_name: String,
 ) -> Result<(), String> {
+    // Abort any pending merge first
+    let _ = Command::new("git")
+        .args(["merge", "--abort"])
+        .current_dir(&project_path)
+        .output();
+
+    // Reset any staged changes that might block checkout
+    let _ = Command::new("git")
+        .args(["reset", "--hard", "HEAD"])
+        .current_dir(&project_path)
+        .output();
+
     let output = Command::new("git")
         .args(["checkout", &branch_name])
         .current_dir(&project_path)
@@ -478,9 +529,27 @@ pub async fn get_story_diff(
     _app: AppHandle,
     project_path: String,
     story_id: String,
+    branch_name: Option<String>,
 ) -> Result<StoryDiffResult, String> {
-    let branch_name = format!("story/{}", sanitize_branch_name(&story_id));
+    // Use provided branch name, or construct from story ID
+    let branch_name = branch_name.unwrap_or_else(|| {
+        format!("story/{}", sanitize_branch_name(&story_id))
+    });
     let main_branch = get_main_branch(&project_path);
+
+    // Verify the branch exists first
+    let branch_check = Command::new("git")
+        .args(["rev-parse", "--verify", &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to verify branch: {}", e))?;
+
+    if !branch_check.status.success() {
+        return Err(format!(
+            "Branch '{}' not found. The story branch may have been deleted or merged.",
+            branch_name
+        ));
+    }
 
     // Get the merge base between main and the story branch
     let merge_base_output = Command::new("git")
@@ -491,7 +560,7 @@ pub async fn get_story_diff(
 
     if !merge_base_output.status.success() {
         return Err(format!(
-            "Branch {} not found or has no common ancestor with {}",
+            "Branch {} has no common ancestor with {}",
             branch_name, main_branch
         ));
     }
@@ -824,6 +893,251 @@ pub async fn cleanup_all_story_worktrees(
                     .output()
                     .ok();
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Information about a conflicting file in a merge.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictFileInfo {
+    pub file_path: String,
+    pub ours_content: String,
+    pub theirs_content: String,
+    pub base_content: String,
+}
+
+/// Result of analyzing merge conflicts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeConflictAnalysis {
+    pub branch_name: String,
+    pub conflicting_files: Vec<ConflictFileInfo>,
+    pub non_conflicting_count: u32,
+}
+
+/// Analyze what conflicts would occur when merging a story branch.
+#[tauri::command]
+pub async fn analyze_merge_conflicts(
+    _app: AppHandle,
+    project_path: String,
+    branch_name: String,
+) -> Result<MergeConflictAnalysis, String> {
+    let main_branch = get_main_branch(&project_path);
+
+    // Get merge base
+    let merge_base_output = Command::new("git")
+        .args(["merge-base", &main_branch, &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get merge base: {}", e))?;
+
+    if !merge_base_output.status.success() {
+        return Err(format!("Cannot find common ancestor between {} and {}", main_branch, branch_name));
+    }
+
+    let base_commit = String::from_utf8_lossy(&merge_base_output.stdout).trim().to_string();
+
+    // Get list of files changed in the story branch
+    let branch_files_output = Command::new("git")
+        .args(["diff", "--name-only", &base_commit, &branch_name])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get branch files: {}", e))?;
+
+    let branch_files: Vec<String> = String::from_utf8_lossy(&branch_files_output.stdout)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+
+    // Get list of files changed in main since the base
+    let main_files_output = Command::new("git")
+        .args(["diff", "--name-only", &base_commit, &main_branch])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get main files: {}", e))?;
+
+    let main_files: std::collections::HashSet<String> = String::from_utf8_lossy(&main_files_output.stdout)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+
+    // Find files changed in both
+    let mut conflicting_files = Vec::new();
+    let mut non_conflicting_count = 0u32;
+
+    for file_path in &branch_files {
+        if main_files.contains(file_path) {
+            // This file was changed in both branches - potential conflict
+            // Get content from each version
+            let base_content = get_file_at_ref(&project_path, &base_commit, file_path);
+            let ours_content = get_file_at_ref(&project_path, &main_branch, file_path);
+            let theirs_content = get_file_at_ref(&project_path, &branch_name, file_path);
+
+            conflicting_files.push(ConflictFileInfo {
+                file_path: file_path.clone(),
+                ours_content,
+                theirs_content,
+                base_content,
+            });
+        } else {
+            non_conflicting_count += 1;
+        }
+    }
+
+    Ok(MergeConflictAnalysis {
+        branch_name,
+        conflicting_files,
+        non_conflicting_count,
+    })
+}
+
+/// Get file content at a specific git ref.
+fn get_file_at_ref(project_path: &str, git_ref: &str, file_path: &str) -> String {
+    let output = Command::new("git")
+        .args(["show", &format!("{}:{}", git_ref, file_path)])
+        .current_dir(project_path)
+        .output()
+        .ok();
+
+    output
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default()
+}
+
+/// Resolution strategy for a conflicting file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileResolution {
+    pub file_path: String,
+    pub strategy: String, // "ours", "theirs", "both"
+}
+
+/// Merge a story branch with specific resolutions for conflicting files.
+#[tauri::command]
+pub async fn merge_with_resolutions(
+    _app: AppHandle,
+    project_path: String,
+    branch_name: String,
+    resolutions: Vec<FileResolution>,
+) -> Result<(), String> {
+    // Start the merge (will likely have conflicts)
+    let merge_output = Command::new("git")
+        .args(["merge", &branch_name, "--no-commit", "--no-ff"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to start merge: {}", e))?;
+
+    // If merge succeeded without conflicts, commit and return
+    if merge_output.status.success() {
+        Command::new("git")
+            .args(["commit", "-m", &format!("Merge branch '{}'", branch_name)])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to commit merge: {}", e))?;
+        return Ok(());
+    }
+
+    // Apply resolutions for each file
+    for resolution in &resolutions {
+        match resolution.strategy.as_str() {
+            "ours" => {
+                // Keep our version
+                Command::new("git")
+                    .args(["checkout", "--ours", &resolution.file_path])
+                    .current_dir(&project_path)
+                    .output()
+                    .map_err(|e| format!("Failed to checkout ours for {}: {}", resolution.file_path, e))?;
+            }
+            "theirs" => {
+                // Keep their version
+                Command::new("git")
+                    .args(["checkout", "--theirs", &resolution.file_path])
+                    .current_dir(&project_path)
+                    .output()
+                    .map_err(|e| format!("Failed to checkout theirs for {}: {}", resolution.file_path, e))?;
+            }
+            "both" => {
+                // Concatenate both versions (theirs after ours)
+                let ours_output = Command::new("git")
+                    .args(["show", &format!("HEAD:{}", resolution.file_path)])
+                    .current_dir(&project_path)
+                    .output()
+                    .ok();
+                
+                let theirs_output = Command::new("git")
+                    .args(["show", &format!("{}:{}", branch_name, resolution.file_path)])
+                    .current_dir(&project_path)
+                    .output()
+                    .ok();
+
+                let ours_content = ours_output
+                    .filter(|o| o.status.success())
+                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                    .unwrap_or_default();
+
+                let theirs_content = theirs_output
+                    .filter(|o| o.status.success())
+                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                    .unwrap_or_default();
+
+                // Write combined content
+                let file_path = PathBuf::from(&project_path).join(&resolution.file_path);
+                std::fs::write(&file_path, format!("{}\n{}", ours_content.trim_end(), theirs_content))
+                    .map_err(|e| format!("Failed to write combined file: {}", e))?;
+            }
+            _ => {
+                return Err(format!("Unknown resolution strategy: {}", resolution.strategy));
+            }
+        }
+
+        // Stage the resolved file
+        Command::new("git")
+            .args(["add", &resolution.file_path])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to stage {}: {}", resolution.file_path, e))?;
+    }
+
+    // Commit the merge
+    let commit_output = Command::new("git")
+        .args(["commit", "-m", &format!("Merge branch '{}' with custom resolutions", branch_name)])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to commit merge: {}", e))?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        // Check if there are still unresolved conflicts
+        if stderr.contains("unmerged") || stderr.contains("conflict") {
+            return Err("Some conflicts remain unresolved. Please resolve all conflicting files.".to_string());
+        }
+        return Err(format!("Failed to commit merge: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Abort an in-progress merge.
+#[tauri::command]
+pub async fn abort_merge(
+    _app: AppHandle,
+    project_path: String,
+) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["merge", "--abort"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to abort merge: {}", e))?;
+
+    if !output.status.success() {
+        // Not in a merge state is fine
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.contains("no merge") {
+            return Err(format!("Failed to abort merge: {}", stderr));
         }
     }
 
