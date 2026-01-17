@@ -1,13 +1,9 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useThemeStore } from "../stores/themeStore";
 import type { RunningProcess } from "../stores/processStore";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { getTerminalTheme } from "../utils/terminalThemes";
-import { formatStreamJson } from "../utils/streamJsonFormatter";
-import "@xterm/xterm/css/xterm.css";
+import { StreamLogEntry } from "../components/StreamLogEntry";
 
 interface AgentOutputPayload {
   processId: string;
@@ -62,6 +58,12 @@ interface ProcessListSyncPayload {
     url?: string;
   }>;
   logs: Record<string, { type: string; content: string }[]>;
+}
+
+interface LogEntryData {
+  type: "stdout" | "stderr" | "system";
+  content: string;
+  timestamp: Date;
 }
 
 function formatDuration(ms: number): string {
@@ -169,63 +171,28 @@ function ProcessRow({ process, isSelected, onSelect }: ProcessRowProps) {
 
 interface ProcessDetailProps {
   process: RunningProcess;
-  logs: { type: string; content: string }[];
+  logs: LogEntryData[];
   onStop: () => void;
 }
 
 function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
-  const { resolvedMode } = useThemeStore();
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const lastLogCountRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
   const [isStopping, setIsStopping] = useState(false);
 
+  // Auto-scroll when new logs arrive
   useEffect(() => {
-    if (!terminalRef.current) return;
-
-    const terminal = new Terminal({
-      theme: getTerminalTheme(resolvedMode),
-      fontSize: 12,
-      fontFamily: '"SF Mono", "JetBrains Mono", monospace',
-      cursorBlink: false,
-      disableStdin: true,
-      convertEol: true,
-      scrollback: 5000,
-      lineHeight: 1.3,
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(terminalRef.current);
-
-    setTimeout(() => fitAddon.fit(), 0);
-    xtermRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
-    });
-    resizeObserver.observe(terminalRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-      terminal.dispose();
-    };
-  }, [resolvedMode]);
-
-  useEffect(() => {
-    const terminal = xtermRef.current;
-    if (!terminal) return;
-
-    const newLogs = logs.slice(lastLogCountRef.current);
-    for (const log of newLogs) {
-      // Format streaming JSON if applicable
-      const formatted = formatStreamJson(log.content);
-      terminal.writeln(formatted || log.content);
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    lastLogCountRef.current = logs.length;
-  }, [logs]);
+  }, [logs, autoScroll]);
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAutoScroll(isAtBottom);
+  }, []);
 
   const handleStop = async () => {
     if (isStopping) return;
@@ -255,15 +222,46 @@ function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
             )}
           </div>
         </div>
-        <button
-          onClick={handleStop}
-          disabled={isStopping}
-          className="px-3 py-1.5 text-sm bg-destructive/10 text-destructive hover:bg-destructive/20 rounded transition-colors disabled:opacity-50"
-        >
-          {isStopping ? "Stopping..." : "Stop"}
-        </button>
+        <div className="flex items-center gap-2">
+          {!autoScroll && logs.length > 0 && (
+            <button
+              onClick={() => {
+                setAutoScroll(true);
+                scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+              }}
+              className="text-xs text-accent hover:text-accent/80 transition-colors"
+            >
+              Scroll to bottom
+            </button>
+          )}
+          <button
+            onClick={handleStop}
+            disabled={isStopping}
+            className="px-3 py-1.5 text-sm bg-destructive/10 text-destructive hover:bg-destructive/20 rounded transition-colors disabled:opacity-50"
+          >
+            {isStopping ? "Stopping..." : "Stop"}
+          </button>
+        </div>
       </div>
-      <div ref={terminalRef} className="flex-1 p-2 bg-background" />
+      <div 
+        ref={scrollRef} 
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 bg-background space-y-1 font-mono text-sm"
+      >
+        {logs.length === 0 && (
+          <div className="flex items-center justify-center h-full text-muted text-sm">
+            Waiting for output...
+          </div>
+        )}
+        {logs.map((log, index) => (
+          <StreamLogEntry
+            key={index}
+            content={log.content}
+            timestamp={log.timestamp}
+            type={log.type}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -272,9 +270,8 @@ export function ProcessViewerWindow() {
   const loadTheme = useThemeStore((state) => state.loadTheme);
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
   
-  // Local state for processes in this window (synced via events from main window)
   const [localProcesses, setLocalProcesses] = useState<Record<string, RunningProcess>>({});
-  const [localLogs, setLocalLogs] = useState<Record<string, { type: string; content: string }[]>>({});
+  const [localLogs, setLocalLogs] = useState<Record<string, LogEntryData[]>>({});
 
   const processList = Object.values(localProcesses);
   const selectedProcess = selectedProcessId ? localProcesses[selectedProcessId] : null;
@@ -286,7 +283,6 @@ export function ProcessViewerWindow() {
   // Request current process list from main window on mount
   useEffect(() => {
     const unlistenSyncPromise = listen<ProcessListSyncPayload>("process-list-sync", (event) => {
-      console.log('[ProcessViewer] received process-list-sync:', event.payload.processes.length, 'processes');
       const { processes, logs } = event.payload;
       const processMap: Record<string, RunningProcess> = {};
       for (const p of processes) {
@@ -297,11 +293,19 @@ export function ProcessViewerWindow() {
         };
       }
       setLocalProcesses(processMap);
-      setLocalLogs(logs);
+      
+      // Convert logs to include timestamps
+      const logsWithTimestamps: Record<string, LogEntryData[]> = {};
+      for (const [processId, processLogs] of Object.entries(logs)) {
+        logsWithTimestamps[processId] = processLogs.map(log => ({
+          type: log.type as "stdout" | "stderr" | "system",
+          content: log.content,
+          timestamp: new Date(),
+        }));
+      }
+      setLocalLogs(logsWithTimestamps);
     });
 
-    // Request the current process list (emitted globally, main window will respond)
-    console.log('[ProcessViewer] emitting request-process-list');
     emit("request-process-list", {}).catch((err) => {
       console.error('[ProcessViewer] Failed to emit request-process-list:', err);
     });
@@ -311,10 +315,9 @@ export function ProcessViewerWindow() {
     };
   }, []);
 
-  // Listen for process registration/unregistration events from main window
+  // Listen for process registration/unregistration events
   useEffect(() => {
     const unlistenRegisterPromise = listen<ProcessRegisteredPayload>("process-registered", (event) => {
-      console.log('[ProcessViewer] received process-registered:', event.payload.process.label, event.payload.process.processId);
       const { process } = event.payload;
       const runningProcess: RunningProcess = {
         ...process,
@@ -325,7 +328,6 @@ export function ProcessViewerWindow() {
         ...prev,
         [process.processId]: runningProcess,
       }));
-      // Initialize logs for this process
       setLocalLogs((prev) => ({
         ...prev,
         [process.processId]: [],
@@ -353,15 +355,19 @@ export function ProcessViewerWindow() {
   useEffect(() => {
     const unlistenOutputPromise = listen<AgentOutputPayload>("agent-output", (event) => {
       const { processId, streamType, content } = event.payload;
+      const logEntry: LogEntryData = {
+        type: streamType,
+        content,
+        timestamp: new Date(),
+      };
       setLocalLogs((prev) => ({
         ...prev,
-        [processId]: [...(prev[processId] || []), { type: streamType, content }],
+        [processId]: [...(prev[processId] || []), logEntry],
       }));
     });
 
     const unlistenExitPromise = listen<AgentExitPayload>("agent-exit", (event) => {
       const { processId } = event.payload;
-      // The process-unregistered event handles removal, but we can handle exit here too
       setLocalProcesses((prev) => {
         const { [processId]: _, ...rest } = prev;
         return rest;

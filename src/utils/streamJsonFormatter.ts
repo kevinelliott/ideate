@@ -1,7 +1,67 @@
 /**
  * Format streaming JSON output from agents into human-readable log entries.
  * Supports Amp and Claude Code streaming formats.
+ * Also converts markdown to ANSI escape codes for terminal display.
  */
+
+// ANSI escape codes for terminal styling
+const ANSI = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  italic: '\x1b[3m',
+  underline: '\x1b[4m',
+  cyan: '\x1b[36m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  magenta: '\x1b[35m',
+  blue: '\x1b[34m',
+  gray: '\x1b[90m',
+  bgGray: '\x1b[48;5;236m',
+};
+
+/**
+ * Convert markdown text to ANSI-styled text for terminal display.
+ */
+function markdownToAnsi(text: string): string {
+  let result = text;
+
+  // Code blocks (```...```) - must be done before inline code
+  result = result.replace(/```(\w*)\n?([\s\S]*?)```/g, (_match, _lang, code) => {
+    const lines = code.trim().split('\n');
+    const formatted = lines.map((line: string) => `${ANSI.bgGray}${ANSI.cyan}  ${line}  ${ANSI.reset}`).join('\n');
+    return `\n${formatted}\n`;
+  });
+
+  // Inline code (`...`)
+  result = result.replace(/`([^`]+)`/g, `${ANSI.cyan}$1${ANSI.reset}`);
+
+  // Bold (**...**)
+  result = result.replace(/\*\*([^*]+)\*\*/g, `${ANSI.bold}$1${ANSI.reset}`);
+
+  // Italic (*...*)
+  result = result.replace(/\*([^*]+)\*/g, `${ANSI.italic}$1${ANSI.reset}`);
+
+  // Headers (# ... at start of line)
+  result = result.replace(/^(#{1,6})\s+(.+)$/gm, (_match, hashes, title) => {
+    const level = hashes.length;
+    if (level <= 2) {
+      return `${ANSI.bold}${ANSI.yellow}${title}${ANSI.reset}`;
+    }
+    return `${ANSI.bold}${title}${ANSI.reset}`;
+  });
+
+  // Bullet lists (- or *)
+  result = result.replace(/^(\s*)[-*]\s+/gm, `$1${ANSI.cyan}•${ANSI.reset} `);
+
+  // Numbered lists (1. 2. etc)
+  result = result.replace(/^(\s*)(\d+)\.\s+/gm, `$1${ANSI.cyan}$2.${ANSI.reset} `);
+
+  // Links [text](url) - show as underlined text
+  result = result.replace(/\[([^\]]+)\]\([^)]+\)/g, `${ANSI.underline}${ANSI.blue}$1${ANSI.reset}`);
+
+  return result;
+}
 
 interface AmpStreamMessage {
   type: 'system' | 'user' | 'assistant' | 'result';
@@ -79,9 +139,9 @@ function formatAmpMessage(msg: AmpStreamMessage): string {
           // Truncate long prompts
           const text = textContent.text;
           if (text.length > 200) {
-            return `📝 Prompt: ${text.substring(0, 200)}...`;
+            return `📝 Prompt: ${markdownToAnsi(text.substring(0, 200))}...`;
           }
-          return `📝 Prompt: ${text}`;
+          return `📝 Prompt: ${markdownToAnsi(text)}`;
         }
         // Check for tool results
         const toolResult = msg.message.content.find(c => c.type === 'tool_result');

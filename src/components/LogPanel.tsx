@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useBuildStore, type LogEntry } from "../stores/buildStore";
+import { useBuildStore } from "../stores/buildStore";
 import { usePanelStore } from "../stores/panelStore";
 import { useProjectStore } from "../stores/projectStore";
-import { useTheme } from "../hooks/useTheme";
-import { getTerminalTheme } from "../utils/terminalThemes";
-import { formatStreamJson } from "../utils/streamJsonFormatter";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
+import { StreamLogEntry } from "./StreamLogEntry";
 import { save } from "@tauri-apps/plugin-dialog";
 import { documentDir } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
-import "@xterm/xterm/css/xterm.css";
 
 interface LogPanelProps {
   projectId: string;
@@ -20,47 +15,10 @@ const MIN_HEIGHT = 80;
 const MAX_HEIGHT = 400;
 const COLLAPSED_HEIGHT = 36;
 
-function formatLogLine(log: LogEntry, filterText?: string): string {
-  let prefix = "";
-  const timestamp = log.timestamp.toLocaleTimeString();
-  
-  // Try to format streaming JSON content
-  let content = log.content;
-  if (log.type === "stdout" || log.type === "stderr") {
-    const formatted = formatStreamJson(content);
-    if (formatted) {
-      content = formatted;
-    }
-  }
-
-  if (filterText && filterText.length > 0) {
-    const escapedFilter = filterText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedFilter})`, 'gi');
-    content = content.replace(regex, '\x1b[43m\x1b[30m$1\x1b[0m');
-  }
-
-  switch (log.type) {
-    case "stdout":
-      prefix = `\x1b[90m[${timestamp}]\x1b[0m `;
-      return `${prefix}${content}`;
-    case "stderr":
-      prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[31m`;
-      return `${prefix}${content}\x1b[0m`;
-    case "system":
-      prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[32m`;
-      return `${prefix}${content}\x1b[0m`;
-    default:
-      return `${prefix}${content}`;
-  }
-}
-
-
 export function LogPanel({ projectId }: LogPanelProps) {
   const projectState = useBuildStore((state) => state.projectStates[projectId]);
   const logs = projectState?.logs ?? [];
   const status = projectState?.status ?? 'idle';
-
-  const { resolvedTheme } = useTheme();
 
   const projects = useProjectStore((state) => state.projects);
   const project = projects.find((p) => p.id === projectId);
@@ -70,14 +28,9 @@ export function LogPanel({ projectId }: LogPanelProps) {
   const setLogPanelHeight = usePanelStore((state) => state.setLogPanelHeight);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [filterText, setFilterText] = useState("");
-  const lastLogCountRef = useRef(0);
-  const lastProjectIdRef = useRef<string | null>(null);
-  const lastFilterRef = useRef("");
 
   const filteredLogs = useMemo(() => {
     if (!filterText.trim()) return logs;
@@ -123,147 +76,25 @@ export function LogPanel({ projectId }: LogPanelProps) {
     };
   }, [isResizing]);
 
+  // Auto-scroll when new logs arrive
   useEffect(() => {
-    if (xtermRef.current) {
-      const theme = getTerminalTheme(resolvedTheme);
-      xtermRef.current.options.theme = theme;
-      const rows = xtermRef.current.rows;
-      xtermRef.current.refresh(0, rows - 1);
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
-      }
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [resolvedTheme]);
+  }, [logs, autoScroll]);
 
-  useEffect(() => {
-    if (isCollapsed || !terminalRef.current) return;
-
-    const terminal = new Terminal({
-      theme: getTerminalTheme(resolvedTheme),
-      fontSize: 12,
-      fontFamily: '"SF Mono", "JetBrains Mono", "Monaco", "Menlo", monospace',
-      cursorBlink: false,
-      disableStdin: true,
-      convertEol: true,
-      scrollback: 5000,
-      lineHeight: 1.4,
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-
-    terminal.open(terminalRef.current);
-    
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-    });
-
-    xtermRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    terminal.onScroll(() => {
-      if (!xtermRef.current) return;
-      const buffer = xtermRef.current.buffer.active;
-      const isAtBottom = buffer.viewportY >= buffer.baseY;
-      setAutoScroll(isAtBottom);
-    });
-
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
-    });
-    
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-
-    lastLogCountRef.current = 0;
-    lastFilterRef.current = filterText;
-    for (const log of filteredLogs) {
-      terminal.writeln(formatLogLine(log, filterText));
-    }
-    lastLogCountRef.current = logs.length;
-    if (autoScroll) {
-      terminal.scrollToBottom();
-    }
-    lastProjectIdRef.current = projectId;
-
-    return () => {
-      resizeObserver.disconnect();
-      terminal.dispose();
-      xtermRef.current = null;
-      fitAddonRef.current = null;
-    };
-  }, [isCollapsed, resolvedTheme]);
-
-  useEffect(() => {
-    if (!isCollapsed && fitAddonRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
-    }
-  }, [height, isCollapsed]);
-
-  useEffect(() => {
-    if (isCollapsed) return;
-    
-    if (lastProjectIdRef.current !== projectId) {
-      if (xtermRef.current) {
-        xtermRef.current.clear();
-        lastLogCountRef.current = 0;
-        lastFilterRef.current = filterText;
-        
-        for (const log of filteredLogs) {
-          xtermRef.current.writeln(formatLogLine(log, filterText));
-        }
-        
-        lastLogCountRef.current = logs.length;
-        if (autoScroll) {
-          xtermRef.current.scrollToBottom();
-        }
-      }
-      lastProjectIdRef.current = projectId;
-    }
-  }, [projectId, logs, filteredLogs, filterText, autoScroll, isCollapsed]);
-
-  useEffect(() => {
-    if (isCollapsed) return;
-    if (!xtermRef.current || lastProjectIdRef.current !== projectId) return;
-
-    if (lastFilterRef.current !== filterText) {
-      xtermRef.current.clear();
-      lastFilterRef.current = filterText;
-      for (const log of filteredLogs) {
-        xtermRef.current.writeln(formatLogLine(log, filterText));
-      }
-      lastLogCountRef.current = logs.length;
-      if (autoScroll) {
-        xtermRef.current.scrollToBottom();
-      }
-      return;
-    }
-
-    const newLogs = logs.slice(lastLogCountRef.current);
-    lastLogCountRef.current = logs.length;
-
-    const lowerFilter = filterText.toLowerCase();
-    for (const log of newLogs) {
-      if (!filterText.trim() || log.content.toLowerCase().includes(lowerFilter)) {
-        xtermRef.current.writeln(formatLogLine(log, filterText));
-      }
-    }
-
-    if (autoScroll) {
-      xtermRef.current.scrollToBottom();
-    }
-  }, [logs, filteredLogs, filterText, autoScroll, projectId, isCollapsed]);
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAutoScroll(isAtBottom);
+  }, []);
 
   const isEmpty = logs.length === 0;
 
   const handleScrollToBottom = () => {
     setAutoScroll(true);
-    xtermRef.current?.scrollToBottom();
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   };
 
   const toggleCollapse = () => {
@@ -399,7 +230,11 @@ export function LogPanel({ projectId }: LogPanelProps) {
       
       {/* Log content */}
       {!isCollapsed && (
-        <div className="relative flex-1 overflow-hidden">
+        <div 
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="relative flex-1 overflow-y-auto px-3 py-2 font-mono text-xs space-y-1"
+        >
           {isEmpty && (
             <div className="absolute inset-0 flex items-center justify-center text-muted z-10 pointer-events-none text-sm">
               {status === "idle"
@@ -407,11 +242,14 @@ export function LogPanel({ projectId }: LogPanelProps) {
                 : "No output yet..."}
             </div>
           )}
-          <div
-            ref={terminalRef}
-            className="h-full w-full overflow-hidden"
-            style={{ padding: "8px 12px" }}
-          />
+          {filteredLogs.map((log, index) => (
+            <StreamLogEntry
+              key={index}
+              content={log.content}
+              timestamp={log.timestamp}
+              type={log.type}
+            />
+          ))}
         </div>
       )}
     </div>

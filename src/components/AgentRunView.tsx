@@ -1,15 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProcessStore, type RunningProcess, type ProcessLogEntry } from "../stores/processStore";
 import { useBuildStore, type LogEntry } from "../stores/buildStore";
 import { useProjectStore } from "../stores/projectStore";
-import { useTheme } from "../hooks/useTheme";
-import { getTerminalTheme } from "../utils/terminalThemes";
-import { formatStreamJson } from "../utils/streamJsonFormatter";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
+import { StreamLogEntry } from "./StreamLogEntry";
 import { notify } from "../utils/notify";
-import "@xterm/xterm/css/xterm.css";
 
 interface AgentRunViewProps {
   process: RunningProcess;
@@ -26,22 +21,14 @@ function formatDuration(ms: number): string {
   return `${hours}h ${remainingMinutes}m`;
 }
 
-/**
- * Quote an argument for shell display using POSIX-compliant single-quote escaping.
- * This produces a string that could be copy-pasted into a shell.
- */
 function shellQuoteArg(arg: string): string {
-  // Empty string needs quotes
   if (arg === '') {
     return "''"
   }
-  // If arg contains only safe characters, no quoting needed
   if (/^[a-zA-Z0-9_./:@=-]+$/.test(arg)) {
     return arg;
   }
-  // Use $'...' syntax for strings with newlines or special escapes for better readability
   if (arg.includes('\n') || arg.includes('\t') || arg.includes('\r')) {
-    // Escape backslashes, single quotes, and control characters
     const escaped = arg
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "\\'")
@@ -50,7 +37,6 @@ function shellQuoteArg(arg: string): string {
       .replace(/\r/g, '\\r')
     return `$'${escaped}'`
   }
-  // Standard single-quote escaping: replace ' with '\''
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
@@ -74,14 +60,11 @@ export function AgentRunView({ process }: AgentRunViewProps) {
   const projects = useProjectStore((state) => state.projects);
   const project = projects.find((p) => p.id === process.projectId);
   
-  // Get logs from buildStore for build processes - subscribe directly for reactivity
   const projectState = useBuildStore((state) => state.projectStates[process.projectId]);
   const buildLogs = projectState?.logs ?? [];
   
-  // Get logs from processStore for non-build processes
   const processLogs = useProcessStore((state) => state.getProcessLogs(process.processId));
   
-  // Use build logs for build/chat/prd processes, process logs for detection/dev-server
   const useBuildLogs = process.type === 'build' || process.type === 'chat' || process.type === 'prd';
   const logs: (LogEntry | ProcessLogEntry)[] = useBuildLogs ? buildLogs : processLogs;
   
@@ -89,17 +72,11 @@ export function AgentRunView({ process }: AgentRunViewProps) {
   const processes = useProcessStore((state) => state.processes);
   const isStillRunning = !!processes[process.processId];
   
-  const { resolvedTheme } = useTheme();
-  
-  const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const lastLogCountRef = useRef(0);
-  
   const [elapsedTime, setElapsedTime] = useState(0);
   const [commandExpanded, setCommandExpanded] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
 
   // Update elapsed time
   useEffect(() => {
@@ -115,136 +92,28 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     return () => clearInterval(interval);
   }, [process.startedAt, isStillRunning]);
 
-  // Initialize terminal
+  // Auto-scroll when new logs arrive
   useEffect(() => {
-    if (!terminalRef.current) return;
-
-    const terminal = new Terminal({
-      theme: getTerminalTheme(resolvedTheme),
-      fontSize: 13,
-      fontFamily: '"SF Mono", "JetBrains Mono", "Monaco", "Menlo", monospace',
-      cursorBlink: false,
-      disableStdin: true,
-      convertEol: true,
-      scrollback: 10000,
-      lineHeight: 1.4,
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-
-    terminal.open(terminalRef.current);
-    
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-    });
-
-    xtermRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    terminal.onScroll(() => {
-      if (!xtermRef.current) return;
-      const buffer = xtermRef.current.buffer.active;
-      const isAtBottom = buffer.viewportY >= buffer.baseY;
-      setAutoScroll(isAtBottom);
-    });
-
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
-    });
-    
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-
-    // Write existing logs
-    lastLogCountRef.current = 0;
-    for (const log of logs) {
-      writeLogEntry(terminal, log);
-    }
-    lastLogCountRef.current = logs.length;
-    if (autoScroll) {
-      terminal.scrollToBottom();
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-      terminal.dispose();
-      xtermRef.current = null;
-      fitAddonRef.current = null;
-    };
-  }, [resolvedTheme]);
-
-  // Update terminal theme when resolved theme changes
-  useEffect(() => {
-    if (xtermRef.current) {
-      const theme = getTerminalTheme(resolvedTheme);
-      xtermRef.current.options.theme = theme;
-      const rows = xtermRef.current.rows;
-      xtermRef.current.refresh(0, rows - 1);
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
-      }
-    }
-  }, [resolvedTheme]);
-
-  // Stream new logs
-  useEffect(() => {
-    if (!xtermRef.current) return;
-
-    const newLogs = logs.slice(lastLogCountRef.current);
-    lastLogCountRef.current = logs.length;
-
-    for (const log of newLogs) {
-      writeLogEntry(xtermRef.current, log);
-    }
-
-    if (autoScroll) {
-      xtermRef.current.scrollToBottom();
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [logs, autoScroll]);
 
-  const writeLogEntry = (terminal: Terminal, log: LogEntry | ProcessLogEntry) => {
-    let prefix = "";
-    const timestamp = log.timestamp.toLocaleTimeString();
-
-    // Try to format streaming JSON content
-    let content = log.content;
-    if (log.type === "stdout" || log.type === "stderr") {
-      const formatted = formatStreamJson(content);
-      if (formatted) {
-        content = formatted;
-      }
-    }
-
-    switch (log.type) {
-      case "stdout":
-        prefix = `\x1b[90m[${timestamp}]\x1b[0m `;
-        break;
-      case "stderr":
-        prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[31m`;
-        break;
-      case "system":
-        prefix = `\x1b[90m[${timestamp}]\x1b[0m \x1b[32m`;
-        break;
-    }
-
-    const suffix = log.type === "stdout" ? "" : "\x1b[0m";
-    terminal.writeln(`${prefix}${content}${suffix}`);
-  };
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAutoScroll(isAtBottom);
+  }, []);
 
   const handleScrollToBottom = () => {
     setAutoScroll(true);
-    xtermRef.current?.scrollToBottom();
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   };
 
   const handleBack = () => {
     selectProcess(null);
   };
-
-  const [isStopping, setIsStopping] = useState(false);
 
   const handleKillProcess = async () => {
     if (isStopping) return;
@@ -291,17 +160,15 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     }
   };
 
-  // Format command for display with proper shell quoting
   const commandString = process.command 
     ? formatCommand(process.command.executable, process.command.args)
     : null;
 
-  // Determine if command is long (multi-line or > 200 chars)
   const isLongCommand = commandString && (commandString.length > 200 || commandString.includes('\n'));
 
   return (
     <main className="flex-1 h-screen flex flex-col bg-background-secondary border-t border-border overflow-hidden">
-      {/* Top bar - matching ProjectTopBar style */}
+      {/* Top bar */}
       <div className="h-12 flex items-center justify-between px-4 border-b border-border bg-background drag-region">
         <div className="flex items-center gap-3 no-drag">
           <button
@@ -435,10 +302,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
       </div>
 
       {/* Log output */}
-      <div 
-        ref={containerRef}
-        className="flex-1 flex flex-col min-h-0 overflow-hidden"
-      >
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2 bg-background/50 flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted uppercase tracking-wider">Output</span>
@@ -470,10 +334,24 @@ export function AgentRunView({ process }: AgentRunViewProps) {
         </div>
         
         <div
-          ref={terminalRef}
-          className="flex-1 overflow-hidden"
-          style={{ padding: "8px 12px" }}
-        />
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 py-2 font-mono text-sm space-y-1"
+        >
+          {logs.length === 0 && (
+            <div className="flex items-center justify-center h-full text-muted text-sm">
+              Waiting for output...
+            </div>
+          )}
+          {logs.map((log, index) => (
+            <StreamLogEntry
+              key={index}
+              content={log.content}
+              timestamp={log.timestamp}
+              type={log.type}
+            />
+          ))}
+        </div>
       </div>
     </main>
   );
