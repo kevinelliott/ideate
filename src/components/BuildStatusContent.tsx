@@ -8,6 +8,8 @@ import { usePanelStore } from "../stores/panelStore";
 import { analyzeStoryDependencies, getDependentsOf } from "../utils/storyDependencies";
 import { DiffViewer } from "./DiffViewer";
 import { FileViewer } from "./FileViewer";
+import { ConflictResolver } from "./ConflictResolver";
+import { StreamLogEntry } from "./StreamLogEntry";
 import { defaultPlugins } from "../types";
 import { 
   estimateBuildComplexity, 
@@ -84,7 +86,8 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmForceMerge, setConfirmForceMerge] = useState<string | null>(null);
-  const [diffViewerStory, setDiffViewerStory] = useState<{ id: string; title: string } | null>(null);
+  const [diffViewerStory, setDiffViewerStory] = useState<{ id: string; title: string; branchName?: string } | null>(null);
+  const [conflictResolverBranch, setConflictResolverBranch] = useState<{ branchName: string; title: string } | null>(null);
   const [confirmRollback, setConfirmRollback] = useState<string | null>(null);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [retryAgentSelection, setRetryAgentSelection] = useState<Record<string, string>>({});
@@ -192,6 +195,8 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
       await loadBranches();
     } catch (e) {
       console.error("Failed to delete branch:", e);
+      alert(`Failed to delete branch: ${e}`);
+      setConfirmDelete(null);
     }
   };
 
@@ -622,7 +627,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       onClick={() => {
-                        setDiffViewerStory({ id: conflict.storyId, title: conflict.storyTitle });
+                        setDiffViewerStory({ id: conflict.storyId, title: conflict.storyTitle, branchName: conflict.branchName });
                       }}
                       className="text-xs px-2 py-1 rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors flex items-center gap-1"
                     >
@@ -678,11 +683,13 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                     </button>
                     <button
                       onClick={async () => {
+                        if (!confirm(`Checkout branch "${conflict.branchName}"? This will abort any pending merge and reset uncommitted changes.`)) return;
                         try {
                           await invoke("checkout_story_branch", {
                             projectPath: project?.path,
                             branchName: conflict.branchName,
                           });
+                          await loadBranches();
                           handleOpenProjectFolder();
                         } catch (e) {
                           console.error("Failed to checkout:", e);
@@ -784,6 +791,17 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         </span>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                        {branch.status !== "merged" && (
+                          <button
+                            onClick={() => setDiffViewerStory({ id: branch.storyId, title: branch.branchName, branchName: branch.branchName })}
+                            className="p-1 rounded hover:bg-accent/20 text-muted hover:text-accent transition-colors"
+                            title="View diff"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                        )}
                         {!branch.isCurrent && (
                           <button
                             onClick={() => handleCheckoutBranch(branch.branchName)}
@@ -797,6 +815,15 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         )}
                         {branch.status !== "merged" && !branch.isCurrent && (
                           <>
+                            <button
+                              onClick={() => setConflictResolverBranch({ branchName: branch.branchName, title: branch.storyId })}
+                              className="p-1 rounded hover:bg-success/20 text-muted hover:text-success transition-colors"
+                              title="Resolve conflicts and merge"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
                             {confirmForceMerge === branch.branchName ? (
                               <div className="flex items-center gap-1">
                                 <button
@@ -828,15 +855,21 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         {!branch.isCurrent && (
                           <>
                             {confirmDelete === branch.branchName ? (
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                 <button
-                                  onClick={() => handleDeleteBranch(branch.branchName, true)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteBranch(branch.branchName, true);
+                                  }}
                                   className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-medium"
                                 >
                                   Delete
                                 </button>
                                 <button
-                                  onClick={() => setConfirmDelete(null)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDelete(null);
+                                  }}
                                   className="text-[10px] px-1.5 py-0.5 rounded bg-muted/20 text-muted"
                                 >
                                   Cancel
@@ -844,7 +877,10 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                               </div>
                             ) : (
                               <button
-                                onClick={() => setConfirmDelete(branch.branchName)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDelete(branch.branchName);
+                                }}
                                 className="p-1 rounded hover:bg-destructive/20 text-muted hover:text-destructive transition-colors"
                                 title="Delete branch"
                               >
@@ -877,17 +913,12 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
           ) : (
             <div className="font-mono text-xs space-y-1">
               {logs.map((log, i) => (
-                <div
+                <StreamLogEntry
                   key={i}
-                  className={`break-words ${
-                    log.type === "stderr" ? "text-destructive" :
-                    log.type === "system" ? "text-accent" :
-                    "text-secondary"
-                  }`}
-                >
-                  <span className="text-muted mr-2">[{log.timestamp.toISOString().slice(11, 19)}]</span>
-                  {log.content}
-                </div>
+                  content={log.content}
+                  timestamp={log.timestamp}
+                  type={log.type}
+                />
               ))}
             </div>
           )}
@@ -968,6 +999,22 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
           projectPath={project.path}
           storyId={diffViewerStory.id}
           storyTitle={diffViewerStory.title}
+          branchName={diffViewerStory.branchName}
+        />
+      )}
+
+      {/* Conflict Resolver Modal */}
+      {project?.path && conflictResolverBranch && (
+        <ConflictResolver
+          isOpen={!!conflictResolverBranch}
+          onClose={() => setConflictResolverBranch(null)}
+          onResolved={() => {
+            loadBranches();
+            useBuildStore.getState().removeConflictedBranch(projectId, conflictResolverBranch.branchName);
+          }}
+          projectPath={project.path}
+          branchName={conflictResolverBranch.branchName}
+          storyTitle={conflictResolverBranch.title}
         />
       )}
     </div>
