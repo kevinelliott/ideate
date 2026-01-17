@@ -5,6 +5,7 @@ import { useBuildStore, type LogEntry } from "../stores/buildStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useTheme } from "../hooks/useTheme";
 import { getTerminalTheme } from "../utils/terminalThemes";
+import { formatStreamJson } from "../utils/streamJsonFormatter";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { notify } from "../utils/notify";
@@ -209,6 +210,15 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     let prefix = "";
     const timestamp = log.timestamp.toLocaleTimeString();
 
+    // Try to format streaming JSON content
+    let content = log.content;
+    if (log.type === "stdout" || log.type === "stderr") {
+      const formatted = formatStreamJson(content);
+      if (formatted) {
+        content = formatted;
+      }
+    }
+
     switch (log.type) {
       case "stdout":
         prefix = `\x1b[90m[${timestamp}]\x1b[0m `;
@@ -222,7 +232,7 @@ export function AgentRunView({ process }: AgentRunViewProps) {
     }
 
     const suffix = log.type === "stdout" ? "" : "\x1b[0m";
-    terminal.writeln(`${prefix}${log.content}${suffix}`);
+    terminal.writeln(`${prefix}${content}${suffix}`);
   };
 
   const handleScrollToBottom = () => {

@@ -4,6 +4,7 @@ import { usePanelStore } from "../stores/panelStore";
 import { useProjectStore } from "../stores/projectStore";
 import { useTheme } from "../hooks/useTheme";
 import { getTerminalTheme } from "../utils/terminalThemes";
+import { formatStreamJson } from "../utils/streamJsonFormatter";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -22,7 +23,15 @@ const COLLAPSED_HEIGHT = 36;
 function formatLogLine(log: LogEntry, filterText?: string): string {
   let prefix = "";
   const timestamp = log.timestamp.toLocaleTimeString();
+  
+  // Try to format streaming JSON content
   let content = log.content;
+  if (log.type === "stdout" || log.type === "stderr") {
+    const formatted = formatStreamJson(content);
+    if (formatted) {
+      content = formatted;
+    }
+  }
 
   if (filterText && filterText.length > 0) {
     const escapedFilter = filterText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

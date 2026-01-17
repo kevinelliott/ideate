@@ -6,6 +6,7 @@ import type { RunningProcess } from "../stores/processStore";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getTerminalTheme } from "../utils/terminalThemes";
+import { formatStreamJson } from "../utils/streamJsonFormatter";
 import "@xterm/xterm/css/xterm.css";
 
 interface AgentOutputPayload {
@@ -219,7 +220,9 @@ function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
 
     const newLogs = logs.slice(lastLogCountRef.current);
     for (const log of newLogs) {
-      terminal.writeln(log.content);
+      // Format streaming JSON if applicable
+      const formatted = formatStreamJson(log.content);
+      terminal.writeln(formatted || log.content);
     }
     lastLogCountRef.current = logs.length;
   }, [logs]);
