@@ -47,7 +47,8 @@ function tryParseJson(content: string): AmpMessage | null {
 }
 
 function formatPath(path: string): string {
-  const parts = path.split("/");
+  const normalized = path.replace(/\\/g, "/");
+  const parts = normalized.split("/");
   return parts.slice(-2).join("/");
 }
 

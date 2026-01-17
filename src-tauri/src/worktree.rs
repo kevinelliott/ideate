@@ -400,14 +400,19 @@ pub async fn delete_story_branch(
                 if branch.ends_with(&branch_name) || branch == format!("refs/heads/{}", branch_name) {
                     if let Some(ref wt_path) = current_worktree {
                         // Remove the worktree first
-                        Command::new("git")
+                        if let Ok(output) = Command::new("git")
                             .args(["worktree", "remove", "--force", wt_path])
                             .current_dir(&project_path)
                             .output()
-                            .ok();
-                        
-                        // Also try to delete the directory if git worktree remove didn't work
-                        let _ = std::fs::remove_dir_all(wt_path);
+                        {
+                            if !output.status.success() {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                // Only delete the directory manually if git reports it's not a worktree
+                                if stderr.contains("is not a working tree") {
+                                    let _ = std::fs::remove_dir_all(wt_path);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -443,11 +448,26 @@ pub async fn checkout_story_branch(
         .current_dir(&project_path)
         .output();
 
-    // Reset any staged changes that might block checkout
-    let _ = Command::new("git")
-        .args(["reset", "--hard", "HEAD"])
+    // Check for uncommitted changes and stash them to preserve user work
+    let status_output = Command::new("git")
+        .args(["status", "--porcelain"])
         .current_dir(&project_path)
-        .output();
+        .output()
+        .map_err(|e| format!("Failed to check git status: {}", e))?;
+
+    if !status_output.stdout.is_empty() {
+        // Stash changes instead of discarding them
+        let _ = Command::new("git")
+            .args([
+                "stash",
+                "push",
+                "-u",
+                "-m",
+                "auto-stash before story branch checkout",
+            ])
+            .current_dir(&project_path)
+            .output();
+    }
 
     let output = Command::new("git")
         .args(["checkout", &branch_name])
@@ -1061,7 +1081,9 @@ pub async fn merge_with_resolutions(
                     .map_err(|e| format!("Failed to checkout theirs for {}: {}", resolution.file_path, e))?;
             }
             "both" => {
-                // Concatenate both versions (theirs after ours)
+                // Concatenate both versions with clear markers
+                // Note: This is primarily useful for additive files (logs, changelogs, etc.)
+                // For code files, manual editing will likely be needed after merge
                 let ours_output = Command::new("git")
                     .args(["show", &format!("HEAD:{}", resolution.file_path)])
                     .current_dir(&project_path)
@@ -1084,9 +1106,13 @@ pub async fn merge_with_resolutions(
                     .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
                     .unwrap_or_default();
 
-                // Write combined content
+                // Write combined content with separator comment
                 let file_path = PathBuf::from(&project_path).join(&resolution.file_path);
-                std::fs::write(&file_path, format!("{}\n{}", ours_content.trim_end(), theirs_content))
+                let separator = format!(
+                    "\n\n// ========== MERGED FROM BRANCH: {} ==========\n// NOTE: Manual review recommended - sections below may need integration\n\n",
+                    branch_name
+                );
+                std::fs::write(&file_path, format!("{}{}{}", ours_content.trim_end(), separator, theirs_content))
                     .map_err(|e| format!("Failed to write combined file: {}", e))?;
             }
             _ => {

@@ -31,7 +31,7 @@ export const defaultPlugins: AgentPlugin[] = [
     id: 'claude-code',
     name: 'Claude Code',
     command: 'claude',
-    argsTemplate: ['-p', '--output-format', 'stream-json', '{{prompt}}'],
+    argsTemplate: ['--output-format', 'stream-json', '-p', '{{prompt}}'],
     workingDir: 'project',
   },
   {

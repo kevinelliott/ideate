@@ -733,11 +733,13 @@ export function usePrdGeneration() {
 
         // Check for agent-side errors that still return exit code 0
         const agentErrorPatterns = [
-          "stream ended without producing",
-          "Error: stream ended",
+          "stream ended without producing any output",
+          "amp error: stream ended",
+          "claude error: stream ended",
           "connection refused",
           "authentication failed",
           "rate limit exceeded",
+          "api key invalid",
         ];
         const hasAgentError = agentErrorPatterns.some((pattern) =>
           recentLogs.toLowerCase().includes(pattern.toLowerCase())
