@@ -31,14 +31,14 @@ export const defaultPlugins: AgentPlugin[] = [
     id: 'claude-code',
     name: 'Claude Code',
     command: 'claude',
-    argsTemplate: ['-p', '{{prompt}}'],
+    argsTemplate: ['-p', '--output-format', 'stream-json', '{{prompt}}'],
     workingDir: 'project',
   },
   {
     id: 'amp',
     name: 'Amp',
     command: 'amp',
-    argsTemplate: ['--execute', '{{prompt}}'],
+    argsTemplate: ['--execute', '{{prompt}}', '--stream-json'],
     workingDir: 'project',
   },
   {
