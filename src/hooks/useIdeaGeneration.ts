@@ -31,8 +31,62 @@ const PROMPT_IDS: Record<GenerationType, string> = {
   simplify: 'ideaDescriptionSimplify',
 }
 
-function cleanAgentOutput(raw: string): string {
-  let output = raw
+interface StreamJsonMessage {
+  type: string
+  message?: {
+    content?: Array<{
+      type: string
+      text?: string
+    }>
+  }
+  // Claude Code format
+  content?: string
+}
+
+function extractTextFromStreamJson(lines: string[]): string {
+  const textParts: string[] = []
+  
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('{')) continue
+    
+    try {
+      const parsed: StreamJsonMessage = JSON.parse(trimmed)
+      
+      // Amp format: assistant message with content array
+      if (parsed.type === 'assistant' && parsed.message?.content) {
+        for (const item of parsed.message.content) {
+          if (item.type === 'text' && item.text) {
+            textParts.push(item.text)
+          }
+        }
+      }
+      
+      // Claude Code format: direct content field
+      if (parsed.type === 'text' && parsed.content) {
+        textParts.push(parsed.content)
+      }
+    } catch {
+      // Not JSON, skip
+    }
+  }
+  
+  return textParts.join('')
+}
+
+function cleanAgentOutput(raw: string, lines: string[]): string {
+  // First, try to extract text from streaming JSON format
+  const streamJsonText = extractTextFromStreamJson(lines)
+  if (streamJsonText.trim()) {
+    return cleanText(streamJsonText)
+  }
+  
+  // Fallback to cleaning raw output
+  return cleanText(raw)
+}
+
+function cleanText(text: string): string {
+  let output = text
   
   // Remove ANSI escape codes (colors, cursor movement, etc.)
   output = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
@@ -142,7 +196,7 @@ export function useIdeaGeneration() {
 
       // Join lines with newlines to reconstruct the original output
       const output = lines.join('\n')
-      const cleanedOutput = cleanAgentOutput(output)
+      const cleanedOutput = cleanAgentOutput(output, lines)
       return cleanedOutput || null
     } catch (error) {
       console.error('Generation error:', error)
