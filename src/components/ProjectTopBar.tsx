@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useBuildStore } from "../stores/buildStore";
 import { useCostStore } from "../stores/costStore";
 import { usePrdStore } from "../stores/prdStore";
 import { CostModal } from "./CostModal";
+import { ProjectSettingsModal, SettingsIcon } from "./ProjectSettingsModal";
 
 export type AutonomyLevel = "autonomous" | "pause-between" | "manual";
 export type BuildMode = "ralph" | "parallel" | "none";
@@ -128,6 +129,7 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
   const [buildMode, setBuildMode] = useState<BuildMode>("ralph");
   const [isLoading, setIsLoading] = useState(true);
   const [isCostModalOpen, setIsCostModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const buildStatus = useBuildStore((state) => state.projectStates[projectId]?.status ?? 'idle');
   const pauseBuild = useBuildStore((state) => state.pauseBuild);
@@ -168,52 +170,54 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
   
   const hasCostData = projectSummary.entryCount > 0;
 
-  useEffect(() => {
-    let cancelled = false;
-    
-    async function loadSettings() {
-      setIsLoading(true);
-      try {
-        const [settings, prefs] = await Promise.all([
-          invoke<ProjectSettings | null>("load_project_settings", { projectPath }),
-          invoke<Preferences | null>("load_preferences"),
-        ]);
-        
-        if (!cancelled) {
-          const defaultAgent = prefs?.defaultAgent || "";
-          const defaultAutonomy = (prefs?.defaultAutonomy as AutonomyLevel) || "autonomous";
-          const defaultBuildMode = (prefs?.defaultBuildMode as BuildMode) || "ralph";
-          
-          if (settings) {
-            setSelectedAgent(settings.agent || defaultAgent);
-            setAutonomyLevel(settings.autonomy || defaultAutonomy);
-            setBuildMode(settings.buildMode || defaultBuildMode);
-          } else {
-            setSelectedAgent(defaultAgent);
-            setAutonomyLevel(defaultAutonomy);
-            setBuildMode(defaultBuildMode);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load project settings:", err);
-        if (!cancelled) {
-          setSelectedAgent("");
-          setAutonomyLevel("autonomous");
-          setBuildMode("ralph");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+  const loadSettings = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [settings, prefs] = await Promise.all([
+        invoke<ProjectSettings | null>("load_project_settings", { projectPath }),
+        invoke<Preferences | null>("load_preferences"),
+      ]);
+      
+      const defaultAgent = prefs?.defaultAgent || "";
+      const defaultAutonomy = (prefs?.defaultAutonomy as AutonomyLevel) || "autonomous";
+      const defaultBuildMode = (prefs?.defaultBuildMode as BuildMode) || "ralph";
+      
+      if (settings) {
+        setSelectedAgent(settings.agent || defaultAgent);
+        setAutonomyLevel(settings.autonomy || defaultAutonomy);
+        setBuildMode(settings.buildMode || defaultBuildMode);
+      } else {
+        setSelectedAgent(defaultAgent);
+        setAutonomyLevel(defaultAutonomy);
+        setBuildMode(defaultBuildMode);
       }
+    } catch (err) {
+      console.error("Failed to load project settings:", err);
+      setSelectedAgent("");
+      setAutonomyLevel("autonomous");
+      setBuildMode("ralph");
+    } finally {
+      setIsLoading(false);
     }
-    
+  }, [projectPath]);
+
+  useEffect(() => {
     loadSettings();
-    
-    return () => {
-      cancelled = true;
+  }, [loadSettings]);
+
+  // Listen for settings changes from the modal
+  useEffect(() => {
+    const handleSettingsChanged = (event: CustomEvent<{ projectId: string; projectPath: string }>) => {
+      if (event.detail.projectPath === projectPath) {
+        loadSettings();
+      }
     };
-  }, [projectId, projectPath]);
+
+    window.addEventListener("project-settings-changed", handleSettingsChanged as EventListener);
+    return () => {
+      window.removeEventListener("project-settings-changed", handleSettingsChanged as EventListener);
+    };
+  }, [projectPath, loadSettings]);
 
   const handleAgentChange = async (agentId: string) => {
     if (isBuilding) return;
@@ -269,6 +273,20 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
         <div className="flex items-center gap-2 no-drag">
           {!isLoading && (
             <>
+              {/* Settings button */}
+              <button
+                onClick={() => setIsSettingsModalOpen(true)}
+                disabled={isBuilding}
+                className={`p-1.5 rounded transition-colors ${
+                  isBuilding
+                    ? "text-muted/50 cursor-not-allowed"
+                    : "text-muted hover:text-foreground hover:bg-card"
+                }`}
+                title={isBuilding ? "Settings disabled during build" : "Project settings"}
+              >
+                <SettingsIcon />
+              </button>
+
               {/* Cost button */}
               <button
                 onClick={() => setIsCostModalOpen(true)}
@@ -432,6 +450,14 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
       <CostModal
         isOpen={isCostModalOpen}
         onClose={() => setIsCostModalOpen(false)}
+        projectId={projectId}
+        projectPath={projectPath}
+        projectName={projectName}
+      />
+
+      <ProjectSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
         projectId={projectId}
         projectPath={projectPath}
         projectName={projectName}
