@@ -1,6 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { Sidebar } from "./components/Sidebar";
 import { MainContent } from "./components/MainContent";
 import { useProjectStore } from "./stores/projectStore";
@@ -12,6 +12,7 @@ import { useIdeasStore } from "./stores/ideasStore";
 import { usePanelStore } from "./stores/panelStore";
 import { useProcessStore } from "./stores/processStore";
 import { useIntegrationsStore } from "./stores/integrationsStore";
+import { usePrdStore } from "./stores/prdStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { useWindowState } from "./hooks/useWindowState";
 import { usePrdGeneration } from "./hooks/usePrdGeneration";
@@ -154,6 +155,22 @@ function App() {
     };
   }, []);
 
+  // Listen for story manager open event
+  useEffect(() => {
+    const handleOpenStoryManager = async () => {
+      try {
+        await invoke("open_story_manager_command");
+      } catch (error) {
+        console.error("Failed to open story manager:", error);
+      }
+    };
+
+    window.addEventListener("open-story-manager", handleOpenStoryManager);
+    return () => {
+      window.removeEventListener("open-story-manager", handleOpenStoryManager);
+    };
+  }, []);
+
   // Global listener for agent output and exit events
   // This handles both buildStore processes (build/chat/prd) and processStore processes (detection/dev-server)
   // Note: We set up the listener once and use getState() inside to get fresh state on each event
@@ -217,6 +234,80 @@ function App() {
       unlistenExitPromise.then((unlisten) => unlisten());
     };
   }, []); // Empty deps - we use getState() to always get fresh state
+
+  // Story Manager sync - listen for requests from Story Manager window and handle bulk actions
+  useEffect(() => {
+    // Send story list when Story Manager requests it
+    const unlistenRequestPromise = listen("request-story-list", async () => {
+      const currentActiveProjectId = useProjectStore.getState().activeProjectId;
+      const currentProject = useProjectStore.getState().projects.find(p => p.id === currentActiveProjectId);
+      const currentStories = usePrdStore.getState().stories;
+      const currentStoryStatuses = currentActiveProjectId 
+        ? useBuildStore.getState().getProjectState(currentActiveProjectId).storyStatuses 
+        : {};
+      
+      // Map stories to include status
+      const storiesWithStatus = currentStories.map(s => ({
+        id: s.id,
+        title: s.title,
+        status: currentStoryStatuses[s.id] || (s.passes ? "complete" : "pending"),
+        passes: s.passes,
+      }));
+
+      await emit("story-list-sync", {
+        stories: storiesWithStatus,
+        projectId: currentActiveProjectId || "",
+        projectName: currentProject?.name || "",
+      });
+    });
+
+    // Handle bulk status changes from Story Manager
+    const unlistenBulkStatusPromise = listen<{
+      projectId: string;
+      storyIds: string[];
+      status: string;
+      passes: boolean;
+    }>("bulk-story-status-change", async (event) => {
+      const { projectId, storyIds, status, passes } = event.payload;
+      
+      // Update each story in prdStore
+      for (const storyId of storyIds) {
+        usePrdStore.getState().updateStory(storyId, { passes });
+        useBuildStore.getState().setStoryStatus(projectId, storyId, status as "pending" | "complete" | "failed" | "in-progress");
+      }
+      
+      // Save the PRD
+      const project = useProjectStore.getState().projects.find(p => p.id === projectId);
+      if (project?.path) {
+        await usePrdStore.getState().savePrd(project.path);
+      }
+    });
+
+    // Handle bulk delete from Story Manager
+    const unlistenBulkDeletePromise = listen<{
+      projectId: string;
+      storyIds: string[];
+    }>("bulk-story-delete", async (event) => {
+      const { projectId, storyIds } = event.payload;
+      
+      // Delete each story from prdStore
+      for (const storyId of storyIds) {
+        usePrdStore.getState().removeStory(storyId);
+      }
+      
+      // Save the PRD
+      const project = useProjectStore.getState().projects.find(p => p.id === projectId);
+      if (project?.path) {
+        await usePrdStore.getState().savePrd(project.path);
+      }
+    });
+
+    return () => {
+      unlistenRequestPromise.then((unlisten) => unlisten());
+      unlistenBulkStatusPromise.then((unlisten) => unlisten());
+      unlistenBulkDeletePromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   // Trigger PRD generation after import if needed
   useEffect(() => {

@@ -199,6 +199,17 @@ export function CommandPalette({
         onClose();
       },
     },
+    {
+      id: "story-manager",
+      name: "Story Manager",
+      shortcut: "⇧ ⌘ M",
+      category: "Advanced",
+      disabled: !activeProjectId,
+      action: () => {
+        window.dispatchEvent(new CustomEvent("open-story-manager"));
+        onClose();
+      },
+    },
   ];
 
   const filteredCommands = commands.filter((cmd) => {
