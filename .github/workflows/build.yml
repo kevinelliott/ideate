@@ -122,7 +122,7 @@ jobs:
           ls -la src-tauri/binaries/
 
       - name: Build Tauri app
-        run: pnpm tauri build
+        run: pnpm tauri build --bundles deb,rpm
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -130,7 +130,6 @@ jobs:
           name: ideate-linux-x86_64
           path: |
             src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
             src-tauri/target/release/bundle/rpm/*.rpm
           if-no-files-found: error
 
