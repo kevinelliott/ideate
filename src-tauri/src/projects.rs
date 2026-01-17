@@ -97,11 +97,21 @@ npm-debug.log*
         .output()
         .map_err(|e| format!("Failed to stage files: {}", e))?;
     
-    Command::new("git")
+    // Try to commit - this may fail if git user is not configured, which is okay
+    // The user can commit manually later
+    let commit_result = Command::new("git")
         .args(["commit", "-m", "Initial commit"])
         .current_dir(&project_dir)
-        .output()
-        .map_err(|e| format!("Failed to create initial commit: {}", e))?;
+        .output();
+    
+    if let Err(e) = commit_result {
+        eprintln!("Warning: Could not create initial commit: {}. Git user may not be configured.", e);
+    } else if let Ok(output) = commit_result {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("Warning: Initial commit failed: {}", stderr);
+        }
+    }
     
     Ok(CreateProjectResult {
         path: project_dir.to_string_lossy().to_string(),

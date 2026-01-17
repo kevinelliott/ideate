@@ -90,6 +90,7 @@ interface BuildStore {
   restoreRetryInfo: (projectId: string, storyId: string, retryCount: number) => void
   resetBuildState: (projectId: string) => void
   addConflictedBranch: (projectId: string, conflict: ConflictInfo) => void
+  removeConflictedBranch: (projectId: string, branchName: string) => void
   clearConflictedBranches: (projectId: string) => void
   
   // Snapshot management
@@ -403,6 +404,21 @@ export const useBuildStore = create<BuildStore>((set, get) => ({
           [projectId]: {
             ...projectState,
             conflictedBranches: [...projectState.conflictedBranches, conflict],
+          },
+        },
+      }
+    })
+  },
+
+  removeConflictedBranch: (projectId, branchName) => {
+    set((state) => {
+      const projectState = state.projectStates[projectId] || createEmptyProjectState()
+      return {
+        projectStates: {
+          ...state.projectStates,
+          [projectId]: {
+            ...projectState,
+            conflictedBranches: projectState.conflictedBranches.filter(c => c.branchName !== branchName),
           },
         },
       }

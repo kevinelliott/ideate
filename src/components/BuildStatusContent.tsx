@@ -8,6 +8,8 @@ import { usePanelStore } from "../stores/panelStore";
 import { analyzeStoryDependencies, getDependentsOf } from "../utils/storyDependencies";
 import { DiffViewer } from "./DiffViewer";
 import { FileViewer } from "./FileViewer";
+import { ConflictResolver } from "./ConflictResolver";
+import { StreamLogEntry } from "./StreamLogEntry";
 import { defaultPlugins } from "../types";
 import { 
   estimateBuildComplexity, 
@@ -84,7 +86,8 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmForceMerge, setConfirmForceMerge] = useState<string | null>(null);
-  const [diffViewerStory, setDiffViewerStory] = useState<{ id: string; title: string } | null>(null);
+  const [diffViewerStory, setDiffViewerStory] = useState<{ id: string; title: string; branchName?: string } | null>(null);
+  const [conflictResolverBranch, setConflictResolverBranch] = useState<{ branchName: string; title: string } | null>(null);
   const [confirmRollback, setConfirmRollback] = useState<string | null>(null);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [retryAgentSelection, setRetryAgentSelection] = useState<Record<string, string>>({});
@@ -192,6 +195,8 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
       await loadBranches();
     } catch (e) {
       console.error("Failed to delete branch:", e);
+      alert(`Failed to delete branch: ${e}`);
+      setConfirmDelete(null);
     }
   };
 
@@ -605,17 +610,99 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                 Open Folder
               </button>
             </div>
-            <div className="px-4 py-2 space-y-2 max-h-40 overflow-y-auto">
+            <div className="px-4 py-2 space-y-3 max-h-64 overflow-y-auto">
               {conflictedBranches.map((conflict: ConflictInfo) => (
-                <div key={conflict.branchName} className="flex items-start gap-2 text-sm">
-                  <span className="text-destructive font-mono text-xs bg-destructive/10 px-1.5 py-0.5 rounded">
-                    {conflict.storyId}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-foreground truncate">{conflict.storyTitle}</p>
-                    <p className="text-xs text-muted mt-0.5">
-                      Resolve in branch: <code className="text-destructive">{conflict.branchName}</code>
-                    </p>
+                <div key={conflict.branchName} className="bg-background rounded-lg p-3 border border-destructive/20">
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-destructive font-mono text-xs bg-destructive/10 px-1.5 py-0.5 rounded flex-shrink-0">
+                      {conflict.storyId}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-foreground truncate font-medium">{conflict.storyTitle}</p>
+                      <p className="text-xs text-muted mt-0.5">
+                        Branch: <code className="text-destructive">{conflict.branchName}</code>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      onClick={() => {
+                        setDiffViewerStory({ id: conflict.storyId, title: conflict.storyTitle, branchName: conflict.branchName });
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      View Diff
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Force merge "${conflict.branchName}"? This will accept all changes from the story branch, overwriting any conflicts.`)) return;
+                        try {
+                          await invoke("force_merge_story_branch", {
+                            projectPath: project?.path,
+                            branchName: conflict.branchName,
+                          });
+                          useBuildStore.getState().removeConflictedBranch(projectId, conflict.branchName);
+                          loadBranches();
+                        } catch (e) {
+                          console.error("Failed to force merge:", e);
+                          alert(`Failed to force merge: ${e}`);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-warning/10 text-warning hover:bg-warning/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Force Merge
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Delete branch "${conflict.branchName}"? This will discard all changes from this story.`)) return;
+                        try {
+                          await invoke("delete_story_branch", {
+                            projectPath: project?.path,
+                            branchName: conflict.branchName,
+                            force: true,
+                          });
+                          useBuildStore.getState().removeConflictedBranch(projectId, conflict.branchName);
+                          loadBranches();
+                        } catch (e) {
+                          console.error("Failed to delete branch:", e);
+                          alert(`Failed to delete branch: ${e}`);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Discard
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Checkout branch "${conflict.branchName}"? This will abort any pending merge and reset uncommitted changes.`)) return;
+                        try {
+                          await invoke("checkout_story_branch", {
+                            projectPath: project?.path,
+                            branchName: conflict.branchName,
+                          });
+                          await loadBranches();
+                          handleOpenProjectFolder();
+                        } catch (e) {
+                          console.error("Failed to checkout:", e);
+                          alert(`Failed to checkout: ${e}`);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                      </svg>
+                      Checkout
+                    </button>
                   </div>
                 </div>
               ))}
@@ -704,6 +791,17 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         </span>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                        {branch.status !== "merged" && (
+                          <button
+                            onClick={() => setDiffViewerStory({ id: branch.storyId, title: branch.branchName, branchName: branch.branchName })}
+                            className="p-1 rounded hover:bg-accent/20 text-muted hover:text-accent transition-colors"
+                            title="View diff"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                        )}
                         {!branch.isCurrent && (
                           <button
                             onClick={() => handleCheckoutBranch(branch.branchName)}
@@ -717,6 +815,15 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         )}
                         {branch.status !== "merged" && !branch.isCurrent && (
                           <>
+                            <button
+                              onClick={() => setConflictResolverBranch({ branchName: branch.branchName, title: branch.storyId })}
+                              className="p-1 rounded hover:bg-success/20 text-muted hover:text-success transition-colors"
+                              title="Resolve conflicts and merge"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
                             {confirmForceMerge === branch.branchName ? (
                               <div className="flex items-center gap-1">
                                 <button
@@ -748,15 +855,21 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                         {!branch.isCurrent && (
                           <>
                             {confirmDelete === branch.branchName ? (
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                 <button
-                                  onClick={() => handleDeleteBranch(branch.branchName, true)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteBranch(branch.branchName, true);
+                                  }}
                                   className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-medium"
                                 >
                                   Delete
                                 </button>
                                 <button
-                                  onClick={() => setConfirmDelete(null)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDelete(null);
+                                  }}
                                   className="text-[10px] px-1.5 py-0.5 rounded bg-muted/20 text-muted"
                                 >
                                   Cancel
@@ -764,7 +877,10 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                               </div>
                             ) : (
                               <button
-                                onClick={() => setConfirmDelete(branch.branchName)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDelete(branch.branchName);
+                                }}
                                 className="p-1 rounded hover:bg-destructive/20 text-muted hover:text-destructive transition-colors"
                                 title="Delete branch"
                               >
@@ -797,17 +913,12 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
           ) : (
             <div className="font-mono text-xs space-y-1">
               {logs.map((log, i) => (
-                <div
+                <StreamLogEntry
                   key={i}
-                  className={`break-words ${
-                    log.type === "stderr" ? "text-destructive" :
-                    log.type === "system" ? "text-accent" :
-                    "text-secondary"
-                  }`}
-                >
-                  <span className="text-muted mr-2">[{log.timestamp.toISOString().slice(11, 19)}]</span>
-                  {log.content}
-                </div>
+                  content={log.content}
+                  timestamp={log.timestamp}
+                  type={log.type}
+                />
               ))}
             </div>
           )}
@@ -888,6 +999,22 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
           projectPath={project.path}
           storyId={diffViewerStory.id}
           storyTitle={diffViewerStory.title}
+          branchName={diffViewerStory.branchName}
+        />
+      )}
+
+      {/* Conflict Resolver Modal */}
+      {project?.path && conflictResolverBranch && (
+        <ConflictResolver
+          isOpen={!!conflictResolverBranch}
+          onClose={() => setConflictResolverBranch(null)}
+          onResolved={() => {
+            loadBranches();
+            useBuildStore.getState().removeConflictedBranch(projectId, conflictResolverBranch.branchName);
+          }}
+          projectPath={project.path}
+          branchName={conflictResolverBranch.branchName}
+          storyTitle={conflictResolverBranch.title}
         />
       )}
     </div>

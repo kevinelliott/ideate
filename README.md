@@ -26,10 +26,66 @@ Ideate is a desktop application for managing AI coding agent workflows. Start wi
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20.19+ or 22.12+ (required by Vite 7)
 - [pnpm](https://pnpm.io/) 9+
 - [Rust](https://www.rust-lang.org/) 1.70+
+- [Bun](https://bun.sh/) (required to build OutRay sidecar binary)
 - Tauri CLI: `cargo install tauri-cli`
+
+### Platform-Specific Setup
+
+#### Windows WSL (Ubuntu)
+
+1. **Install Node.js via nvm** (recommended for version management):
+   ```bash
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+   source ~/.bashrc
+   nvm install 22
+   nvm use 22
+   ```
+
+2. **Install pnpm**:
+   ```bash
+   npm install -g pnpm
+   ```
+
+3. **Install Rust**:
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source ~/.cargo/env
+   ```
+
+4. **Install GTK/WebKit development libraries** (required for Tauri):
+   ```bash
+   sudo apt update && sudo apt install -y \
+     libgtk-3-dev \
+     libwebkit2gtk-4.1-dev \
+     libayatana-appindicator3-dev \
+     librsvg2-dev
+   ```
+
+5. **Install Bun** (required to build OutRay sidecar):
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   source ~/.bashrc
+   ```
+
+#### macOS
+
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+```
+
+#### Linux (Debian/Ubuntu)
+
+```bash
+sudo apt update && sudo apt install -y \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
+```
 
 ### Installation
 

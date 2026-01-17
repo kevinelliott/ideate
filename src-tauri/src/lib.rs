@@ -193,6 +193,10 @@ pub fn run() {
             worktree::rollback_story_changes,
             worktree::discard_story_snapshot,
             worktree::get_story_diff,
+            // Conflict resolution
+            worktree::analyze_merge_conflicts,
+            worktree::merge_with_resolutions,
+            worktree::abort_merge,
             // Utils
             utils::write_binary_file,
             utils::list_project_files,

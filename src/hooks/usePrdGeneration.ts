@@ -152,6 +152,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId: activeProjectId,
+          projectName,
           type: "prd",
           label: "PRD Generation",
         });
@@ -330,6 +331,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "Codebase Analysis",
         });
@@ -518,6 +520,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "Story Generation",
         });
@@ -690,6 +693,7 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "Story Breakdown",
         });
@@ -725,6 +729,29 @@ export function usePrdGeneration() {
           );
           setStatus("error");
           return false;
+        }
+
+        // Check for agent-side errors that still return exit code 0
+        const agentErrorPatterns = [
+          "stream ended without producing any output",
+          "amp error: stream ended",
+          "claude error: stream ended",
+          "connection refused",
+          "authentication failed",
+          "rate limit exceeded",
+          "api key invalid",
+        ];
+        const hasAgentError = agentErrorPatterns.some((pattern) =>
+          recentLogs.toLowerCase().includes(pattern.toLowerCase())
+        );
+
+        if (hasAgentError) {
+          appendLog(
+            projectId,
+            "system",
+            "Agent encountered an error during story breakdown. Stories may not have been refined.",
+          );
+          // Continue anyway - the original PRD is still valid
         }
 
         appendLog(
@@ -764,6 +791,12 @@ export function usePrdGeneration() {
                 projectId,
                 "system",
                 `Story breakdown complete: ${initialCount} → ${stories.length} stories (+${delta} from breakdown)`,
+              );
+            } else if (hasAgentError) {
+              appendLog(
+                projectId,
+                "system",
+                `Story breakdown incomplete: ${stories.length} stories unchanged due to agent error. You can manually re-run breakdown from Settings.`,
               );
             } else {
               appendLog(
@@ -882,7 +915,6 @@ export function usePrdGeneration() {
           `Agent started (process ID: ${spawnResult.processId})`,
         );
 
-        console.log('[generatePrdFromIdea] About to call registerProcess for:', spawnResult.processId);
         registerProcess({
           processId: spawnResult.processId,
           agentId: plugin.id,
@@ -892,10 +924,10 @@ export function usePrdGeneration() {
             workingDirectory: projectPath,
           },
           projectId,
+          projectName,
           type: "prd",
           label: "PRD from Idea",
         });
-        console.log('[generatePrdFromIdea] registerProcess called');
 
         const waitResult = await invoke<WaitAgentResult>("wait_agent", {
           processId: spawnResult.processId,

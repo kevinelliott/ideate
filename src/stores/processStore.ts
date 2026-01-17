@@ -20,6 +20,7 @@ export interface ProcessCommand {
 export interface RunningProcess {
   processId: string
   projectId: string
+  projectName?: string
   type: ProcessType
   label: string
   startedAt: Date
@@ -156,16 +157,15 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
       },
     }))
     
-    // Emit event for other windows (e.g., Process Viewer)
+    // Emit event globally (received by all windows including Process Viewer)
     console.log('[processStore] emitting process-registered event for:', process.processId)
-    emit('process-registered', {
+    const payload = {
       process: {
         ...newProcess,
         startedAt: startedAt.toISOString(),
       },
-    }).then(() => {
-      console.log('[processStore] process-registered event emitted successfully')
-    }).catch((err) => {
+    }
+    emit('process-registered', payload).catch((err) => {
       console.error('[processStore] Failed to emit process-registered:', err)
     })
   },
@@ -247,7 +247,7 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
       return { processes: rest, selectedProcessId: newSelectedProcessId }
     })
     
-    // Emit event for other windows (e.g., Process Viewer)
+    // Emit event globally
     emit('process-unregistered', { processId, exitCode, success }).catch(() => {})
   },
 
@@ -380,6 +380,7 @@ listen('request-process-list', () => {
   for (const [processId, entries] of Object.entries(state.processLogs)) {
     logs[processId] = entries.map(e => ({ type: e.type, content: e.content }))
   }
+  // Send globally (Process Viewer will receive this)
   emit('process-list-sync', { processes, logs }).catch((err) => {
     console.error('[processStore] Failed to emit process-list-sync:', err)
   })

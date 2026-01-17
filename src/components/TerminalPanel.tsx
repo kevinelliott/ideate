@@ -116,13 +116,19 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
   // Set up global event listeners for terminal output/exit
   useEffect(() => {
     let mounted = true;
+    let unlistenOutput: UnlistenFn | null = null;
+    let unlistenExit: UnlistenFn | null = null;
 
     const setupListeners = async () => {
-      // Clean up old listeners
+      // Clean up any existing listeners from refs first
       unlistenOutputRef.current?.();
       unlistenExitRef.current?.();
+      unlistenOutputRef.current = null;
+      unlistenExitRef.current = null;
 
-      unlistenOutputRef.current = await listen<TerminalOutputPayload>(
+      if (!mounted) return;
+
+      unlistenOutput = await listen<TerminalOutputPayload>(
         "terminal-output",
         (event) => {
           const { terminalId, data } = event.payload;
@@ -132,8 +138,13 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           }
         }
       );
+      if (!mounted) {
+        unlistenOutput();
+        return;
+      }
+      unlistenOutputRef.current = unlistenOutput;
 
-      unlistenExitRef.current = await listen<TerminalExitPayload>(
+      unlistenExit = await listen<TerminalExitPayload>(
         "terminal-exit",
         (event) => {
           const { terminalId, exitCode } = event.payload;
@@ -146,16 +157,24 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
           }
         }
       );
+      if (!mounted) {
+        unlistenExit();
+        return;
+      }
+      unlistenExitRef.current = unlistenExit;
     };
 
-    if (mounted) {
-      setupListeners();
-    }
+    setupListeners();
 
     return () => {
       mounted = false;
+      // Clean up both local and ref listeners
+      unlistenOutput?.();
+      unlistenExit?.();
       unlistenOutputRef.current?.();
       unlistenExitRef.current?.();
+      unlistenOutputRef.current = null;
+      unlistenExitRef.current = null;
     };
   }, [markTerminalExited]);
 
@@ -278,7 +297,9 @@ export function TerminalPanel({ projectId, projectPath }: TerminalPanelProps) {
       // Don't kill the terminal - keep it running for when we return
       currentTerminalIdRef.current = null;
     };
-  }, [isCollapsed, projectId, projectPath, resolvedTheme, getTerminalId, registerTerminal]);
+  // Note: resolvedTheme changes are handled separately in the theme update effect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCollapsed, projectId, projectPath, getTerminalId, registerTerminal]);
 
   // When project changes while expanded, switch to that project's terminal
   useEffect(() => {

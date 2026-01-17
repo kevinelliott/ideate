@@ -90,6 +90,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
   const defaultAgentId = useAgentStore((state) => state.defaultAgentId)
   const showBuildStatus = useProjectStore((state) => state.showBuildStatus)
+  const projects = useProjectStore((state) => state.projects)
 
   const storyIndexRef = useRef(0)
   const activeProcessesRef = useRef<Map<string, string>>(new Map())
@@ -193,9 +194,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       setCurrentProcessId(projectId, result.processId)
       appendLog(projectId, 'system', `Agent process started (ID: ${result.processId})`)
 
+      const project = projects.find((p) => p.id === projectId)
       registerProcess({
         processId: result.processId,
         projectId,
+        projectName: project?.name,
         type: 'build',
         label: story.title,
         agentId,
@@ -305,9 +308,11 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       activeProcessesRef.current.set(story.id, result.processId)
       appendLog(projectId, 'system', `[Parallel] Agent started for ${story.id} (PID: ${result.processId})`)
 
+      const project = projects.find((p) => p.id === projectId)
       registerProcess({
         processId: result.processId,
         projectId,
+        projectName: project?.name,
         type: 'build',
         label: `[P] ${story.title}`,
         agentId,

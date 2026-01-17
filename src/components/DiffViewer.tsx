@@ -24,6 +24,7 @@ interface DiffViewerProps {
   projectPath: string;
   storyId: string;
   storyTitle: string;
+  branchName?: string;
 }
 
 function getStatusColor(status: string) {
@@ -81,7 +82,7 @@ function DiffLine({ line, lineNumber }: { line: string; lineNumber: number }) {
 
 
 
-export function DiffViewer({ isOpen, onClose, projectPath, storyId, storyTitle }: DiffViewerProps) {
+export function DiffViewer({ isOpen, onClose, projectPath, storyId, storyTitle, branchName }: DiffViewerProps) {
   const [diffResult, setDiffResult] = useState<StoryDiffResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +100,7 @@ export function DiffViewer({ isOpen, onClose, projectPath, storyId, storyTitle }
       const result = await invoke<StoryDiffResult>("get_story_diff", {
         projectPath,
         storyId,
+        branchName: branchName || null,
       });
       setDiffResult(result);
       if (result.files.length > 0) {
@@ -109,7 +111,7 @@ export function DiffViewer({ isOpen, onClose, projectPath, storyId, storyTitle }
     } finally {
       setLoading(false);
     }
-  }, [projectPath, storyId]);
+  }, [projectPath, storyId, branchName]);
 
   useEffect(() => {
     if (isOpen) {

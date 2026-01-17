@@ -90,10 +90,13 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const loadedProjectId = usePrdStore((state) => state.loadedProjectId)
   const stories = usePrdStore((state) => state.stories)
 
-  void useProcessStore((state) => state.processes) // Subscribe to process changes
-  const getProcessesByProject = useProcessStore((state) => state.getProcessesByProject)
+  const processes = useProcessStore((state) => state.processes) // Subscribe to process changes
   const selectProcess = useProcessStore((state) => state.selectProcess)
   const selectedProcessId = useProcessStore((state) => state.selectedProcessId)
+  
+  // Derive processes by project from the subscribed state
+  const getProcessesByProject = (projectId: string) => 
+    Object.values(processes).filter((p) => p.projectId === projectId)
 
   const ideas = useIdeasStore((state) => state.ideas)
   const selectedIdeaId = useIdeasStore((state) => state.selectedIdeaId)
@@ -156,6 +159,20 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
       return next
     })
   }
+  
+  // Auto-expand projects when they have running processes
+  useEffect(() => {
+    const projectsWithProcesses = new Set(
+      Object.values(processes).map((p) => p.projectId)
+    )
+    if (projectsWithProcesses.size > 0) {
+      setExpandedProjects((prev) => {
+        const next = new Set(prev)
+        projectsWithProcesses.forEach((projectId) => next.add(projectId))
+        return next
+      })
+    }
+  }, [processes])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()

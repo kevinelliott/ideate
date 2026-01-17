@@ -24,6 +24,7 @@ interface ProcessRegisteredPayload {
   process: {
     processId: string;
     projectId: string;
+    projectName?: string;
     type: string;
     label: string;
     startedAt: string;
@@ -47,6 +48,7 @@ interface ProcessListSyncPayload {
   processes: Array<{
     processId: string;
     projectId: string;
+    projectName?: string;
     type: string;
     label: string;
     startedAt: string;
@@ -70,6 +72,14 @@ function formatDuration(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return `${hours}h ${remainingMinutes}m`;
+}
+
+function formatProcessType(type: string): string {
+  switch (type) {
+    case "prd": return "PRD";
+    case "dev-server": return "Dev Server";
+    default: return type.charAt(0).toUpperCase() + type.slice(1);
+  }
 }
 
 function ProcessTypeIcon({ type }: { type: string }) {
@@ -140,7 +150,13 @@ function ProcessRow({ process, isSelected, onSelect }: ProcessRowProps) {
           {process.label}
         </div>
         <div className="text-xs text-muted flex items-center gap-2">
-          <span className="capitalize">{process.type}</span>
+          {process.projectName && (
+            <>
+              <span className="truncate max-w-[100px]" title={process.projectName}>{process.projectName}</span>
+              <span>•</span>
+            </>
+          )}
+          <span>{formatProcessType(process.type)}</span>
           <span>•</span>
           <span>{formatDuration(elapsed)}</span>
         </div>
@@ -227,7 +243,7 @@ function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
         <div>
           <h2 className="text-lg font-semibold text-foreground">{process.label}</h2>
           <div className="text-sm text-muted flex items-center gap-2">
-            <span className="capitalize">{process.type}</span>
+            <span>{formatProcessType(process.type)}</span>
             {process.agentId && (
               <>
                 <span>•</span>
@@ -281,7 +297,7 @@ export function ProcessViewerWindow() {
       setLocalLogs(logs);
     });
 
-    // Request the current process list
+    // Request the current process list (emitted globally, main window will respond)
     console.log('[ProcessViewer] emitting request-process-list');
     emit("request-process-list", {}).catch((err) => {
       console.error('[ProcessViewer] Failed to emit request-process-list:', err);
