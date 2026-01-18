@@ -134,14 +134,26 @@ export function WelcomeGuideModal({ isOpen, onClose }: WelcomeGuideModalProps) {
     if (dontShowAgain) {
       try {
         const prefs = await invoke<Preferences | null>("load_preferences");
-        if (prefs) {
-          await invoke("save_preferences", {
-            preferences: {
-              ...prefs,
-              hasSeenWelcomeGuide: true,
-            },
-          });
-        }
+        const defaultPrefs: Preferences = {
+          defaultAgent: null,
+          defaultAutonomy: "suggest",
+          defaultBuildMode: "sequential",
+          logBufferSize: 1000,
+          maxParallelAgents: 3,
+          agentPaths: [],
+          theme: "dark",
+          appIcon: "default",
+          promptOverrides: {},
+          hasSeenWelcomeGuide: true,
+          hasAcceptedDisclaimer: false,
+        };
+        await invoke("save_preferences", {
+          preferences: {
+            ...defaultPrefs,
+            ...prefs,
+            hasSeenWelcomeGuide: true,
+          },
+        });
       } catch (error) {
         console.error("Failed to save preference:", error);
       }
