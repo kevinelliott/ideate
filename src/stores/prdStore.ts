@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, emit } from '@tauri-apps/api/event'
 
+// Debug: log when prdStore module is loaded
+console.log('[prdStore] Module loaded in window:', window.location.pathname)
+
 export interface Story {
   id: string
   title: string
@@ -256,7 +259,18 @@ export const usePrdStore = create<PrdState>((set, get) => ({
 }))
 
 // Listen for story list sync requests from Story Manager window
+// Only handle in main window (path is "/" or empty, not /story-manager or /process-viewer)
 listen<{ projectId?: string }>('request-story-list', async (event) => {
+  const currentPath = window.location.pathname;
+  const isMainWindow = currentPath === '/' || currentPath === '' || currentPath === '/index.html';
+  console.log('[prdStore] request-story-list received:', event.payload, 'window:', currentPath, 'isMainWindow:', isMainWindow)
+  
+  // Only the main window should respond to this request
+  if (!isMainWindow) {
+    console.log('[prdStore] Ignoring request in non-main window:', currentPath)
+    return
+  }
+  
   const { useProjectStore } = await import('./projectStore')
   const { useBuildStore } = await import('./buildStore')
   const { invoke } = await import('@tauri-apps/api/core')
@@ -266,7 +280,10 @@ listen<{ projectId?: string }>('request-story-list', async (event) => {
   const activeProjectId = useProjectStore.getState().activeProjectId
   const targetProjectId = requestedProjectId ?? activeProjectId
   
+  console.log('[prdStore] targetProjectId:', targetProjectId, 'requestedProjectId:', requestedProjectId, 'activeProjectId:', activeProjectId)
+  
   if (!targetProjectId) {
+    console.log('[prdStore] No targetProjectId, emitting empty story-list-sync')
     await emit('story-list-sync', {
       stories: [],
       projectId: '',
@@ -275,8 +292,11 @@ listen<{ projectId?: string }>('request-story-list', async (event) => {
     return
   }
   
-  const project = useProjectStore.getState().projects.find(p => p.id === targetProjectId)
+  const projects = useProjectStore.getState().projects
+  const project = projects.find(p => p.id === targetProjectId)
   let projectPrd = usePrdStore.getState().projectPrds[targetProjectId]
+  
+  console.log('[prdStore] projects count:', projects.length, 'found project:', project?.name, 'projectPrd exists:', !!projectPrd)
   
   // If PRD not loaded in memory, load from disk
   if (!projectPrd && project?.path) {
@@ -321,6 +341,8 @@ listen<{ projectId?: string }>('request-story-list', async (event) => {
   const storyStatuses = useBuildStore.getState().getProjectState(targetProjectId).storyStatuses
   const stories = projectPrd?.stories ?? []
   
+  console.log('[prdStore] stories count:', stories.length, 'emitting story-list-sync')
+  
   const storiesWithStatus = stories.map(s => ({
     id: s.id,
     title: s.title,
@@ -333,17 +355,27 @@ listen<{ projectId?: string }>('request-story-list', async (event) => {
     projectId: targetProjectId,
     projectName: project?.name || '',
   })
+  
+  console.log('[prdStore] story-list-sync emitted with', storiesWithStatus.length, 'stories for project:', project?.name)
 }).catch((err) => {
   console.error('[prdStore] Failed to set up request-story-list listener:', err)
 })
 
 // Listen for bulk status changes from Story Manager
+// Only handle in main window
 listen<{
   projectId: string
   storyIds: string[]
   status: string
   passes: boolean
 }>('bulk-story-status-change', async (event) => {
+  // Only the main window should handle this
+  const currentPath = window.location.pathname;
+  const isMainWindow = currentPath === '/' || currentPath === '' || currentPath === '/index.html';
+  if (!isMainWindow) {
+    return
+  }
+  
   const { projectId, storyIds, status, passes } = event.payload
   const { useProjectStore } = await import('./projectStore')
   const { useBuildStore } = await import('./buildStore')
@@ -364,10 +396,18 @@ listen<{
 })
 
 // Listen for bulk delete from Story Manager
+// Only handle in main window
 listen<{
   projectId: string
   storyIds: string[]
 }>('bulk-story-delete', async (event) => {
+  // Only the main window should handle this
+  const currentPath = window.location.pathname;
+  const isMainWindow = currentPath === '/' || currentPath === '' || currentPath === '/index.html';
+  if (!isMainWindow) {
+    return
+  }
+  
   const { projectId, storyIds } = event.payload
   const { useProjectStore } = await import('./projectStore')
   

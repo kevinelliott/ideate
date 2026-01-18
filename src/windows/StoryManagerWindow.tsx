@@ -127,10 +127,21 @@ export function StoryManagerWindow() {
 
   // Request current story list from main window on mount
   useEffect(() => {
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+    let receivedResponse = false;
+    
+    console.log('[StoryManager] Setting up listeners, projectId from URL:', projectId);
+    
     const unlistenSyncPromise = listen<StoryListSyncPayload>("story-list-sync", (event) => {
+      console.log('[StoryManager] story-list-sync received:', event.payload);
       const { stories: syncedStories, projectId: pid, projectName: pname } = event.payload;
       // Only accept sync for our project
-      if (projectId && pid !== projectId) return;
+      if (projectId && pid !== projectId) {
+        console.log('[StoryManager] Ignoring sync for different project:', pid, 'vs', projectId);
+        return;
+      }
+      receivedResponse = true;
+      console.log('[StoryManager] Accepting sync, stories:', syncedStories.length, 'projectName:', pname);
       setStories(syncedStories);
       if (!projectId) setProjectId(pid);
       setProjectName(pname);
@@ -138,13 +149,28 @@ export function StoryManagerWindow() {
       setSelectedIds(new Set());
     });
 
-    // Request story list for specific project
-    emit("request-story-list", { projectId }).catch((err) => {
-      console.error("[StoryManager] Failed to emit request-story-list:", err);
-    });
+    // Request story list for specific project with retry
+    const requestStoryList = () => {
+      console.log('[StoryManager] Emitting request-story-list for projectId:', projectId);
+      emit("request-story-list", { projectId }).catch((err) => {
+        console.error("[StoryManager] Failed to emit request-story-list:", err);
+      });
+    };
+    
+    // Initial request
+    requestStoryList();
+    
+    // Retry after a short delay if no response (main window may still be loading)
+    retryTimeout = setTimeout(() => {
+      if (!receivedResponse) {
+        console.log('[StoryManager] No response received, retrying request-story-list');
+        requestStoryList();
+      }
+    }, 500);
 
     return () => {
       unlistenSyncPromise.then((unlisten) => unlisten());
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, [projectId]);
 
