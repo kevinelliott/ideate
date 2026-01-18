@@ -28,6 +28,7 @@ interface ProjectState {
   loadProjects: () => Promise<void>
   saveProjects: () => Promise<void>
   setProjects: (projects: Project[]) => void
+  reorderProjects: (fromIndex: number, toIndex: number) => void
   showProcessHistory: (projectId: string) => void
   hideProcessHistory: () => void
   showBuildStatus: (projectId: string) => void
@@ -100,6 +101,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setProjects: (projects) => {
     set({ projects, isLoaded: true })
+  },
+
+  reorderProjects: (fromIndex, toIndex) => {
+    const { projects } = get()
+    if (fromIndex < 0 || fromIndex >= projects.length || toIndex < 0 || toIndex >= projects.length) {
+      return
+    }
+    const newProjects = [...projects]
+    const [removed] = newProjects.splice(fromIndex, 1)
+    newProjects.splice(toIndex, 0, removed)
+    set({ projects: newProjects })
+    get().saveProjects()
   },
 
   loadProjects: async () => {

@@ -19,6 +19,7 @@ interface IdeasState {
   addIdea: (idea: Omit<Idea, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Idea>
   updateIdea: (id: string, updates: Partial<Omit<Idea, 'id' | 'createdAt'>>) => Promise<void>
   removeIdea: (id: string) => Promise<void>
+  reorderIdeas: (fromIndex: number, toIndex: number) => Promise<void>
   selectIdea: (id: string | null) => void
   getSelectedIdea: () => Idea | null
 }
@@ -85,6 +86,23 @@ export const useIdeasStore = create<IdeasState>((set, get) => ({
       ideas: newIdeas,
       selectedIdeaId: selectedIdeaId === id ? null : selectedIdeaId,
     })
+    
+    try {
+      await invoke('save_ideas', { ideas: newIdeas })
+    } catch (error) {
+      console.error('Failed to save ideas:', error)
+    }
+  },
+
+  reorderIdeas: async (fromIndex, toIndex) => {
+    const { ideas } = get()
+    if (fromIndex < 0 || fromIndex >= ideas.length || toIndex < 0 || toIndex >= ideas.length) {
+      return
+    }
+    const newIdeas = [...ideas]
+    const [removed] = newIdeas.splice(fromIndex, 1)
+    newIdeas.splice(toIndex, 0, removed)
+    set({ ideas: newIdeas })
     
     try {
       await invoke('save_ideas', { ideas: newIdeas })

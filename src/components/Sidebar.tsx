@@ -102,6 +102,9 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const selectedIdeaId = useIdeasStore((state) => state.selectedIdeaId)
   const selectIdea = useIdeasStore((state) => state.selectIdea)
   const addIdea = useIdeasStore((state) => state.addIdea)
+  const reorderIdeas = useIdeasStore((state) => state.reorderIdeas)
+
+  const reorderProjects = useProjectStore((state) => state.reorderProjects)
 
   const showProcessHistory = useProjectStore((state) => state.showProcessHistory)
   const processHistoryProjectId = useProjectStore((state) => state.processHistoryProjectId)
@@ -147,6 +150,11 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     projectId: '',
     projectName: '',
   })
+
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null)
+  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null)
+  const [draggedIdeaId, setDraggedIdeaId] = useState<string | null>(null)
+  const [dragOverIdeaId, setDragOverIdeaId] = useState<string | null>(null)
 
   const toggleProjectExpanded = (projectId: string) => {
     setExpandedProjects((prev) => {
@@ -502,6 +510,88 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     return 'System'
   }
 
+  const handleProjectDragStart = (e: React.DragEvent, projectId: string) => {
+    setDraggedProjectId(projectId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', projectId)
+  }
+
+  const handleProjectDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleProjectDragEnter = (e: React.DragEvent, projectId: string) => {
+    e.preventDefault()
+    if (draggedProjectId && draggedProjectId !== projectId) {
+      setDragOverProjectId(projectId)
+    }
+  }
+
+  const handleProjectDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOverProjectId(null)
+  }
+
+  const handleProjectDrop = (e: React.DragEvent, targetProjectId: string) => {
+    e.preventDefault()
+    if (draggedProjectId && draggedProjectId !== targetProjectId) {
+      const fromIndex = projects.findIndex((p) => p.id === draggedProjectId)
+      const toIndex = projects.findIndex((p) => p.id === targetProjectId)
+      if (fromIndex !== -1 && toIndex !== -1) {
+        reorderProjects(fromIndex, toIndex)
+      }
+    }
+    setDraggedProjectId(null)
+    setDragOverProjectId(null)
+  }
+
+  const handleProjectDragEnd = () => {
+    setDraggedProjectId(null)
+    setDragOverProjectId(null)
+  }
+
+  const handleIdeaDragStart = (e: React.DragEvent, ideaId: string) => {
+    setDraggedIdeaId(ideaId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', ideaId)
+  }
+
+  const handleIdeaDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleIdeaDragEnter = (e: React.DragEvent, ideaId: string) => {
+    e.preventDefault()
+    if (draggedIdeaId && draggedIdeaId !== ideaId) {
+      setDragOverIdeaId(ideaId)
+    }
+  }
+
+  const handleIdeaDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOverIdeaId(null)
+  }
+
+  const handleIdeaDrop = (e: React.DragEvent, targetIdeaId: string) => {
+    e.preventDefault()
+    if (draggedIdeaId && draggedIdeaId !== targetIdeaId) {
+      const fromIndex = ideas.findIndex((i) => i.id === draggedIdeaId)
+      const toIndex = ideas.findIndex((i) => i.id === targetIdeaId)
+      if (fromIndex !== -1 && toIndex !== -1) {
+        reorderIdeas(fromIndex, toIndex)
+      }
+    }
+    setDraggedIdeaId(null)
+    setDragOverIdeaId(null)
+  }
+
+  const handleIdeaDragEnd = () => {
+    setDraggedIdeaId(null)
+    setDragOverIdeaId(null)
+  }
+
   return (
     <>
       <aside
@@ -596,8 +686,21 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                   )
                 }
 
+                const isDragging = project.id === draggedProjectId
+                const isDragOver = project.id === dragOverProjectId
+
                 return (
-                  <li key={project.id}>
+                  <li
+                    key={project.id}
+                    draggable
+                    onDragStart={(e) => handleProjectDragStart(e, project.id)}
+                    onDragOver={handleProjectDragOver}
+                    onDragEnter={(e) => handleProjectDragEnter(e, project.id)}
+                    onDragLeave={handleProjectDragLeave}
+                    onDrop={(e) => handleProjectDrop(e, project.id)}
+                    onDragEnd={handleProjectDragEnd}
+                    className={`${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'ring-2 ring-accent rounded-md' : ''}`}
+                  >
                     {/* Project row */}
                     <div className="group">
                       <div
@@ -607,7 +710,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                           isActive
                             ? 'bg-card text-foreground'
                             : 'hover:bg-card/50 text-secondary hover:text-foreground'
-                        }`}
+                        } ${isDragging ? 'border-dashed border border-border' : ''}`}
                       >
                         {/* Expand/collapse chevron */}
                         <svg
@@ -804,8 +907,20 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
               <ul className="space-y-0.5">
                 {ideas.map((idea) => {
                   const isSelected = idea.id === selectedIdeaId
+                  const isDragging = idea.id === draggedIdeaId
+                  const isDragOver = idea.id === dragOverIdeaId
                   return (
-                    <li key={idea.id}>
+                    <li
+                      key={idea.id}
+                      draggable
+                      onDragStart={(e) => handleIdeaDragStart(e, idea.id)}
+                      onDragOver={handleIdeaDragOver}
+                      onDragEnter={(e) => handleIdeaDragEnter(e, idea.id)}
+                      onDragLeave={handleIdeaDragLeave}
+                      onDrop={(e) => handleIdeaDrop(e, idea.id)}
+                      onDragEnd={handleIdeaDragEnd}
+                      className={`${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'ring-2 ring-accent rounded-md' : ''}`}
+                    >
                       <button
                         onClick={() => {
                           selectIdea(idea.id)
@@ -815,7 +930,7 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                           isSelected
                             ? 'bg-card text-foreground'
                             : 'hover:bg-card/50 text-secondary hover:text-foreground'
-                        }`}
+                        } ${isDragging ? 'border-dashed border border-border' : ''}`}
                       >
                         <svg
                           className="w-3.5 h-3.5 text-accent flex-shrink-0"
