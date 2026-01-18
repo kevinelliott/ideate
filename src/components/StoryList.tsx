@@ -158,13 +158,12 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
       return;
     }
 
-    const fromIndex = sortedStories.findIndex((s) => s.id === draggedStoryId);
-    const toIndex = sortedStories.findIndex((s) => s.id === targetStory.id);
+    // Find indices in the original stories array
+    const fromIndex = stories.findIndex((s) => s.id === draggedStoryId);
+    const toIndex = stories.findIndex((s) => s.id === targetStory.id);
 
-    if (fromIndex !== -1 && toIndex !== -1) {
-      const actualFromIndex = stories.findIndex((s) => s.id === draggedStoryId);
-      const actualToIndex = stories.findIndex((s) => s.id === targetStory.id);
-      reorderStories(projectId, actualFromIndex, actualToIndex);
+    if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+      reorderStories(projectId, fromIndex, toIndex);
       await savePrd(projectId, projectPath);
     }
 
