@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { open } from '@tauri-apps/plugin-shell'
 import { invoke } from '@tauri-apps/api/core'
 
 interface ProjectContextMenuProps {
@@ -50,7 +49,7 @@ export function ProjectContextMenu({
 
   const handleRevealInFinder = async () => {
     try {
-      await open(projectPath)
+      await invoke('reveal_in_file_manager', { path: projectPath })
       onClose()
     } catch (error) {
       console.error('Failed to reveal in Finder:', error)

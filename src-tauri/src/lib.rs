@@ -202,7 +202,8 @@ pub fn run() {
             // Utils
             utils::write_binary_file,
             utils::list_project_files,
-            utils::read_project_file
+            utils::read_project_file,
+            utils::reveal_in_file_manager
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

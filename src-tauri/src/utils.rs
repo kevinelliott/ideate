@@ -53,6 +53,48 @@ pub fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
     fs::write(&path, &data).map_err(|e| format!("Failed to write file: {}", e))
 }
 
+/// Reveal a file or folder in the system file manager.
+/// On macOS, this uses `open -R` to reveal and select the item in Finder.
+/// On other platforms, this opens the containing folder.
+#[tauri::command(rename_all = "camelCase")]
+pub fn reveal_in_file_manager(path: String) -> Result<(), String> {
+    let path = PathBuf::from(&path);
+    
+    if !path.exists() {
+        return Err(format!("Path does not exist: {}", path.display()));
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in Explorer: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        // Try xdg-open on the parent directory
+        let parent = path.parent().unwrap_or(&path);
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 /// Represents a file or directory entry in the file tree.
 #[derive(serde::Serialize)]
 pub struct FileEntry {
