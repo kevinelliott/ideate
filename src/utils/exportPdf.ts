@@ -1,8 +1,16 @@
 import { jsPDF } from "jspdf";
 import type { Idea } from "../stores/ideasStore";
+import type { Story, PrdMetadata } from "../stores/prdStore";
 
 interface PdfExportOptions {
   idea: Idea;
+  logoDataUrl?: string;
+}
+
+interface PrdPdfExportOptions {
+  stories: Story[];
+  metadata: PrdMetadata;
+  projectName: string;
   logoDataUrl?: string;
 }
 
@@ -390,6 +398,223 @@ export function exportIdeaToPdf({ idea, logoDataUrl }: PdfExportOptions): Blob {
       day: "numeric",
     });
     doc.text(`Created: ${createdDate}`, margin, footerY);
+    
+    if (totalPages > 1) {
+      doc.text(`Page ${page} of ${totalPages}`, pageWidth / 2, footerY, { align: "center" });
+    }
+    
+    doc.text("Ideate", pageWidth - margin, footerY, { align: "right" });
+  }
+
+  return doc.output("blob");
+}
+
+/**
+ * Export a PRD with user stories to PDF format.
+ * Returns a Blob that can be saved to a file.
+ */
+export function exportPrdToPdf({ stories, metadata, projectName, logoDataUrl }: PrdPdfExportOptions): Blob {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const contentWidth = pageWidth - margin * 2;
+  let y = margin;
+
+  const colors = {
+    primary: [34, 34, 34] as [number, number, number],
+    secondary: [100, 100, 100] as [number, number, number],
+    accent: [34, 197, 94] as [number, number, number],
+    muted: [150, 150, 150] as [number, number, number],
+    success: [34, 197, 94] as [number, number, number],
+    pending: [150, 150, 150] as [number, number, number],
+    border: [220, 220, 220] as [number, number, number],
+  };
+
+  const checkPageBreak = (neededHeight: number) => {
+    if (y + neededHeight > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+      return true;
+    }
+    return false;
+  };
+
+  const wrapText = (text: string, maxWidth: number, fontSize: number): string[] => {
+    doc.setFontSize(fontSize);
+    return doc.splitTextToSize(text, maxWidth);
+  };
+
+  // Add logo to top right
+  if (logoDataUrl) {
+    const logoSize = 22;
+    const logoX = pageWidth - margin - logoSize;
+    const logoY = margin - 15;
+    doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoSize, logoSize);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(180, 180, 180);
+    const logoTextX = logoX + logoSize / 2;
+    doc.text("ideate.sh", logoTextX, logoY + logoSize + 1.5, { align: "center" });
+  }
+
+  // Title
+  const titleMaxWidth = logoDataUrl ? contentWidth - 25 : contentWidth;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(...colors.primary);
+  const title = metadata.project || projectName;
+  const titleLines = wrapText(title, titleMaxWidth, 24);
+  titleLines.forEach((line: string) => {
+    checkPageBreak(12);
+    doc.text(line, margin, y);
+    y += 10;
+  });
+
+  y += 2;
+
+  // Subtitle: Product Requirements Document
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(...colors.secondary);
+  doc.text("Product Requirements Document", margin, y);
+  y += 8;
+
+  // Accent line under title
+  doc.setDrawColor(...colors.accent);
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin + 40, y);
+  y += 10;
+
+  // Description if available
+  if (metadata.description) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(11);
+    doc.setTextColor(...colors.secondary);
+    const descLines = wrapText(metadata.description, contentWidth, 11);
+    descLines.forEach((line: string) => {
+      checkPageBreak(6);
+      doc.text(line, margin, y);
+      y += 5.5;
+    });
+    y += 6;
+  }
+
+  // Summary stats
+  const completedCount = stories.filter(s => s.passes).length;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(...colors.muted);
+  doc.text(`${stories.length} User Stories • ${completedCount} Complete`, margin, y);
+  y += 12;
+
+  // User Stories section header
+  checkPageBreak(20);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(...colors.primary);
+  doc.text("User Stories", margin, y);
+  y += 8;
+
+  // Stories
+  stories.forEach((story) => {
+    checkPageBreak(35);
+    
+    // Story ID and status
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...colors.accent);
+    doc.text(story.id, margin, y);
+    
+    // Status indicator
+    const statusText = story.passes ? "Complete" : "Pending";
+    const statusColor = story.passes ? colors.success : colors.pending;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...statusColor);
+    const idWidth = doc.getTextWidth(story.id);
+    doc.text(` • ${statusText}`, margin + idWidth, y);
+    
+    y += 6;
+
+    // Story title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...colors.primary);
+    const titleLines = wrapText(story.title, contentWidth, 11);
+    titleLines.forEach((line: string) => {
+      checkPageBreak(6);
+      doc.text(line, margin, y);
+      y += 5.5;
+    });
+    y += 2;
+
+    // Story description
+    if (story.description) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.secondary);
+      const descLines = wrapText(story.description, contentWidth, 10);
+      descLines.slice(0, 4).forEach((line: string) => {
+        checkPageBreak(5);
+        doc.text(line, margin, y);
+        y += 5;
+      });
+      y += 2;
+    }
+
+    // Acceptance criteria
+    if (story.acceptanceCriteria && story.acceptanceCriteria.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.muted);
+      doc.text("Acceptance Criteria:", margin, y);
+      y += 5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.secondary);
+      story.acceptanceCriteria.forEach((criterion) => {
+        checkPageBreak(5);
+        const criteriaLines = wrapText(`• ${criterion}`, contentWidth - 5, 9);
+        criteriaLines.forEach((line: string) => {
+          doc.text(line, margin + 3, y);
+          y += 4.5;
+        });
+      });
+      y += 2;
+    }
+
+    // Draw card border
+    const cardEndY = y;
+    doc.setDrawColor(...colors.border);
+    doc.setLineWidth(0.3);
+    doc.line(margin, cardEndY, margin + contentWidth, cardEndY);
+    
+    y += 6;
+  });
+
+  // Footer with date on each page
+  const totalPages = doc.getNumberOfPages();
+  for (let page = 1; page <= totalPages; page++) {
+    doc.setPage(page);
+    const footerY = pageHeight - 10;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...colors.muted);
+    
+    const today = new Date().toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    doc.text(`Generated: ${today}`, margin, footerY);
     
     if (totalPages > 1) {
       doc.text(`Page ${page} of ${totalPages}`, pageWidth / 2, footerY, { align: "center" });

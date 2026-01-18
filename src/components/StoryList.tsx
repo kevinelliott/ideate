@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { save } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { usePrdStore } from "../stores/prdStore";
 import { useBuildStore } from "../stores/buildStore";
 import type { Story } from "../stores/prdStore";
@@ -11,6 +13,8 @@ import { GenerateStoriesModal } from "./GenerateStoriesModal";
 import { RegeneratePrdModal } from "./RegeneratePrdModal";
 import { usePrdGeneration } from "../hooks/usePrdGeneration";
 import { useProjectStore } from "../stores/projectStore";
+import { exportPrdToPdf, loadLogoForPdf } from "../utils/exportPdf";
+import { notify } from "../utils/notify";
 
 interface StoryListProps {
   projectId: string;
@@ -53,6 +57,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
   const [draggedStoryId, setDraggedStoryId] = useState<string | null>(null);
   const [dragOverStoryId, setDragOverStoryId] = useState<string | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const handleStoryClick = (storyId: string) => {
     selectStory(projectId, storyId === selectedStoryId ? null : storyId);
@@ -227,6 +232,41 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
     );
   };
 
+  const handleExportPdf = async () => {
+    if (!project || isExportingPdf) return;
+    
+    setIsExportingPdf(true);
+    try {
+      const logoDataUrl = await loadLogoForPdf().catch(() => undefined);
+      const pdfBlob = exportPrdToPdf({
+        stories,
+        metadata: projectPrd?.metadata ?? {},
+        projectName: project.name,
+        logoDataUrl,
+      });
+      
+      const fileName = `${project.name.replace(/\s+/g, '-').toLowerCase()}-prd.pdf`;
+      const filePath = await save({
+        defaultPath: fileName,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      
+      if (filePath) {
+        const arrayBuffer = await pdfBlob.arrayBuffer();
+        await invoke("write_binary_file", {
+          path: filePath,
+          data: Array.from(new Uint8Array(arrayBuffer)),
+        });
+        notify.success("PDF Exported", `PRD saved to ${filePath}`);
+      }
+    } catch (error) {
+      console.error("Failed to export PDF:", error);
+      notify.error("Export Failed", "Failed to export PRD as PDF");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const getNextPriority = (): number => {
     if (stories.length === 0) return 1;
     const maxPriority = Math.max(...stories.map((s) => s.priority));
@@ -299,6 +339,39 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Add Story button */}
+          <button
+            onClick={handleOpenCreate}
+            className="p-1.5 rounded-lg border border-border text-muted hover:text-accent hover:border-accent hover:bg-accent/5 transition-all"
+            title="Add story"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+
+          {/* Export PDF button */}
+          <button
+            onClick={handleExportPdf}
+            disabled={isExportingPdf || stories.length === 0}
+            className="p-1.5 rounded-lg border border-border text-muted hover:text-foreground hover:bg-card transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Export PRD as PDF"
+          >
+            <svg
+              className={`w-4 h-4 ${isExportingPdf ? 'animate-pulse' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          </button>
+
           {/* Regenerate PRD button */}
           <button
             onClick={handleOpenRegenerateModal}
