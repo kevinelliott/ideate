@@ -18,7 +18,8 @@ export function IdeaInputView({
   onGeneratePrd,
 }: IdeaInputViewProps) {
   const [idea, setIdea] = useState(projectDescription);
-  const status = usePrdStore((state) => state.status);
+  const projectPrd = usePrdStore((state) => state.projectPrds[projectId]);
+  const status = projectPrd?.status ?? 'idle';
   const isGenerating = status === "generating";
   
   const defaultAgentId = useAgentStore((state) => state.defaultAgentId);

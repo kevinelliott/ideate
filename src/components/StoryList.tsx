@@ -21,14 +21,17 @@ type SortField = "priority" | "id" | "title";
 type SortDirection = "asc" | "desc";
 
 export function StoryList({ projectId, projectPath }: StoryListProps) {
-  const stories = usePrdStore((state) => state.stories);
+  const projectPrd = usePrdStore((state) => state.getProjectPrd(projectId));
+  const stories = projectPrd?.stories ?? [];
+  const selectedStoryId = projectPrd?.selectedStoryId ?? null;
+  const prdStatus = projectPrd?.status ?? 'idle';
+  
   const updateStory = usePrdStore((state) => state.updateStory);
   const addStory = usePrdStore((state) => state.addStory);
   const removeStory = usePrdStore((state) => state.removeStory);
   const savePrd = usePrdStore((state) => state.savePrd);
   const selectStory = usePrdStore((state) => state.selectStory);
-  const selectedStoryId = usePrdStore((state) => state.selectedStoryId);
-  const prdStatus = usePrdStore((state) => state.status);
+  const reorderStories = usePrdStore((state) => state.reorderStories);
   
   const retryStory = useBuildStore((state) => state.retryStory);
   const pauseBuild = useBuildStore((state) => state.pauseBuild);
@@ -50,11 +53,9 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
   const [draggedStoryId, setDraggedStoryId] = useState<string | null>(null);
   const [dragOverStoryId, setDragOverStoryId] = useState<string | null>(null);
-  
-  const reorderStories = usePrdStore((state) => state.reorderStories);
 
   const handleStoryClick = (storyId: string) => {
-    selectStory(storyId === selectedStoryId ? null : storyId);
+    selectStory(projectId, storyId === selectedStoryId ? null : storyId);
   };
 
   const handleEditStory = (story: Story) => {
@@ -67,7 +68,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
 
   const handleSaveEdit = async (updates: Partial<Story>) => {
     if (editingStory) {
-      updateStory(editingStory.id, updates);
+      updateStory(projectId, editingStory.id, updates);
       await savePrd(projectId, projectPath);
     }
   };
@@ -81,7 +82,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   };
 
   const handleCreateStory = async (storyData: Omit<Story, "id">) => {
-    addStory(storyData);
+    addStory(projectId, storyData);
     await savePrd(projectId, projectPath);
   };
 
@@ -91,7 +92,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
 
   const handleConfirmDelete = async () => {
     if (deletingStory) {
-      removeStory(deletingStory.id);
+      removeStory(projectId, deletingStory.id);
       await savePrd(projectId, projectPath);
       setDeletingStory(null);
     }
@@ -163,7 +164,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
     if (fromIndex !== -1 && toIndex !== -1) {
       const actualFromIndex = stories.findIndex((s) => s.id === draggedStoryId);
       const actualToIndex = stories.findIndex((s) => s.id === targetStory.id);
-      reorderStories(actualFromIndex, actualToIndex);
+      reorderStories(projectId, actualFromIndex, actualToIndex);
       await savePrd(projectId, projectPath);
     }
 

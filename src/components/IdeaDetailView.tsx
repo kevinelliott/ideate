@@ -57,10 +57,12 @@ export function IdeaDetailView({ idea }: IdeaDetailViewProps) {
 
   const addProject = useProjectStore((state) => state.addProject);
   const setActiveProject = useProjectStore((state) => state.setActiveProject);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
 
   const { generatePrdFromIdea } = usePrdGeneration();
   const initSession = useAgentStore((state) => state.initSession);
-  const prdStatus = usePrdStore((state) => state.status);
+  const projectPrd = usePrdStore((state) => activeProjectId ? state.projectPrds[activeProjectId] : null);
+  const prdStatus = projectPrd?.status ?? 'idle';
 
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(idea.title);

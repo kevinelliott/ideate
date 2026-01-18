@@ -32,7 +32,8 @@ const buildModeLabels: Record<BuildMode, string> = {
 };
 
 export function OverviewContent({ project }: OverviewContentProps) {
-  const stories = usePrdStore((state) => state.stories);
+  const projectPrd = usePrdStore((state) => state.projectPrds[project.id]);
+  const stories = projectPrd?.stories ?? [];
   // Subscribe directly to the project state for reactivity
   const projectState = useBuildStore((state) => state.projectStates[project.id]);
   const entries = useCostStore((state) => state.entries);

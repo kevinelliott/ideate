@@ -75,6 +75,12 @@ function App() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [pendingPrdGeneration, setPendingPrdGeneration] = useState<{projectId: string, projectPath: string, projectName: string} | null>(null);
   
+  // Check if this window was opened for a specific project (multi-window mode)
+  const [windowProjectId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('projectId');
+  });
+  
   const addProject = useProjectStore((state) => state.addProject);
   const setActiveProject = useProjectStore((state) => state.setActiveProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -142,6 +148,13 @@ function App() {
         setPreferencesLoaded(true);
       });
   }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas, loadPanelStates, loadIntegrationsConfig]);
+
+  // If this window was opened for a specific project, set it as active once projects are loaded
+  useEffect(() => {
+    if (windowProjectId && isLoaded) {
+      setActiveProject(windowProjectId);
+    }
+  }, [windowProjectId, isLoaded, setActiveProject]);
 
   // Listen for native menu event to show welcome guide
   useEffect(() => {

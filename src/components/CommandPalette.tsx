@@ -52,7 +52,8 @@ export function CommandPalette({
 
   const { toggleTheme, colorMode } = useTheme();
 
-  const stories = usePrdStore((state) => state.stories);
+  const projectPrd = usePrdStore((state) => activeProjectId ? state.projectPrds[activeProjectId] : null);
+  const stories = projectPrd?.stories ?? [];
   const hasIncompleteStories = stories.some((s) => !s.passes);
   const hasStories = stories.length > 0;
 

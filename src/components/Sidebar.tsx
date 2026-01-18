@@ -87,8 +87,8 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   const projectStates = useBuildStore((state) => state.projectStates)
 
   const clearPrd = usePrdStore((state) => state.clearPrd)
-  const loadedProjectId = usePrdStore((state) => state.loadedProjectId)
-  const stories = usePrdStore((state) => state.stories)
+  const projectPrd = usePrdStore((state) => activeProjectId ? state.projectPrds[activeProjectId] : null)
+  const stories = projectPrd?.stories ?? []
 
   const processes = useProcessStore((state) => state.processes) // Subscribe to process changes
   const selectProcess = useProcessStore((state) => state.selectProcess)
@@ -334,10 +334,8 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     const projectIdToDelete = deleteModal.projectId
     const projectName = deleteModal.projectName
     
-    // If we're deleting the project whose PRD is currently loaded, clear it first
-    if (loadedProjectId === projectIdToDelete) {
-      clearPrd()
-    }
+    // Clear the PRD for this project
+    clearPrd(projectIdToDelete)
     
     // Also clear the build state for this project
     resetBuildState(projectIdToDelete)
@@ -363,8 +361,8 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
       return true
     }
     
-    // For idle state, check if this is the active project with loaded stories
-    if (projectId === activeProjectId && loadedProjectId === projectId) {
+    // For idle state, check if this is the active project with stories
+    if (projectId === activeProjectId) {
       // Check if there are incomplete stories
       return stories.length > 0 && stories.some(s => !s.passes)
     }

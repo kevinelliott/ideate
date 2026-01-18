@@ -51,10 +51,8 @@ export function MainContent() {
   const activeProject = projects.find((p) => p.id === activeProjectId);
 
   const setPrd = usePrdStore((state) => state.setPrd);
-  const clearPrd = usePrdStore((state) => state.clearPrd);
   const setStatus = usePrdStore((state) => state.setStatus);
-  const selectStory = usePrdStore((state) => state.selectStory);
-  const loadedProjectId = usePrdStore((state) => state.loadedProjectId);
+  const getProjectPrd = usePrdStore((state) => state.getProjectPrd);
 
   const selectedIdeaId = useIdeasStore((state) => state.selectedIdeaId);
   const ideas = useIdeasStore((state) => state.ideas);
@@ -76,36 +74,20 @@ export function MainContent() {
   // Load PRD when switching projects - use activeProjectId as key dependency
   useEffect(() => {
     async function loadPrd() {
-      // If no active project, clear the PRD
+      // If no active project, nothing to load
       if (!activeProjectId || !activeProject?.path) {
-        clearPrd();
         loadingProjectIdRef.current = null;
         return;
       }
 
       // If we're already loading or have loaded this project's PRD, skip
-      if (loadedProjectId === activeProjectId) {
+      const projectPrd = getProjectPrd(activeProjectId);
+      if (projectPrd.status === "ready" || projectPrd.status === "generating") {
         return;
       }
 
       // Track which project we're loading
       loadingProjectIdRef.current = activeProjectId;
-
-      // Check if this project has an active PRD generation process running
-      const projectBuildState = projectStates[activeProjectId];
-      const hasActivePrdProcess = projectBuildState?.currentProcessId !== null;
-      const currentPrdStatus = usePrdStore.getState().status;
-      const isGenerating = currentPrdStatus === "generating" && hasActivePrdProcess;
-
-      // Clear existing stories and selection immediately when project changes
-      // But preserve "generating" status if PRD generation is in progress for this project
-      clearPrd();
-      if (!isGenerating) {
-        setStatus("idle");
-      } else {
-        // Restore the generating status after clearPrd reset it
-        setStatus("generating");
-      }
 
       try {
         const prd = await invoke<Prd | null>("load_prd", {
@@ -133,20 +115,19 @@ export function MainContent() {
             description: prd.description,
             branchName: prd.branchName,
           };
-          setPrd(stories, metadata, activeProjectId);
-          setStatus("ready");
+          setPrd(activeProjectId, stories, metadata);
         }
       } catch (error) {
         // Only set error if we're still on the same project
         if (loadingProjectIdRef.current === activeProjectId) {
           console.error("Failed to load PRD:", error);
-          setStatus("error");
+          setStatus(activeProjectId, "error");
         }
       }
     }
 
     loadPrd();
-  }, [activeProjectId, activeProject?.path, setPrd, clearPrd, setStatus, selectStory, loadedProjectId, projectStates]);
+  }, [activeProjectId, activeProject?.path, setPrd, setStatus, getProjectPrd, projectStates]);
 
   // Show agent run view if a process is selected (takes priority)
   if (selectedProcess) {

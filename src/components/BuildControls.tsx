@@ -18,7 +18,8 @@ export function BuildControls({ projectId, projectPath }: BuildControlsProps) {
   const status = projectState?.status ?? 'idle';
   const currentStoryId = projectState?.currentStoryId ?? null;
 
-  const stories = usePrdStore((state) => state.stories);
+  const projectPrd = usePrdStore((state) => state.projectPrds[projectId]);
+  const stories = projectPrd?.stories ?? [];
   const project = useProjectStore((state) => 
     state.projects.find((p) => p.id === projectId)
   );

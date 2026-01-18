@@ -20,171 +20,279 @@ export interface PrdMetadata {
 
 export type PrdStatus = 'idle' | 'generating' | 'ready' | 'error'
 
-interface PrdState {
+/** Per-project PRD state */
+interface ProjectPrdState {
   stories: Story[]
   metadata: PrdMetadata
   status: PrdStatus
   selectedStoryId: string | null
-  loadedProjectId: string | null
-  setStories: (stories: Story[]) => void
-  setMetadata: (metadata: PrdMetadata) => void
-  setPrd: (stories: Story[], metadata: PrdMetadata, projectId?: string) => void
-  clearPrd: () => void
-  updateStory: (id: string, updates: Partial<Story>) => void
-  addStory: (story: Omit<Story, 'id'>) => Story
-  removeStory: (id: string) => void
-  reorderStories: (fromIndex: number, toIndex: number) => void
-  setStatus: (status: PrdStatus) => void
-  selectStory: (id: string | null) => void
+}
+
+function createDefaultProjectPrd(): ProjectPrdState {
+  return {
+    stories: [],
+    metadata: {},
+    status: 'idle',
+    selectedStoryId: null,
+  }
+}
+
+interface PrdState {
+  /** Per-project PRD data keyed by projectId */
+  projectPrds: Record<string, ProjectPrdState>
+  
+  /** Get PRD state for a project (creates default if not exists) */
+  getProjectPrd: (projectId: string) => ProjectPrdState
+  
+  /** Set stories for a specific project */
+  setStories: (projectId: string, stories: Story[]) => void
+  
+  /** Set metadata for a specific project */
+  setMetadata: (projectId: string, metadata: PrdMetadata) => void
+  
+  /** Set full PRD for a specific project */
+  setPrd: (projectId: string, stories: Story[], metadata: PrdMetadata) => void
+  
+  /** Clear PRD for a specific project */
+  clearPrd: (projectId: string) => void
+  
+  /** Update a story in a specific project */
+  updateStory: (projectId: string, storyId: string, updates: Partial<Story>) => void
+  
+  /** Add a story to a specific project */
+  addStory: (projectId: string, storyData: Omit<Story, 'id'>) => Story
+  
+  /** Remove a story from a specific project */
+  removeStory: (projectId: string, storyId: string) => void
+  
+  /** Reorder stories in a specific project */
+  reorderStories: (projectId: string, fromIndex: number, toIndex: number) => void
+  
+  /** Set status for a specific project */
+  setStatus: (projectId: string, status: PrdStatus) => void
+  
+  /** Select a story in a specific project */
+  selectStory: (projectId: string, storyId: string | null) => void
+  
+  /** Save PRD for a specific project to disk */
   savePrd: (projectId: string, projectPath: string) => Promise<void>
-  getLoadedProjectId: () => string | null
 }
 
 export const usePrdStore = create<PrdState>((set, get) => ({
-  stories: [],
-  metadata: {},
-  status: 'idle',
-  selectedStoryId: null,
-  loadedProjectId: null,
+  projectPrds: {},
 
-  setStories: (stories) => {
-    set({ stories })
+  getProjectPrd: (projectId: string) => {
+    const state = get()
+    return state.projectPrds[projectId] ?? createDefaultProjectPrd()
   },
 
-  setMetadata: (metadata) => {
-    set({ metadata })
-  },
-
-  setPrd: (stories, metadata, projectId) => {
-    set({ stories, metadata, loadedProjectId: projectId ?? null })
-  },
-
-  clearPrd: () => {
-    set({
-      stories: [],
-      metadata: {},
-      status: 'idle',
-      selectedStoryId: null,
-      loadedProjectId: null,
-    })
-  },
-
-  updateStory: (id, updates) => {
+  setStories: (projectId: string, stories: Story[]) => {
     set((state) => ({
-      stories: state.stories.map((s) =>
-        s.id === id ? { ...s, ...updates } : s
-      ),
+      projectPrds: {
+        ...state.projectPrds,
+        [projectId]: {
+          ...(state.projectPrds[projectId] ?? createDefaultProjectPrd()),
+          stories,
+        },
+      },
     }))
   },
 
-  addStory: (storyData) => {
+  setMetadata: (projectId: string, metadata: PrdMetadata) => {
+    set((state) => ({
+      projectPrds: {
+        ...state.projectPrds,
+        [projectId]: {
+          ...(state.projectPrds[projectId] ?? createDefaultProjectPrd()),
+          metadata,
+        },
+      },
+    }))
+  },
+
+  setPrd: (projectId: string, stories: Story[], metadata: PrdMetadata) => {
+    set((state) => ({
+      projectPrds: {
+        ...state.projectPrds,
+        [projectId]: {
+          ...(state.projectPrds[projectId] ?? createDefaultProjectPrd()),
+          stories,
+          metadata,
+          status: 'ready',
+        },
+      },
+    }))
+  },
+
+  clearPrd: (projectId: string) => {
+    set((state) => ({
+      projectPrds: {
+        ...state.projectPrds,
+        [projectId]: createDefaultProjectPrd(),
+      },
+    }))
+  },
+
+  updateStory: (projectId: string, storyId: string, updates: Partial<Story>) => {
+    set((state) => {
+      const projectPrd = state.projectPrds[projectId] ?? createDefaultProjectPrd()
+      return {
+        projectPrds: {
+          ...state.projectPrds,
+          [projectId]: {
+            ...projectPrd,
+            stories: projectPrd.stories.map((s) =>
+              s.id === storyId ? { ...s, ...updates } : s
+            ),
+          },
+        },
+      }
+    })
+  },
+
+  addStory: (projectId: string, storyData: Omit<Story, 'id'>) => {
     const newStory: Story = {
       ...storyData,
       id: `US-${String(storyData.priority).padStart(3, '0')}`,
     }
-    set((state) => ({
-      stories: [...state.stories, newStory],
-    }))
+    set((state) => {
+      const projectPrd = state.projectPrds[projectId] ?? createDefaultProjectPrd()
+      return {
+        projectPrds: {
+          ...state.projectPrds,
+          [projectId]: {
+            ...projectPrd,
+            stories: [...projectPrd.stories, newStory],
+          },
+        },
+      }
+    })
     return newStory
   },
 
-  removeStory: (id) => {
-    set((state) => ({
-      stories: state.stories.filter((s) => s.id !== id),
-      selectedStoryId: state.selectedStoryId === id ? null : state.selectedStoryId,
-    }))
+  removeStory: (projectId: string, storyId: string) => {
+    set((state) => {
+      const projectPrd = state.projectPrds[projectId] ?? createDefaultProjectPrd()
+      return {
+        projectPrds: {
+          ...state.projectPrds,
+          [projectId]: {
+            ...projectPrd,
+            stories: projectPrd.stories.filter((s) => s.id !== storyId),
+            selectedStoryId: projectPrd.selectedStoryId === storyId ? null : projectPrd.selectedStoryId,
+          },
+        },
+      }
+    })
   },
 
-  reorderStories: (fromIndex, toIndex) => {
+  reorderStories: (projectId: string, fromIndex: number, toIndex: number) => {
     set((state) => {
-      const stories = [...state.stories]
+      const projectPrd = state.projectPrds[projectId] ?? createDefaultProjectPrd()
+      const stories = [...projectPrd.stories]
       const [removed] = stories.splice(fromIndex, 1)
       stories.splice(toIndex, 0, removed)
       const reorderedStories = stories.map((story, index) => ({
         ...story,
         priority: index + 1,
       }))
-      return { stories: reorderedStories }
+      return {
+        projectPrds: {
+          ...state.projectPrds,
+          [projectId]: {
+            ...projectPrd,
+            stories: reorderedStories,
+          },
+        },
+      }
     })
   },
 
-  setStatus: (status) => {
-    set({ status })
+  setStatus: (projectId: string, status: PrdStatus) => {
+    set((state) => ({
+      projectPrds: {
+        ...state.projectPrds,
+        [projectId]: {
+          ...(state.projectPrds[projectId] ?? createDefaultProjectPrd()),
+          status,
+        },
+      },
+    }))
   },
 
-  selectStory: (id) => {
-    set({ selectedStoryId: id })
+  selectStory: (projectId: string, storyId: string | null) => {
+    set((state) => ({
+      projectPrds: {
+        ...state.projectPrds,
+        [projectId]: {
+          ...(state.projectPrds[projectId] ?? createDefaultProjectPrd()),
+          selectedStoryId: storyId,
+        },
+      },
+    }))
   },
 
   savePrd: async (projectId: string, projectPath: string) => {
-    const { stories, metadata, loadedProjectId } = get()
+    const { projectPrds } = get()
+    const projectPrd = projectPrds[projectId]
     
-    // Guard: refuse to save if the in-memory PRD belongs to a different project
-    if (loadedProjectId && loadedProjectId !== projectId) {
-      console.error(
-        `[prdStore] Refusing to save PRD: loadedProjectId=${loadedProjectId} does not match requested projectId=${projectId}`
-      )
+    if (!projectPrd) {
+      console.error(`[prdStore] No PRD loaded for project ${projectId}`)
       return
     }
     
     try {
       const prd = {
-        project: metadata.project,
-        description: metadata.description,
-        branchName: metadata.branchName,
-        userStories: stories,
+        project: projectPrd.metadata.project,
+        description: projectPrd.metadata.description,
+        branchName: projectPrd.metadata.branchName,
+        userStories: projectPrd.stories,
       }
       await invoke('save_prd', { projectPath, prd })
     } catch (error) {
       console.error('Failed to save PRD:', error)
     }
   },
-
-  getLoadedProjectId: () => get().loadedProjectId,
 }))
 
 // Listen for story list sync requests from Story Manager window
-// This runs at module load time so it's always available
-listen('request-story-list', async () => {
-  // Import dynamically to avoid circular dependencies
+listen<{ projectId?: string }>('request-story-list', async (event) => {
   const { useProjectStore } = await import('./projectStore')
   const { useBuildStore } = await import('./buildStore')
   
-  const currentActiveProjectId = useProjectStore.getState().activeProjectId
-  const currentProject = useProjectStore.getState().projects.find(p => p.id === currentActiveProjectId)
-  const currentStories = usePrdStore.getState().stories
-  const currentStoryStatuses = currentActiveProjectId 
-    ? useBuildStore.getState().getProjectState(currentActiveProjectId).storyStatuses 
-    : {}
+  // Use requested projectId or fall back to active project
+  const requestedProjectId = event.payload?.projectId
+  const activeProjectId = useProjectStore.getState().activeProjectId
+  const targetProjectId = requestedProjectId ?? activeProjectId
   
-  // Map stories to include status
-  const storiesWithStatus = currentStories.map(s => ({
+  if (!targetProjectId) {
+    await emit('story-list-sync', {
+      stories: [],
+      projectId: '',
+      projectName: '',
+    })
+    return
+  }
+  
+  const project = useProjectStore.getState().projects.find(p => p.id === targetProjectId)
+  const projectPrd = usePrdStore.getState().getProjectPrd(targetProjectId)
+  const storyStatuses = useBuildStore.getState().getProjectState(targetProjectId).storyStatuses
+  
+  const storiesWithStatus = projectPrd.stories.map(s => ({
     id: s.id,
     title: s.title,
-    status: currentStoryStatuses[s.id] || (s.passes ? 'complete' : 'pending'),
+    status: storyStatuses[s.id] || (s.passes ? 'complete' : 'pending'),
     passes: s.passes,
   }))
 
   await emit('story-list-sync', {
     stories: storiesWithStatus,
-    projectId: currentActiveProjectId || '',
-    projectName: currentProject?.name || '',
+    projectId: targetProjectId,
+    projectName: project?.name || '',
   })
 }).catch((err) => {
   console.error('[prdStore] Failed to set up request-story-list listener:', err)
 })
-
-// Helper to check if the PRD for a given project is currently loaded
-function isPrdLoadedFor(projectId: string): boolean {
-  const { loadedProjectId } = usePrdStore.getState()
-  if (!loadedProjectId || loadedProjectId !== projectId) {
-    console.error(
-      `[prdStore] Ignoring PRD bulk update: loadedProjectId=${loadedProjectId} does not match event.projectId=${projectId}`
-    )
-    return false
-  }
-  return true
-}
 
 // Listen for bulk status changes from Story Manager
 listen<{
@@ -194,18 +302,12 @@ listen<{
   passes: boolean
 }>('bulk-story-status-change', async (event) => {
   const { projectId, storyIds, status, passes } = event.payload
-  
-  // Guard: only mutate if the correct project's PRD is loaded
-  if (!isPrdLoadedFor(projectId)) {
-    return
-  }
-  
   const { useProjectStore } = await import('./projectStore')
   const { useBuildStore } = await import('./buildStore')
   
-  // Update each story
+  // Update each story in the correct project's PRD
   for (const storyId of storyIds) {
-    usePrdStore.getState().updateStory(storyId, { passes })
+    usePrdStore.getState().updateStory(projectId, storyId, { passes })
     useBuildStore.getState().setStoryStatus(projectId, storyId, status as 'pending' | 'complete' | 'failed' | 'in-progress')
   }
   
@@ -224,17 +326,11 @@ listen<{
   storyIds: string[]
 }>('bulk-story-delete', async (event) => {
   const { projectId, storyIds } = event.payload
-  
-  // Guard: only mutate if the correct project's PRD is loaded
-  if (!isPrdLoadedFor(projectId)) {
-    return
-  }
-  
   const { useProjectStore } = await import('./projectStore')
   
-  // Delete each story
+  // Delete each story from the correct project's PRD
   for (const storyId of storyIds) {
-    usePrdStore.getState().removeStory(storyId)
+    usePrdStore.getState().removeStory(projectId, storyId)
   }
   
   // Save the PRD

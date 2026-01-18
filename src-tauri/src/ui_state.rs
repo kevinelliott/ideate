@@ -228,3 +228,30 @@ pub fn open_story_manager(app: AppHandle) -> Result<(), String> {
 pub fn open_story_manager_command(app: AppHandle) -> Result<(), String> {
     open_story_manager(app)
 }
+
+/// Opens a new project window for a specific project.
+#[tauri::command(rename_all = "camelCase")]
+pub fn open_project_window(app: AppHandle, project_id: String, project_name: String) -> Result<(), String> {
+    // Use project_id as window label (sanitized)
+    let window_label = format!("project-{}", project_id.replace("-", "").chars().take(12).collect::<String>());
+    
+    // Check if window already exists
+    if let Some(window) = app.get_webview_window(&window_label) {
+        // Focus existing window
+        window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
+        return Ok(());
+    }
+    
+    // Create new window with project_id as query parameter
+    let url = WebviewUrl::App(format!("/?projectId={}", project_id).into());
+    
+    WebviewWindowBuilder::new(&app, &window_label, url)
+        .title(format!("Ideate - {}", project_name))
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(800.0, 600.0)
+        .resizable(true)
+        .build()
+        .map_err(|e| format!("Failed to create project window: {}", e))?;
+    
+    Ok(())
+}

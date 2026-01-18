@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { open } from '@tauri-apps/plugin-shell'
+import { invoke } from '@tauri-apps/api/core'
 
 interface ProjectContextMenuProps {
   projectId: string
@@ -14,6 +15,8 @@ interface ProjectContextMenuProps {
 }
 
 export function ProjectContextMenu({
+  projectId,
+  projectName,
   projectPath,
   x,
   y,
@@ -70,12 +73,28 @@ export function ProjectContextMenu({
     onClose()
   }
 
+  const handleOpenInNewWindow = async () => {
+    try {
+      await invoke('open_project_window', { projectId, projectName })
+      onClose()
+    } catch (error) {
+      console.error('Failed to open project in new window:', error)
+      onClose()
+    }
+  }
+
   return (
     <div
       ref={menuRef}
       className="fixed z-50 min-w-[160px] py-1 bg-card border border-border rounded-lg shadow-lg"
       style={{ left: x, top: y }}
     >
+      <button
+        onClick={handleOpenInNewWindow}
+        className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-white transition-colors"
+      >
+        Open in New Window
+      </button>
       <button
         onClick={handleRevealInFinder}
         className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-white transition-colors"

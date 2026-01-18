@@ -23,7 +23,7 @@ function safeSetPrd(
   projectId: string,
   stories: Story[],
   metadata: PrdMetadata,
-  setPrd: (stories: Story[], metadata: PrdMetadata, projectId?: string) => void,
+  setPrd: (projectId: string, stories: Story[], metadata: PrdMetadata) => void,
   appendLog: (projectId: string, type: LogType, message: string) => void,
 ): boolean {
   const currentActiveProjectId = useProjectStore.getState().activeProjectId;
@@ -37,7 +37,7 @@ function safeSetPrd(
     return false;
   }
   
-  setPrd(stories, metadata, projectId);
+  setPrd(projectId, stories, metadata);
   return true;
 }
 
@@ -97,7 +97,7 @@ export function usePrdGeneration() {
         return false;
       }
 
-      setStatus("generating");
+      setStatus(activeProjectId, "generating");
       clearLogs(activeProjectId);
       appendLog(
         activeProjectId,
@@ -188,7 +188,7 @@ export function usePrdGeneration() {
             "system",
             `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
-          setStatus("error");
+          setStatus(activeProjectId, "error");
           return false;
         }
 
@@ -221,7 +221,7 @@ export function usePrdGeneration() {
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(activeProjectId, stories, metadata, setPrd, appendLog);
           if (applied) {
-            setStatus("ready");
+            setStatus(activeProjectId, "ready");
             appendLog(
               activeProjectId,
               "system",
@@ -239,14 +239,14 @@ export function usePrdGeneration() {
             "system",
             "Warning: PRD file not found or empty after generation",
           );
-          setStatus("error");
+          setStatus(activeProjectId, "error");
           return false;
         }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         appendLog(activeProjectId, "system", `Error: ${errorMessage}`);
-        setStatus("error");
+        setStatus(activeProjectId, "error");
         notify.error("PRD generation failed", errorMessage);
         return false;
       }
@@ -273,7 +273,7 @@ export function usePrdGeneration() {
       projectPath: string,
       agentId?: string,
     ): Promise<boolean> => {
-      setStatus("generating");
+      setStatus(projectId, "generating");
       clearLogs(projectId);
       appendLog(
         projectId,
@@ -365,7 +365,7 @@ export function usePrdGeneration() {
             "system",
             `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
-          setStatus("error");
+          setStatus(projectId, "error");
           return false;
         }
 
@@ -398,7 +398,7 @@ export function usePrdGeneration() {
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
           if (applied) {
-            setStatus("ready");
+            setStatus(projectId, "ready");
             appendLog(
               projectId,
               "system",
@@ -415,14 +415,14 @@ export function usePrdGeneration() {
             "system",
             "Warning: PRD file not found or empty after codebase analysis",
           );
-          setStatus("error");
+          setStatus(projectId, "error");
           return false;
         }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         appendLog(projectId, "system", `Error: ${errorMessage}`);
-        setStatus("error");
+        setStatus(projectId, "error");
         notify.error("Codebase analysis failed", errorMessage);
         return false;
       }
@@ -449,9 +449,9 @@ export function usePrdGeneration() {
       request: string,
       agentId?: string,
     ): Promise<boolean> => {
-      const currentStories = usePrdStore.getState().stories;
+      const currentStories = usePrdStore.getState().getProjectPrd(projectId).stories;
 
-      setStatus("generating");
+      setStatus(projectId, "generating");
       appendLog(projectId, "system", `Generating additional user stories...`);
 
       try {
@@ -554,7 +554,7 @@ export function usePrdGeneration() {
             "system",
             `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
-          setStatus("ready");
+          setStatus(projectId, "ready");
           return false;
         }
 
@@ -589,7 +589,7 @@ export function usePrdGeneration() {
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
           if (applied) {
-            setStatus("ready");
+            setStatus(projectId, "ready");
             appendLog(
               projectId,
               "system",
@@ -603,14 +603,14 @@ export function usePrdGeneration() {
             "system",
             "Warning: PRD file not found or empty after story generation",
           );
-          setStatus("ready");
+          setStatus(projectId, "ready");
           return false;
         }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         appendLog(projectId, "system", `Error: ${errorMessage}`);
-        setStatus("ready");
+        setStatus(projectId, "ready");
         return false;
       }
     },
@@ -634,7 +634,7 @@ export function usePrdGeneration() {
       projectPath: string,
       agentId?: string,
     ): Promise<boolean> => {
-      const currentStories = usePrdStore.getState().stories;
+      const currentStories = usePrdStore.getState().getProjectPrd(projectId).stories;
       const initialCount = currentStories.length;
 
       appendLog(
@@ -727,7 +727,7 @@ export function usePrdGeneration() {
             "system",
             `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
-          setStatus("error");
+          setStatus(projectId, "error");
           return false;
         }
 
@@ -783,7 +783,7 @@ export function usePrdGeneration() {
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
           if (applied) {
-            setStatus("ready");
+            setStatus(projectId, "ready");
 
             const delta = stories.length - initialCount;
             if (delta > 0) {
@@ -813,14 +813,14 @@ export function usePrdGeneration() {
             "system",
             "Warning: PRD file not found or empty after story breakdown",
           );
-          setStatus("error");
+          setStatus(projectId, "error");
           return false;
         }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         appendLog(projectId, "system", `Error: ${errorMessage}`);
-        setStatus("error");
+        setStatus(projectId, "error");
         return false;
       }
     },
@@ -855,7 +855,7 @@ export function usePrdGeneration() {
       const shouldBreakdown = options?.breakdownStories ?? false;
       const shouldStartBuild = options?.startBuildAfterPrd ?? false;
 
-      setStatus("generating");
+      setStatus(projectId, "generating");
       clearLogs(projectId);
       appendLog(
         projectId,
@@ -958,7 +958,7 @@ export function usePrdGeneration() {
             "system",
             `Agent exited with error (code: ${waitResult.exitCode ?? "unknown"})`,
           );
-          setStatus("error");
+          setStatus(projectId, "error");
           return false;
         }
 
@@ -1018,7 +1018,7 @@ export function usePrdGeneration() {
                 );
               }
             } else {
-              setStatus("ready");
+              setStatus(projectId, "ready");
             }
             
             // Start the build if requested
@@ -1041,14 +1041,14 @@ export function usePrdGeneration() {
             "system",
             "Warning: PRD file not found or empty after generation",
           );
-          setStatus("error");
+          setStatus(projectId, "error");
           return false;
         }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         appendLog(projectId, "system", `Error: ${errorMessage}`);
-        setStatus("error");
+        setStatus(projectId, "error");
         return false;
       }
     },

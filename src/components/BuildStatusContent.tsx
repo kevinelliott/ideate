@@ -98,7 +98,8 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
   });
   
   const projectState = useBuildStore((state) => state.projectStates[projectId]);
-  const stories = usePrdStore((state) => state.stories);
+  const projectPrd = usePrdStore((state) => state.projectPrds[projectId]);
+  const stories = projectPrd?.stories ?? [];
   const selectStory = usePrdStore((state) => state.selectStory);
   const projects = useProjectStore((state) => state.projects);
   const project = projects.find(p => p.id === projectId);
@@ -264,7 +265,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
   }, [currentStoryId]);
 
   const handleStoryClick = (storyId: string) => {
-    selectStory(storyId);
+    selectStory(projectId, storyId);
   };
 
   const isDragEnabled = buildStatus === 'idle';
@@ -303,7 +304,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
     const toIndex = stories.findIndex((s) => s.id === targetStoryId);
 
     if (fromIndex !== -1 && toIndex !== -1) {
-      reorderStories(fromIndex, toIndex);
+      reorderStories(projectId, fromIndex, toIndex);
       await savePrd(project.id, project.path);
     }
 

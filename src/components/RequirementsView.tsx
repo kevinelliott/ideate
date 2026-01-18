@@ -16,13 +16,16 @@ interface RequirementsViewProps {
 }
 
 export function RequirementsView({ project }: RequirementsViewProps) {
-  const stories = usePrdStore((state) => state.stories);
-  const selectedStoryId = usePrdStore((state) => state.selectedStoryId);
-  const status = usePrdStore((state) => state.status);
-  const selectStory = usePrdStore((state) => state.selectStory);
+  const projectPrd = usePrdStore((state) => state.projectPrds[project.id]);
+  const stories = projectPrd?.stories ?? [];
+  const selectedStoryId = projectPrd?.selectedStoryId ?? null;
+  const status = projectPrd?.status ?? 'idle';
+  
   const updateStory = usePrdStore((state) => state.updateStory);
-  const savePrd = usePrdStore((state) => state.savePrd);
+  const selectStory = usePrdStore((state) => state.selectStory);
   const setStatus = usePrdStore((state) => state.setStatus);
+  const savePrd = usePrdStore((state) => state.savePrd);
+  
   const hasStories = stories.length > 0;
   
   const selectedStory = stories.find((s) => s.id === selectedStoryId);
@@ -32,7 +35,7 @@ export function RequirementsView({ project }: RequirementsViewProps) {
   const { generatePrd } = usePrdGeneration();
 
   const handleCloseInspector = () => {
-    selectStory(null);
+    selectStory(project.id, null);
   };
 
   const handleEditFromInspector = (story: Story) => {
@@ -45,7 +48,7 @@ export function RequirementsView({ project }: RequirementsViewProps) {
 
   const handleSaveEdit = async (updates: Partial<Story>) => {
     if (editingStory) {
-      updateStory(editingStory.id, updates);
+      updateStory(project.id, editingStory.id, updates);
       await savePrd(project.id, project.path);
     }
   };
@@ -60,7 +63,7 @@ export function RequirementsView({ project }: RequirementsViewProps) {
 
   const handleRetryGeneration = () => {
     setGenerationError(null);
-    setStatus("idle");
+    setStatus(project.id, "idle");
   };
 
   return (

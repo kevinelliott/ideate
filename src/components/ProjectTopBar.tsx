@@ -146,7 +146,8 @@ export function ProjectTopBar({ projectId, projectPath, projectName, projectDesc
     window.dispatchEvent(new CustomEvent('cancel-build', { detail: { projectId } }));
   };
   
-  const stories = usePrdStore((state) => state.stories);
+  const projectPrd = usePrdStore((state) => state.projectPrds[projectId]);
+  const stories = projectPrd?.stories ?? [];
   const hasIncompleteStories = stories.some((s) => !s.passes);
   const hasStories = stories.length > 0;
   const canStart = hasStories && hasIncompleteStories && buildStatus === "idle";

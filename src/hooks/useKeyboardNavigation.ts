@@ -24,9 +24,10 @@ export function useKeyboardNavigation({
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const setActiveProject = useProjectStore((state) => state.setActiveProject);
 
-  const stories = usePrdStore((state) => state.stories);
-  const selectedStoryId = usePrdStore((state) => state.selectedStoryId);
-  const selectStory = usePrdStore((state) => state.selectStory);
+  const projectPrd = usePrdStore((state) => activeProjectId ? state.projectPrds[activeProjectId] : null);
+  const stories = projectPrd?.stories ?? [];
+  const selectedStoryId = projectPrd?.selectedStoryId ?? null;
+  const selectStoryAction = usePrdStore((state) => state.selectStory);
 
   const toggleLogPanel = usePanelStore((state) => state.toggleLogPanel);
   const toggleTerminalPanel = usePanelStore((state) => state.toggleTerminalPanel);
@@ -181,7 +182,9 @@ export function useKeyboardNavigation({
             }
           }
 
-          selectStory(sortedStories[newIndex].id);
+          if (activeProjectId) {
+            selectStoryAction(activeProjectId, sortedStories[newIndex].id);
+          }
         }
         return;
       }
@@ -195,12 +198,12 @@ export function useKeyboardNavigation({
           } else if (activeProjectId && sortedStories.length > 0) {
             setNavigationContext("stories");
             if (!selectedStoryId) {
-              selectStory(sortedStories[0].id);
+              selectStoryAction(activeProjectId, sortedStories[0].id);
             }
           }
         } else if (navigationContext === "stories") {
-          if (!selectedStoryId && sortedStories.length > 0) {
-            selectStory(sortedStories[0].id);
+          if (!selectedStoryId && sortedStories.length > 0 && activeProjectId) {
+            selectStoryAction(activeProjectId, sortedStories[0].id);
           }
         }
         return;
@@ -212,7 +215,7 @@ export function useKeyboardNavigation({
       setActiveProject,
       sortedStories,
       selectedStoryId,
-      selectStory,
+      selectStoryAction,
       navigationContext,
       isModalOpen,
       onNewProject,

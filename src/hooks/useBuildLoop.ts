@@ -79,7 +79,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
   const clearLogs = useBuildStore((state) => state.clearLogs)
   const resetStoryStatuses = useBuildStore((state) => state.resetStoryStatuses)
 
-  const stories = usePrdStore((state) => state.stories)
+  const getProjectPrd = usePrdStore((state) => state.getProjectPrd)
+  const stories = projectId ? getProjectPrd(projectId).stories : []
   const updateStory = usePrdStore((state) => state.updateStory)
   const savePrd = usePrdStore((state) => state.savePrd)
 
@@ -138,7 +139,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           maxCostPerBuild: prefs.maxCostPerBuild ?? null,
           warnOnLargeStory: prefs.warnOnLargeStory ?? true,
         }
-        const depGraph = analyzeStoryDependencies(usePrdStore.getState().stories)
+        const depGraph = analyzeStoryDependencies(usePrdStore.getState().getProjectPrd(projectId).stories)
         const deps = depGraph[story.id]?.prerequisites.length || 0
         const estimate = estimateStoryComplexity(story, deps)
         const budgetCheck = checkBudgetLimits(estimate, budgetLimits)
@@ -242,7 +243,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       if (waitResult.success && !hasAgentError) {
         appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exitCode})`)
         setStoryStatus(projectId, story.id, 'complete')
-        updateStory(story.id, { passes: true })
+        updateStory(projectId, story.id, { passes: true })
         await savePrd(projectId, projectPath)
         
         // Discard snapshot on success
@@ -388,7 +389,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         if (storySuccess) {
           appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed and merged`)
           setStoryStatus(projectId, story.id, 'complete')
-          updateStory(story.id, { passes: true })
+          updateStory(projectId, story.id, { passes: true })
           await savePrd(projectId, projectPath)
           const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
           if (prefs?.buildNotifications !== false) {
@@ -458,7 +459,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     startBuild(projectId)
     appendLog(projectId, 'system', '🚀 Parallel build started')
 
-    const allStories = usePrdStore.getState().stories
+    const allStories = usePrdStore.getState().getProjectPrd(projectId).stories
     const incompleteStories = allStories
       .filter((s) => !s.passes)
       .sort((a, b) => a.priority - b.priority)
@@ -620,7 +621,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     await loopPromise
 
     // Finalization
-    const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    const allComplete = usePrdStore.getState().getProjectPrd(projectId).stories.every((s) => s.passes)
     const failedCount = Array.from(statusMap.values()).filter(st => st === 'failed').length
     const blockedCount = Array.from(statusMap.values()).filter(st => st === 'pending').length
 
@@ -677,7 +678,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     startBuild(projectId)
     appendLog(projectId, 'system', `Build started from story ${storyId}`)
 
-    const allStories = usePrdStore.getState().stories
+    const allStories = usePrdStore.getState().getProjectPrd(projectId).stories
       .sort((a, b) => a.priority - b.priority)
     
     const startIndex = allStories.findIndex(s => s.id === storyId)
@@ -719,7 +720,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
       const autonomy = settings?.autonomy || 'autonomous'
 
-      const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+      const remainingStories = usePrdStore.getState().getProjectPrd(projectId).stories.filter((s) => !s.passes)
       if (remainingStories.length > 0) {
         if (autonomy === 'manual' || autonomy === 'pause-between') {
           const nextStory = remainingStories[0]
@@ -733,7 +734,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       }
     }
 
-    const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    const allComplete = usePrdStore.getState().getProjectPrd(projectId).stories.every((s) => s.passes)
     if (allComplete) {
       appendLog(projectId, 'system', '🎉 All stories completed successfully!')
     }
@@ -817,7 +818,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         return
       }
 
-      const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+      const remainingStories = usePrdStore.getState().getProjectPrd(projectId).stories.filter((s) => !s.passes)
       if (shouldPauseForAutonomy(autonomy, 'after', remainingStories.length > 0)) {
         if (autonomy === 'pause-between') {
           appendLog(projectId, 'system', 'Pausing for review (pause-between mode)')
@@ -828,7 +829,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       }
     }
 
-    const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+    const projectPrd = usePrdStore.getState().projectPrds[projectId]
+    const allComplete = (projectPrd?.stories ?? []).every((s) => s.passes)
     const buildPrefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
     const buildNotificationsEnabled = buildPrefs?.buildNotifications !== false
 
@@ -838,7 +840,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         notify.success('Build Complete', 'All stories completed successfully')
       }
     } else {
-      const failedCount = usePrdStore.getState().stories.filter((s) => !s.passes).length
+      const projectPrdForFailed = usePrdStore.getState().projectPrds[projectId]
+      const failedCount = (projectPrdForFailed?.stories ?? []).filter((s) => !s.passes).length
       if (buildNotificationsEnabled) {
         notify.warning('Build Finished', `${failedCount} ${failedCount === 1 ? 'story' : 'stories'} still incomplete`)
       }
@@ -864,7 +867,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
     appendLog(projectId, 'system', 'Build resumed')
 
     const runRemaining = async () => {
-      const incompleteStories = usePrdStore.getState().stories
+      const resumeProjectPrd = usePrdStore.getState().projectPrds[projectId]
+      const incompleteStories = (resumeProjectPrd?.stories ?? [])
         .filter((s) => !s.passes)
         .sort((a, b) => a.priority - b.priority)
 
@@ -897,7 +901,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         const settings = await invoke<ProjectSettings | null>('load_project_settings', { projectPath })
         const autonomy = settings?.autonomy || 'autonomous'
 
-        const remainingStories = usePrdStore.getState().stories.filter((s) => !s.passes)
+        const remainingProjectPrd = usePrdStore.getState().projectPrds[projectId]
+        const remainingStories = (remainingProjectPrd?.stories ?? []).filter((s) => !s.passes)
         if (remainingStories.length > 0) {
           if (autonomy === 'manual' || autonomy === 'pause-between') {
             const nextStory = remainingStories[0]
@@ -911,7 +916,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         }
       }
 
-      const allComplete = usePrdStore.getState().stories.every((s) => s.passes)
+      const allCompleteProjectPrd = usePrdStore.getState().projectPrds[projectId]
+      const allComplete = (allCompleteProjectPrd?.stories ?? []).every((s) => s.passes)
       if (allComplete) {
         appendLog(projectId, 'system', '🎉 All stories completed successfully!')
       }
@@ -971,8 +977,9 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       const customEvent = event as CustomEvent<{ projectId: string }>
       if (customEvent.detail.projectId !== projectId) return
       const currentStatus = useBuildStore.getState().getProjectState(projectId || '').status
-      const currentStories = usePrdStore.getState().stories
-      if (currentStatus === 'idle' && currentStories.length > 0 && currentStories.some(s => !s.passes)) {
+      const sidebarProjectPrd = usePrdStore.getState().projectPrds[projectId || '']
+      const currentStories = sidebarProjectPrd?.stories ?? []
+      if (currentStatus === 'idle' && currentStories.length > 0 && currentStories.some((s) => !s.passes)) {
         handleStart()
       }
     }
@@ -1029,7 +1036,8 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       return
     }
 
-    const story = usePrdStore.getState().stories.find(s => s.id === storyId)
+    const retryProjectPrd = usePrdStore.getState().projectPrds[projectId]
+    const story = (retryProjectPrd?.stories ?? []).find((s) => s.id === storyId)
     if (!story) {
       appendLog(projectId, 'system', `Story ${storyId} not found`)
       releaseBuildLoop(projectId)

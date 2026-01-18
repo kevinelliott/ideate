@@ -181,6 +181,7 @@ pub fn run() {
             ui_state::save_window_state,
             ui_state::open_process_viewer_command,
             ui_state::open_story_manager_command,
+            ui_state::open_project_window,
             // Worktree
             worktree::prepare_story_worktree,
             worktree::finalize_story_worktree,
