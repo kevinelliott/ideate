@@ -10,9 +10,15 @@ pub fn get_ideate_dir(project_path: &str) -> PathBuf {
 }
 
 /// Sanitizes JSON content that may have common formatting issues from AI-generated output.
-/// Handles trailing commas, single-line comments, and other common issues.
+/// Handles trailing commas, single-line comments, control characters, and other common issues.
 pub fn sanitize_json(content: &str) -> String {
     let mut result = content.to_string();
+    
+    // Remove control characters (except for valid whitespace: \t, \n, \r)
+    // These can appear in AI-generated content and break JSON parsing
+    result = result.chars().filter(|c| {
+        !c.is_control() || *c == '\t' || *c == '\n' || *c == '\r'
+    }).collect();
     
     // Remove single-line comments (// ...)
     let single_comment_re = Regex::new(r#"//[^
