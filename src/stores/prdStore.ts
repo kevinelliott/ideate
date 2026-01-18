@@ -174,6 +174,18 @@ listen('request-story-list', async () => {
   console.error('[prdStore] Failed to set up request-story-list listener:', err)
 })
 
+// Helper to check if the PRD for a given project is currently loaded
+function isPrdLoadedFor(projectId: string): boolean {
+  const { loadedProjectId } = usePrdStore.getState()
+  if (!loadedProjectId || loadedProjectId !== projectId) {
+    console.error(
+      `[prdStore] Ignoring PRD bulk update: loadedProjectId=${loadedProjectId} does not match event.projectId=${projectId}`
+    )
+    return false
+  }
+  return true
+}
+
 // Listen for bulk status changes from Story Manager
 listen<{
   projectId: string
@@ -181,10 +193,15 @@ listen<{
   status: string
   passes: boolean
 }>('bulk-story-status-change', async (event) => {
+  const { projectId, storyIds, status, passes } = event.payload
+  
+  // Guard: only mutate if the correct project's PRD is loaded
+  if (!isPrdLoadedFor(projectId)) {
+    return
+  }
+  
   const { useProjectStore } = await import('./projectStore')
   const { useBuildStore } = await import('./buildStore')
-  
-  const { projectId, storyIds, status, passes } = event.payload
   
   // Update each story
   for (const storyId of storyIds) {
@@ -206,9 +223,14 @@ listen<{
   projectId: string
   storyIds: string[]
 }>('bulk-story-delete', async (event) => {
-  const { useProjectStore } = await import('./projectStore')
-  
   const { projectId, storyIds } = event.payload
+  
+  // Guard: only mutate if the correct project's PRD is loaded
+  if (!isPrdLoadedFor(projectId)) {
+    return
+  }
+  
+  const { useProjectStore } = await import('./projectStore')
   
   // Delete each story
   for (const storyId of storyIds) {
