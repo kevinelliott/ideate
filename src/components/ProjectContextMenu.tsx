@@ -83,6 +83,16 @@ export function ProjectContextMenu({
     }
   }
 
+  const handleOpenStoryManager = async () => {
+    try {
+      await invoke('open_story_manager_command', { projectId, projectName })
+      onClose()
+    } catch (error) {
+      console.error('Failed to open story manager:', error)
+      onClose()
+    }
+  }
+
   return (
     <div
       ref={menuRef}
@@ -95,6 +105,13 @@ export function ProjectContextMenu({
       >
         Open in New Window
       </button>
+      <button
+        onClick={handleOpenStoryManager}
+        className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-white transition-colors"
+      >
+        Story Manager
+      </button>
+      <div className="my-1 border-t border-border" />
       <button
         onClick={handleRevealInFinder}
         className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-white transition-colors"

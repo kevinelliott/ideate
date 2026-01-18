@@ -111,7 +111,11 @@ function getStatusLabel(status: StoryStatus, passes: boolean): string {
 export function StoryManagerWindow() {
   const loadTheme = useThemeStore((state) => state.loadTheme);
   const [stories, setStories] = useState<Story[]>([]);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(() => {
+    // Get projectId from URL query parameter
+    const params = new URLSearchParams(window.location.search);
+    return params.get('projectId');
+  });
   const [projectName, setProjectName] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -125,21 +129,24 @@ export function StoryManagerWindow() {
   useEffect(() => {
     const unlistenSyncPromise = listen<StoryListSyncPayload>("story-list-sync", (event) => {
       const { stories: syncedStories, projectId: pid, projectName: pname } = event.payload;
+      // Only accept sync for our project
+      if (projectId && pid !== projectId) return;
       setStories(syncedStories);
-      setProjectId(pid);
+      if (!projectId) setProjectId(pid);
       setProjectName(pname);
       // Clear selection when stories change
       setSelectedIds(new Set());
     });
 
-    emit("request-story-list", {}).catch((err) => {
+    // Request story list for specific project
+    emit("request-story-list", { projectId }).catch((err) => {
       console.error("[StoryManager] Failed to emit request-story-list:", err);
     });
 
     return () => {
       unlistenSyncPromise.then((unlisten) => unlisten());
     };
-  }, []);
+  }, [projectId]);
 
   // Listen for story updates
   useEffect(() => {

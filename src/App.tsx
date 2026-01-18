@@ -170,8 +170,17 @@ function App() {
   // Listen for story manager open event
   useEffect(() => {
     const handleOpenStoryManager = async () => {
+      const activeId = useProjectStore.getState().activeProjectId;
+      const activeProject = useProjectStore.getState().projects.find(p => p.id === activeId);
+      if (!activeId || !activeProject) {
+        console.warn("No active project to open Story Manager for");
+        return;
+      }
       try {
-        await invoke("open_story_manager_command");
+        await invoke("open_story_manager_command", { 
+          projectId: activeId, 
+          projectName: activeProject.name 
+        });
       } catch (error) {
         console.error("Failed to open story manager:", error);
       }

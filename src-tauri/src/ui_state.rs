@@ -194,25 +194,27 @@ pub fn open_process_viewer_command(app: AppHandle) -> Result<(), String> {
     open_process_viewer(app)
 }
 
-/// Opens or focuses the Story Manager window.
-pub fn open_story_manager(app: AppHandle) -> Result<(), String> {
-    const WINDOW_LABEL: &str = "story-manager";
+/// Opens or focuses the Story Manager window for a specific project.
+#[tauri::command(rename_all = "camelCase")]
+pub fn open_story_manager_command(app: AppHandle, project_id: String, project_name: String) -> Result<(), String> {
+    // Use project-specific window label
+    let window_label = format!("story-manager-{}", project_id.replace("-", "").chars().take(12).collect::<String>());
     
     // Check if window already exists
-    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+    if let Some(window) = app.get_webview_window(&window_label) {
         // Focus existing window
         window.set_focus().map_err(|e| format!("Failed to focus window: {}", e))?;
         return Ok(());
     }
     
-    // Create new window without a menu bar
-    let url = WebviewUrl::App("/story-manager".into());
+    // Create new window with projectId as query parameter
+    let url = WebviewUrl::App(format!("/story-manager?projectId={}", project_id).into());
     
     use tauri::menu::MenuBuilder;
     let empty_menu = MenuBuilder::new(&app).build().map_err(|e| format!("Failed to build menu: {}", e))?;
     
-    WebviewWindowBuilder::new(&app, WINDOW_LABEL, url)
-        .title("Story Manager")
+    WebviewWindowBuilder::new(&app, &window_label, url)
+        .title(format!("Story Manager - {}", project_name))
         .inner_size(800.0, 500.0)
         .min_inner_size(500.0, 300.0)
         .resizable(true)
@@ -221,12 +223,6 @@ pub fn open_story_manager(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to create story manager window: {}", e))?;
     
     Ok(())
-}
-
-/// Tauri command to open the story manager from frontend.
-#[tauri::command]
-pub fn open_story_manager_command(app: AppHandle) -> Result<(), String> {
-    open_story_manager(app)
 }
 
 /// Opens a new project window for a specific project.

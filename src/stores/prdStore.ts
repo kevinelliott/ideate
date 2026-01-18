@@ -259,6 +259,7 @@ export const usePrdStore = create<PrdState>((set, get) => ({
 listen<{ projectId?: string }>('request-story-list', async (event) => {
   const { useProjectStore } = await import('./projectStore')
   const { useBuildStore } = await import('./buildStore')
+  const { invoke } = await import('@tauri-apps/api/core')
   
   // Use requested projectId or fall back to active project
   const requestedProjectId = event.payload?.projectId
@@ -275,10 +276,52 @@ listen<{ projectId?: string }>('request-story-list', async (event) => {
   }
   
   const project = useProjectStore.getState().projects.find(p => p.id === targetProjectId)
-  const projectPrd = usePrdStore.getState().getProjectPrd(targetProjectId)
-  const storyStatuses = useBuildStore.getState().getProjectState(targetProjectId).storyStatuses
+  let projectPrd = usePrdStore.getState().projectPrds[targetProjectId]
   
-  const storiesWithStatus = projectPrd.stories.map(s => ({
+  // If PRD not loaded in memory, load from disk
+  if (!projectPrd && project?.path) {
+    try {
+      interface Prd {
+        project?: string
+        description?: string
+        branchName?: string
+        userStories?: Array<{
+          id: string
+          title: string
+          description: string
+          acceptanceCriteria: string[]
+          priority: number
+          passes: boolean
+          notes: string
+        }>
+      }
+      const prd = await invoke<Prd | null>('load_prd', { projectPath: project.path })
+      if (prd?.userStories) {
+        const stories = prd.userStories.map((s, index) => ({
+          id: s.id || `US-${String(index + 1).padStart(3, '0')}`,
+          title: s.title || '',
+          description: s.description || '',
+          acceptanceCriteria: s.acceptanceCriteria || [],
+          priority: s.priority ?? index + 1,
+          passes: s.passes ?? false,
+          notes: s.notes || '',
+        }))
+        usePrdStore.getState().setPrd(targetProjectId, stories, {
+          project: prd.project,
+          description: prd.description,
+          branchName: prd.branchName,
+        })
+        projectPrd = usePrdStore.getState().projectPrds[targetProjectId]
+      }
+    } catch (error) {
+      console.error('[prdStore] Failed to load PRD for story list:', error)
+    }
+  }
+  
+  const storyStatuses = useBuildStore.getState().getProjectState(targetProjectId).storyStatuses
+  const stories = projectPrd?.stories ?? []
+  
+  const storiesWithStatus = stories.map(s => ({
     id: s.id,
     title: s.title,
     status: storyStatuses[s.id] || (s.passes ? 'complete' : 'pending'),
