@@ -11,7 +11,7 @@ interface PreviewPanelProps {
 }
 
 const MIN_WIDTH = 200;
-const MAX_WIDTH = 800;
+const MAX_WIDTH = 1200;
 const COLLAPSED_WIDTH = 36;
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 125, 150, 200];

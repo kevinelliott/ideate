@@ -246,7 +246,7 @@ function ProcessDetail({ process, logs, onStop }: ProcessDetailProps) {
       <div 
         ref={scrollRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 bg-background space-y-1 font-mono text-sm"
+        className="flex-1 overflow-y-auto p-4 bg-background space-y-1 font-mono text-sm select-text"
       >
         {logs.length === 0 && (
           <div className="flex items-center justify-center h-full text-muted text-sm">
