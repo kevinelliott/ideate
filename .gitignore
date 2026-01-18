@@ -24,3 +24,4 @@ firebase-debug.log
 .env
 .env.local
 .env.*.local
+generated/
