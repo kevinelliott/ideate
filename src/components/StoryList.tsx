@@ -68,7 +68,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const handleSaveEdit = async (updates: Partial<Story>) => {
     if (editingStory) {
       updateStory(editingStory.id, updates);
-      await savePrd(projectPath);
+      await savePrd(projectId, projectPath);
     }
   };
 
@@ -82,7 +82,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
 
   const handleCreateStory = async (storyData: Omit<Story, "id">) => {
     addStory(storyData);
-    await savePrd(projectPath);
+    await savePrd(projectId, projectPath);
   };
 
   const handleDeleteStory = (story: Story) => {
@@ -92,7 +92,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const handleConfirmDelete = async () => {
     if (deletingStory) {
       removeStory(deletingStory.id);
-      await savePrd(projectPath);
+      await savePrd(projectId, projectPath);
       setDeletingStory(null);
     }
   };
@@ -164,7 +164,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
       const actualFromIndex = stories.findIndex((s) => s.id === draggedStoryId);
       const actualToIndex = stories.findIndex((s) => s.id === targetStory.id);
       reorderStories(actualFromIndex, actualToIndex);
-      await savePrd(projectPath);
+      await savePrd(projectId, projectPath);
     }
 
     setDraggedStoryId(null);

@@ -304,7 +304,7 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
 
     if (fromIndex !== -1 && toIndex !== -1) {
       reorderStories(fromIndex, toIndex);
-      await savePrd(project.path);
+      await savePrd(project.id, project.path);
     }
 
     setDraggedStoryId(null);

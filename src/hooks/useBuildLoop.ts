@@ -243,7 +243,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exitCode})`)
         setStoryStatus(projectId, story.id, 'complete')
         updateStory(story.id, { passes: true })
-        await savePrd(projectPath)
+        await savePrd(projectId, projectPath)
         
         // Discard snapshot on success
         if (snapshot) {
@@ -389,7 +389,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           appendLog(projectId, 'system', `✓ [Parallel] Story ${story.id} completed and merged`)
           setStoryStatus(projectId, story.id, 'complete')
           updateStory(story.id, { passes: true })
-          await savePrd(projectPath)
+          await savePrd(projectId, projectPath)
           const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
           if (prefs?.buildNotifications !== false) {
             notify.success('Story Complete', story.title)

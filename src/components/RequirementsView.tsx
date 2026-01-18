@@ -46,7 +46,7 @@ export function RequirementsView({ project }: RequirementsViewProps) {
   const handleSaveEdit = async (updates: Partial<Story>) => {
     if (editingStory) {
       updateStory(editingStory.id, updates);
-      await savePrd(project.path);
+      await savePrd(project.id, project.path);
     }
   };
 

@@ -36,7 +36,7 @@ interface PrdState {
   reorderStories: (fromIndex: number, toIndex: number) => void
   setStatus: (status: PrdStatus) => void
   selectStory: (id: string | null) => void
-  savePrd: (projectPath: string) => Promise<void>
+  savePrd: (projectId: string, projectPath: string) => Promise<void>
   getLoadedProjectId: () => string | null
 }
 
@@ -116,8 +116,17 @@ export const usePrdStore = create<PrdState>((set, get) => ({
     set({ selectedStoryId: id })
   },
 
-  savePrd: async (projectPath: string) => {
-    const { stories, metadata } = get()
+  savePrd: async (projectId: string, projectPath: string) => {
+    const { stories, metadata, loadedProjectId } = get()
+    
+    // Guard: refuse to save if the in-memory PRD belongs to a different project
+    if (loadedProjectId && loadedProjectId !== projectId) {
+      console.error(
+        `[prdStore] Refusing to save PRD: loadedProjectId=${loadedProjectId} does not match requested projectId=${projectId}`
+      )
+      return
+    }
+    
     try {
       const prd = {
         project: metadata.project,
@@ -126,7 +135,6 @@ export const usePrdStore = create<PrdState>((set, get) => ({
         userStories: stories,
       }
       await invoke('save_prd', { projectPath, prd })
-      console.log('PRD saved successfully')
     } catch (error) {
       console.error('Failed to save PRD:', error)
     }
@@ -187,7 +195,7 @@ listen<{
   // Save the PRD
   const project = useProjectStore.getState().projects.find(p => p.id === projectId)
   if (project?.path) {
-    await usePrdStore.getState().savePrd(project.path)
+    await usePrdStore.getState().savePrd(projectId, project.path)
   }
 }).catch((err) => {
   console.error('[prdStore] Failed to set up bulk-story-status-change listener:', err)
@@ -210,7 +218,7 @@ listen<{
   // Save the PRD
   const project = useProjectStore.getState().projects.find(p => p.id === projectId)
   if (project?.path) {
-    await usePrdStore.getState().savePrd(project.path)
+    await usePrdStore.getState().savePrd(projectId, project.path)
   }
 }).catch((err) => {
   console.error('[prdStore] Failed to set up bulk-story-delete listener:', err)
