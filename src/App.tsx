@@ -21,6 +21,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Lazy load modals - they are only shown on user interaction
 const NewProjectModal = lazy(() => import("./components/NewProjectModal").then(m => ({ default: m.NewProjectModal })));
+const ProjectWizard = lazy(() => import("./components/ProjectWizard").then(m => ({ default: m.ProjectWizard })));
 const ImportProjectModal = lazy(() => import("./components/ImportProjectModal").then(m => ({ default: m.ImportProjectModal })));
 const PermissionsModal = lazy(() => import("./components/PermissionsModal").then(m => ({ default: m.PermissionsModal })));
 const WelcomeGuideModal = lazy(() => import("./components/WelcomeGuideModal").then(m => ({ default: m.WelcomeGuideModal })));
@@ -67,6 +68,7 @@ function ModalFallback() {
 
 function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showProjectWizard, setShowProjectWizard] = useState(false);
   const [showImportProjectModal, setShowImportProjectModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
@@ -99,15 +101,16 @@ function App() {
   // Initialize PRD generation hook at App level so event listeners are always mounted
   usePrdGeneration();
 
-  const isAnyModalOpen = showNewProjectModal || showImportProjectModal || showPermissionsModal || showWelcomeGuide || showDisclaimer || showCommandPalette;
+  const isAnyModalOpen = showNewProjectModal || showProjectWizard || showImportProjectModal || showPermissionsModal || showWelcomeGuide || showDisclaimer || showCommandPalette;
 
   useKeyboardNavigation({
-    onNewProject: () => setShowNewProjectModal(true),
+    onNewProject: () => setShowProjectWizard(true),
     onOpenSettings: () => window.dispatchEvent(new CustomEvent('open-settings')),
     onOpenCommandPalette: () => setShowCommandPalette(true),
     isModalOpen: isAnyModalOpen,
     onCloseModal: () => {
       setShowNewProjectModal(false);
+      setShowProjectWizard(false);
       setShowImportProjectModal(false);
       setShowPermissionsModal(false);
       setShowWelcomeGuide(false);
@@ -294,6 +297,10 @@ function App() {
   };
 
   const handleNewProject = () => {
+    setShowProjectWizard(true);
+  };
+
+  const handleQuickAddProject = () => {
     setShowNewProjectModal(true);
   };
 
@@ -405,7 +412,7 @@ function App() {
   return (
     <div className="flex h-screen bg-background text-foreground">
       <ErrorBoundary>
-        <Sidebar onNewProject={handleNewProject} onImportProject={handleImportProject} />
+        <Sidebar onNewProject={handleNewProject} onQuickAddProject={handleQuickAddProject} onImportProject={handleImportProject} />
       </ErrorBoundary>
       <ErrorBoundary>
         <MainContent />
@@ -418,6 +425,12 @@ function App() {
             isOpen={showNewProjectModal}
             onClose={handleCloseNewProjectModal}
             onCreate={handleCreateProject}
+          />
+        )}
+        {showProjectWizard && (
+          <ProjectWizard
+            isOpen={showProjectWizard}
+            onClose={() => setShowProjectWizard(false)}
           />
         )}
         {showImportProjectModal && (

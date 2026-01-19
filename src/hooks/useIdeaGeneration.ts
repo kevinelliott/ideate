@@ -139,7 +139,8 @@ export function useIdeaGeneration() {
     type: GenerationType,
     title: string,
     summary: string,
-    currentDescription: string
+    currentDescription: string,
+    agentId?: string
   ): Promise<string | null> => {
     if (type === 'generate' && !title.trim()) {
       return null
@@ -153,7 +154,10 @@ export function useIdeaGeneration() {
     setGenerationType(type)
 
     try {
-      const plugin = defaultPlugins.find((p: AgentPlugin) => p.id === 'amp') || defaultPlugins[0]
+      // Use specified agent or fall back to amp, then first available
+      const plugin = agentId 
+        ? defaultPlugins.find((p: AgentPlugin) => p.id === agentId) || defaultPlugins[0]
+        : defaultPlugins.find((p: AgentPlugin) => p.id === 'amp') || defaultPlugins[0]
 
       if (!plugin) {
         throw new Error('No agent plugin configured')

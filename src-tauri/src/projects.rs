@@ -6,7 +6,7 @@ use std::process::Command;
 use tauri::{AppHandle, Manager};
 
 use crate::models::{
-    CostHistory, CreateProjectResult, Prd, ProjectConfig, ProjectSettings,
+    CostHistory, CreateProjectResult, Design, Prd, ProjectConfig, ProjectIdea, ProjectSettings,
     ProjectState, StoredProject,
 };
 use crate::utils::{get_ideate_dir, sanitize_json};
@@ -260,6 +260,174 @@ pub fn save_prd(project_path: String, prd: Prd) -> Result<(), String> {
         .map_err(|e| format!("Failed to write prd.json: {}", e))?;
     
     Ok(())
+}
+
+// ============================================================================
+// Project Idea Management
+// ============================================================================
+
+/// Loads the project idea from .ideate/idea.json
+#[tauri::command(rename_all = "camelCase")]
+pub fn load_project_idea(project_path: String) -> Result<Option<ProjectIdea>, String> {
+    let idea_path = get_ideate_dir(&project_path).join("idea.json");
+    
+    if !idea_path.exists() {
+        return Ok(None);
+    }
+    
+    let content = fs::read_to_string(&idea_path)
+        .map_err(|e| format!("Failed to read idea.json: {}", e))?;
+    
+    let idea: ProjectIdea = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse idea.json: {}", e))?;
+    
+    Ok(Some(idea))
+}
+
+/// Saves the project idea to .ideate/idea.json
+#[tauri::command(rename_all = "camelCase")]
+pub fn save_project_idea(project_path: String, idea: ProjectIdea) -> Result<(), String> {
+    let ideate_dir = get_ideate_dir(&project_path);
+    
+    if !ideate_dir.exists() {
+        fs::create_dir_all(&ideate_dir)
+            .map_err(|e| format!("Failed to create .ideate directory: {}", e))?;
+    }
+    
+    let idea_path = ideate_dir.join("idea.json");
+    
+    let idea_json = serde_json::to_string_pretty(&idea)
+        .map_err(|e| format!("Failed to serialize idea: {}", e))?;
+    
+    fs::write(&idea_path, idea_json)
+        .map_err(|e| format!("Failed to write idea.json: {}", e))?;
+    
+    Ok(())
+}
+
+// ============================================================================
+// Design Document Management
+// ============================================================================
+
+/// Loads the Design document for a project.
+#[tauri::command(rename_all = "camelCase")]
+pub fn load_design(project_path: String) -> Result<Option<Design>, String> {
+    let design_path = get_ideate_dir(&project_path).join("design.json");
+    
+    if !design_path.exists() {
+        return Ok(None);
+    }
+    
+    let content = fs::read_to_string(&design_path)
+        .map_err(|e| format!("Failed to read design.json: {}", e))?;
+    
+    // Sanitize the JSON before parsing (handles trailing commas, comments, etc.)
+    let sanitized = sanitize_json(&content);
+    
+    let design: Design = serde_json::from_str(&sanitized)
+        .map_err(|e| format!("Failed to parse design.json: {}", e))?;
+    
+    Ok(Some(design))
+}
+
+/// Saves the Design document for a project.
+#[tauri::command(rename_all = "camelCase")]
+pub fn save_design(project_path: String, design: Design) -> Result<(), String> {
+    let ideate_dir = get_ideate_dir(&project_path);
+    
+    if !ideate_dir.exists() {
+        fs::create_dir_all(&ideate_dir)
+            .map_err(|e| format!("Failed to create .ideate directory: {}", e))?;
+    }
+    
+    let design_path = ideate_dir.join("design.json");
+    
+    let design_json = serde_json::to_string_pretty(&design)
+        .map_err(|e| format!("Failed to serialize Design: {}", e))?;
+    
+    fs::write(&design_path, design_json)
+        .map_err(|e| format!("Failed to write design.json: {}", e))?;
+    
+    Ok(())
+}
+
+// ============================================================================
+// Utility Commands
+// ============================================================================
+
+/// Deletes a project directory and all its contents.
+#[tauri::command(rename_all = "camelCase")]
+pub fn delete_project_directory(path: String) -> Result<(), String> {
+    let project_dir = PathBuf::from(&path);
+    
+    if !project_dir.exists() {
+        return Err(format!("Directory '{}' does not exist", path));
+    }
+    
+    if !project_dir.is_dir() {
+        return Err(format!("'{}' is not a directory", path));
+    }
+    
+    fs::remove_dir_all(&project_dir)
+        .map_err(|e| format!("Failed to delete directory '{}': {}", path, e))?;
+    
+    Ok(())
+}
+
+/// Lists files in a directory (non-recursive).
+#[tauri::command(rename_all = "camelCase")]
+pub fn list_directory(path: String) -> Result<Vec<String>, String> {
+    let dir = PathBuf::from(&path);
+    
+    if !dir.exists() {
+        return Err(format!("Directory '{}' does not exist", path));
+    }
+    
+    if !dir.is_dir() {
+        return Err(format!("'{}' is not a directory", path));
+    }
+    
+    let mut files = Vec::new();
+    
+    for entry in fs::read_dir(&dir).map_err(|e| format!("Failed to read directory: {}", e))? {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        if let Some(name) = entry.file_name().to_str() {
+            files.push(name.to_string());
+        }
+    }
+    
+    files.sort();
+    Ok(files)
+}
+
+/// Checks if a directory exists at the given path.
+#[tauri::command(rename_all = "camelCase")]
+pub fn check_directory_exists(path: String) -> Result<bool, String> {
+    let path = PathBuf::from(&path);
+    Ok(path.exists() && path.is_dir())
+}
+
+/// Checks if a command exists in the system PATH.
+#[tauri::command(rename_all = "camelCase")]
+pub fn check_command_exists(command: String) -> Result<bool, String> {
+    let result = Command::new("which")
+        .arg(&command)
+        .output();
+    
+    match result {
+        Ok(output) => Ok(output.status.success()),
+        Err(_) => {
+            // Fallback for Windows
+            let result = Command::new("where")
+                .arg(&command)
+                .output();
+            
+            match result {
+                Ok(output) => Ok(output.status.success()),
+                Err(_) => Ok(false),
+            }
+        }
+    }
 }
 
 // ============================================================================

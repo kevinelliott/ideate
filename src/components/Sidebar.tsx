@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { useProjectStore, type ProjectStatus, type Project } from '../stores/projectStore'
 import { useBuildStore } from '../stores/buildStore'
 import { usePrdStore } from '../stores/prdStore'
@@ -15,6 +16,7 @@ import { notify } from '../utils/notify'
 
 interface SidebarProps {
   onNewProject: () => void;
+  onQuickAddProject: () => void;
   onImportProject: () => void;
 }
 
@@ -73,7 +75,7 @@ interface ContextMenuState {
   y: number
 }
 
-export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
+export function Sidebar({ onNewProject, onQuickAddProject, onImportProject }: SidebarProps) {
   const projects = useProjectStore((state) => state.projects)
   const activeProjectId = useProjectStore((state) => state.activeProjectId)
   const setActiveProject = useProjectStore((state) => state.setActiveProject)
@@ -145,10 +147,12 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     isOpen: boolean
     projectId: string
     projectName: string
+    projectPath: string
   }>({
     isOpen: false,
     projectId: '',
     projectName: '',
+    projectPath: '',
   })
 
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null)
@@ -306,13 +310,18 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
   }
 
   const handleDelete = () => {
-    if (contextMenu.project) {
-      setDeleteModal({
-        isOpen: true,
-        projectId: contextMenu.project.id,
-        projectName: contextMenu.project.name,
-      })
+    if (!contextMenu.project) {
+      console.error('handleDelete called but contextMenu.project is null')
+      return
     }
+    
+    const { id, name, path } = contextMenu.project
+    setDeleteModal({
+      isOpen: true,
+      projectId: id,
+      projectName: name,
+      projectPath: path,
+    })
   }
 
   const handleSaveInlineRename = () => {
@@ -338,9 +347,10 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
     }
   }
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async (deleteFromDisk: boolean) => {
     const projectIdToDelete = deleteModal.projectId
     const projectName = deleteModal.projectName
+    const projectPath = deleteModal.projectPath
     
     // Clear the PRD for this project
     clearPrd(projectIdToDelete)
@@ -355,9 +365,20 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
       return next
     })
     
+    // Delete from disk if requested
+    if (deleteFromDisk && projectPath) {
+      try {
+        await invoke('delete_project_directory', { path: projectPath })
+        notify.success('Project deleted', `${projectName} and all files removed`)
+      } catch (error) {
+        notify.error('Failed to delete files', String(error))
+      }
+    } else {
+      notify.success('Project removed', projectName)
+    }
+    
     removeProject(projectIdToDelete)
-    setDeleteModal({ isOpen: false, projectId: '', projectName: '' })
-    notify.success('Project removed', projectName)
+    setDeleteModal({ isOpen: false, projectId: '', projectName: '', projectPath: '' })
   }
 
   const canStartBuild = (projectId: string) => {
@@ -625,10 +646,10 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
               </svg>
             </button>
             <button
-              onClick={onNewProject}
+              onClick={onQuickAddProject}
               className="no-drag w-6 h-6 flex items-center justify-center rounded-md hover:bg-card transition-colors"
-              aria-label="New Project"
-              title="Create new project"
+              aria-label="Quick Add Project"
+              title="Quick add project (no wizard)"
             >
               <svg 
                 className="w-4 h-4 text-secondary" 
@@ -639,8 +660,28 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
                 <path 
                   strokeLinecap="round" 
                   strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 4v16m8-8H4" 
+                  strokeWidth={1.5} 
+                  d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" 
+                />
+              </svg>
+            </button>
+            <button
+              onClick={onNewProject}
+              className="no-drag w-6 h-6 flex items-center justify-center rounded-md hover:bg-card transition-colors"
+              aria-label="New Project Wizard"
+              title="Create new project with wizard"
+            >
+              <svg 
+                className="w-4 h-4 text-secondary" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={1.5} 
+                  d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" 
                 />
               </svg>
             </button>
@@ -1035,8 +1076,9 @@ export function Sidebar({ onNewProject, onImportProject }: SidebarProps) {
       <DeleteProjectModal
         isOpen={deleteModal.isOpen}
         projectName={deleteModal.projectName}
+        projectPath={deleteModal.projectPath}
         onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteModal({ isOpen: false, projectId: '', projectName: '' })}
+        onCancel={() => setDeleteModal({ isOpen: false, projectId: '', projectName: '', projectPath: '' })}
       />
 
       <SettingsModal

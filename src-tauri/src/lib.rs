@@ -9,6 +9,7 @@ mod integrations;
 mod macos;
 mod models;
 mod preferences;
+mod preview_server;
 mod process;
 mod projects;
 mod terminal;
@@ -133,6 +134,14 @@ pub fn run() {
             projects::save_projects,
             projects::load_prd,
             projects::save_prd,
+            projects::load_project_idea,
+            projects::save_project_idea,
+            projects::load_design,
+            projects::save_design,
+            projects::check_command_exists,
+            projects::check_directory_exists,
+            projects::delete_project_directory,
+            projects::list_directory,
             projects::load_project_settings,
             projects::save_project_settings,
             projects::load_project_state,
@@ -203,7 +212,11 @@ pub fn run() {
             utils::write_binary_file,
             utils::list_project_files,
             utils::read_project_file,
-            utils::reveal_in_file_manager
+            utils::reveal_in_file_manager,
+            // Preview server
+            preview_server::start_preview_server,
+            preview_server::stop_preview_server,
+            preview_server::get_preview_server_info
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -211,6 +224,8 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 // Kill all spawned processes when the app exits
                 process::kill_all_processes();
+                // Stop all preview servers
+                preview_server::stop_all_servers();
             }
         });
 }

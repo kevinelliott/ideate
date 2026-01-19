@@ -64,6 +64,15 @@ pub struct Story {
     pub notes: String,
 }
 
+/// Project idea - stored in .ideate/idea.json
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectIdea {
+    pub title: String,
+    pub summary: String,
+    pub description: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Prd {
@@ -80,6 +89,92 @@ pub struct Prd {
 #[serde(rename_all = "camelCase")]
 pub struct StoryRetryInfo {
     pub retry_count: i32,
+}
+
+// ============================================================================
+// Design Document Models
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignComponent {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub responsibilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignArchitecture {
+    #[serde(default)]
+    pub overview: Option<String>,
+    #[serde(default)]
+    pub components: Vec<DesignComponent>,
+    #[serde(default)]
+    pub data_flow: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignTechStack {
+    #[serde(default)]
+    pub frontend: Vec<String>,
+    #[serde(default)]
+    pub backend: Vec<String>,
+    #[serde(default)]
+    pub database: Vec<String>,
+    #[serde(default)]
+    pub infrastructure: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignApiEndpoint {
+    pub endpoint: String,
+    pub method: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignDataModel {
+    pub name: String,
+    #[serde(default)]
+    pub fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignConsiderations {
+    #[serde(default)]
+    pub security: Vec<String>,
+    #[serde(default)]
+    pub performance: Vec<String>,
+    #[serde(default)]
+    pub scalability: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Design {
+    pub project: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub generated_at: Option<String>,
+    #[serde(default)]
+    pub architecture: Option<DesignArchitecture>,
+    #[serde(default)]
+    pub tech_stack: Option<DesignTechStack>,
+    #[serde(default)]
+    pub file_structure: Option<String>,
+    #[serde(default)]
+    pub api_design: Vec<DesignApiEndpoint>,
+    #[serde(default)]
+    pub data_models: Vec<DesignDataModel>,
+    #[serde(default)]
+    pub considerations: Option<DesignConsiderations>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -342,6 +437,14 @@ pub struct Preferences {
     pub max_cost_per_build: Option<f64>,
     #[serde(default = "default_warn_on_large_story")]
     pub warn_on_large_story: bool,
+    #[serde(default)]
+    pub ideas_agent: Option<String>,
+    #[serde(default)]
+    pub prd_agent: Option<String>,
+    #[serde(default)]
+    pub specs_agent: Option<String>,
+    #[serde(default)]
+    pub design_agent: Option<String>,
 }
 
 fn default_warn_on_large_story() -> bool {
@@ -401,6 +504,10 @@ impl Default for Preferences {
             max_tokens_per_story: None,
             max_cost_per_build: None,
             warn_on_large_story: default_warn_on_large_story(),
+            ideas_agent: None,
+            prd_agent: None,
+            specs_agent: None,
+            design_agent: None,
         }
     }
 }

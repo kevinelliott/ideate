@@ -423,6 +423,126 @@ For example:
 
 Check package.json for the dev/start script and the framework being used to determine the correct port.`,
   },
+
+  specsGeneration: {
+    id: "specsGeneration",
+    name: "Technical Specifications",
+    description: "Generates technical design specifications from project requirements",
+    category: "prd",
+    variables: ["{{projectName}}", "{{description}}", "{{stories}}"],
+    defaultPrompt: `You are a software architect. Create a technical design document for this project.
+
+PROJECT: {{projectName}}
+DESCRIPTION: {{description}}
+
+USER STORIES:
+{{stories}}
+
+Generate a design.json file in the .ideate/ folder with this structure:
+{
+  "project": "{{projectName}}",
+  "version": "1.0.0",
+  "generatedAt": "ISO timestamp",
+  "architecture": {
+    "overview": "High-level architecture description",
+    "components": [
+      {
+        "name": "Component Name",
+        "description": "What this component does",
+        "responsibilities": ["Responsibility 1", "Responsibility 2"]
+      }
+    ],
+    "dataFlow": "Description of how data flows through the system"
+  },
+  "techStack": {
+    "frontend": ["React", "TypeScript"],
+    "backend": ["Node.js"],
+    "database": ["PostgreSQL"],
+    "infrastructure": ["Docker"]
+  },
+  "fileStructure": "src/\\n  components/\\n  hooks/\\n  stores/\\n  utils/",
+  "apiDesign": [
+    {
+      "endpoint": "/api/resource",
+      "method": "GET",
+      "description": "Get all resources"
+    }
+  ],
+  "dataModels": [
+    {
+      "name": "User",
+      "fields": ["id: string", "email: string", "name: string"]
+    }
+  ],
+  "considerations": {
+    "security": ["Authentication required", "Input validation"],
+    "performance": ["Caching strategy", "Lazy loading"],
+    "scalability": ["Horizontal scaling", "Database indexing"]
+  }
+}
+
+IMPORTANT: Only create the .ideate/design.json file. Do not implement any code.`,
+  },
+
+  designGeneration: {
+    id: "designGeneration",
+    name: "Design Document Generation",
+    description: "Generates technical design specifications from project requirements (legacy)",
+    category: "prd",
+    variables: ["{{projectName}}", "{{description}}", "{{stories}}"],
+    defaultPrompt: `You are a software architect. Create a technical design document for this project.
+
+PROJECT: {{projectName}}
+DESCRIPTION: {{description}}
+
+USER STORIES:
+{{stories}}
+
+Generate a design.json file in the .ideate/ folder with this structure:
+{
+  "project": "{{projectName}}",
+  "version": "1.0.0",
+  "generatedAt": "ISO timestamp",
+  "architecture": {
+    "overview": "High-level architecture description",
+    "components": [
+      {
+        "name": "Component Name",
+        "description": "What this component does",
+        "responsibilities": ["Responsibility 1", "Responsibility 2"]
+      }
+    ],
+    "dataFlow": "Description of how data flows through the system"
+  },
+  "techStack": {
+    "frontend": ["React", "TypeScript"],
+    "backend": ["Node.js"],
+    "database": ["PostgreSQL"],
+    "infrastructure": ["Docker"]
+  },
+  "fileStructure": "src/\\n  components/\\n  hooks/\\n  stores/\\n  utils/",
+  "apiDesign": [
+    {
+      "endpoint": "/api/resource",
+      "method": "GET",
+      "description": "Get all resources"
+    }
+  ],
+  "dataModels": [
+    {
+      "name": "User",
+      "fields": ["id: string", "email: string", "name: string"]
+    }
+  ],
+  "considerations": {
+    "security": ["Authentication required", "Input validation"],
+    "performance": ["Caching strategy", "Lazy loading"],
+    "scalability": ["Horizontal scaling", "Database indexing"]
+  }
+}
+
+IMPORTANT: Only create the .ideate/design.json file. Do not implement any code.`,
+  },
 };
 
 export type PromptOverrides = Record<string, string>;

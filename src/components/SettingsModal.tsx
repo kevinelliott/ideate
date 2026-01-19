@@ -23,6 +23,10 @@ interface Preferences {
   maxTokensPerStory: number | null;
   maxCostPerBuild: number | null;
   warnOnLargeStory: boolean;
+  ideasAgent: string | null;
+  prdAgent: string | null;
+  specsAgent: string | null;
+  designAgent: string | null;
 }
 
 interface AgentModel {
@@ -78,6 +82,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [maxCostPerBuild, setMaxCostPerBuild] = useState<number | null>(null);
   const [warnOnLargeStory, setWarnOnLargeStory] = useState<boolean>(true);
   
+  // Wizard agent defaults
+  const [ideasAgent, setIdeasAgent] = useState<string | null>(null);
+  const [prdAgent, setPrdAgent] = useState<string | null>(null);
+  const [specsAgent, setSpecsAgent] = useState<string | null>(null);
+  const [designAgent, setDesignAgent] = useState<string | null>(null);
+  
   // Agent detection state
   const [agentStatuses, setAgentStatuses] = useState<AgentPluginStatus[]>([]);
   const [isDetectingAgents, setIsDetectingAgents] = useState(false);
@@ -101,14 +111,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setActiveTab("general");
       setEditingPromptId(null);
       setIconChanged(false);
+      // Detect agents on modal open for wizard defaults section
+      if (agentStatuses.length === 0) {
+        detectAgents();
+      }
     }
   }, [isOpen, loadIntegrationsConfig]);
-
-  useEffect(() => {
-    if (isOpen && activeTab === "agents" && agentStatuses.length === 0) {
-      detectAgents();
-    }
-  }, [isOpen, activeTab]);
 
   // Check OutRay auth status when integrations tab is active and OutRay is enabled
   useEffect(() => {
@@ -176,6 +184,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setMaxTokensPerStory(prefs.maxTokensPerStory ?? null);
         setMaxCostPerBuild(prefs.maxCostPerBuild ?? null);
         setWarnOnLargeStory(prefs.warnOnLargeStory ?? true);
+        setIdeasAgent(prefs.ideasAgent ?? null);
+        setPrdAgent(prefs.prdAgent ?? null);
+        setSpecsAgent(prefs.specsAgent ?? null);
+        setDesignAgent(prefs.designAgent ?? null);
       }
       setIsDirty(false);
     } catch (error) {
@@ -215,6 +227,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         maxTokensPerStory,
         maxCostPerBuild,
         warnOnLargeStory,
+        ideasAgent,
+        prdAgent,
+        specsAgent,
+        designAgent,
       };
       await invoke("save_preferences", { preferences: prefs });
       setIsDirty(false);
@@ -785,6 +801,106 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         }`}
                       />
                     </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Wizard Defaults Section */}
+              <section>
+                <h3 className="text-sm font-medium text-secondary uppercase tracking-wider mb-3">
+                  Wizard Defaults
+                </h3>
+                <p className="text-xs text-muted mb-4">
+                  Configure which agents are used for each step in the Project Wizard. 
+                  Leave as "Auto" to use the best available agent for each task.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Ideas Agent</label>
+                    <select
+                      value={ideasAgent || ""}
+                      onChange={(e) => {
+                        setIdeasAgent(e.target.value || null);
+                        setIsDirty(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                    >
+                      <option value="">Auto (Claude Code if available)</option>
+                      {availableAgents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted mt-1">
+                      Agent used for generating and refining idea descriptions.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Plans / PRD Agent</label>
+                    <select
+                      value={prdAgent || ""}
+                      onChange={(e) => {
+                        setPrdAgent(e.target.value || null);
+                        setIsDirty(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                    >
+                      <option value="">Auto (Amp if available)</option>
+                      {availableAgents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted mt-1">
+                      Agent used for generating Product Requirements Documents and user stories.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Architecture & Technical Specs Agent</label>
+                    <select
+                      value={specsAgent || ""}
+                      onChange={(e) => {
+                        setSpecsAgent(e.target.value || null);
+                        setIsDirty(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                    >
+                      <option value="">Auto (Amp with Oracle if available)</option>
+                      {availableAgents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted mt-1">
+                      Agent used for generating technical specifications. Amp uses the Oracle for deeper analysis.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-foreground mb-2">Visual Design Agent</label>
+                    <select
+                      value={designAgent || ""}
+                      onChange={(e) => {
+                        setDesignAgent(e.target.value || null);
+                        setIsDirty(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                    >
+                      <option value="">Auto (Gemini 3 Pro Preview if available)</option>
+                      {availableAgents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted mt-1">
+                      Agent used for generating visual design prototypes and mockups.
+                    </p>
                   </div>
                 </div>
               </section>

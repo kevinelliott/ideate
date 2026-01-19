@@ -1090,6 +1090,36 @@ export function usePrdGeneration() {
     };
   }, [generatePrdFromCodebase]);
 
+  // Handle wizard PRD generation events
+  useEffect(() => {
+    const handleWizardGeneratePrd = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        projectId: string;
+        projectName: string;
+        projectPath: string;
+        ideaTitle: string;
+        ideaSummary: string;
+        ideaDescription: string;
+        agentId?: string;
+      }>;
+      const { projectId, projectName, projectPath, ideaTitle, ideaSummary, ideaDescription, agentId } = customEvent.detail;
+      generatePrdFromIdea(
+        projectId,
+        projectName,
+        projectPath,
+        ideaTitle,
+        ideaSummary,
+        ideaDescription,
+        { agentId, breakdownStories: false, startBuildAfterPrd: false }
+      );
+    };
+
+    window.addEventListener("wizard-generate-prd", handleWizardGeneratePrd);
+    return () => {
+      window.removeEventListener("wizard-generate-prd", handleWizardGeneratePrd);
+    };
+  }, [generatePrdFromIdea]);
+
   return {
     generatePrd,
     generatePrdFromCodebase,
