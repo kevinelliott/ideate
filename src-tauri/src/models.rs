@@ -44,6 +44,8 @@ pub struct StoredProject {
     pub path: String,
     pub status: String,
     pub created_at: String,
+    #[serde(default)]
+    pub stack_id: Option<String>,
 }
 
 // ============================================================================
@@ -521,4 +523,43 @@ impl Default for Preferences {
 pub struct RecentThreadDuration {
     pub thread_id: Option<String>,
     pub duration_ms: i64,
+}
+
+// ============================================================================
+// Stacks Models
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StackTool {
+    pub name: String,
+    pub category: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub website: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Stack {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub tools: Vec<StackTool>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub is_builtin: bool,
+    #[serde(default)]
+    pub is_published: bool,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }

@@ -12,6 +12,7 @@ mod preferences;
 mod preview_server;
 mod process;
 mod projects;
+mod stacks;
 mod terminal;
 mod ui_state;
 mod usage;
@@ -124,6 +125,12 @@ pub fn run() {
             });
 
             macos::set_app_name();
+            
+            // Disable native fullscreen on macOS to prevent crash during fullscreen transition
+            // This is a workaround for a bug in tao/macOS 26 where the fullscreen transition
+            // crashes when trying to capture a window snapshot
+            macos::disable_native_fullscreen(&app.handle());
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -204,6 +211,12 @@ pub fn run() {
             worktree::rollback_story_changes,
             worktree::discard_story_snapshot,
             worktree::get_story_diff,
+            // Git commit/rollback for stories
+            worktree::check_git_initialized,
+            worktree::init_git_repo,
+            worktree::git_commit_story,
+            worktree::git_rollback_last_commit,
+            worktree::git_discard_changes,
             // Conflict resolution
             worktree::analyze_merge_conflicts,
             worktree::merge_with_resolutions,
@@ -216,7 +229,11 @@ pub fn run() {
             // Preview server
             preview_server::start_preview_server,
             preview_server::stop_preview_server,
-            preview_server::get_preview_server_info
+            preview_server::get_preview_server_info,
+            // Stacks
+            stacks::load_stacks,
+            stacks::save_stacks,
+            stacks::delete_stack
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

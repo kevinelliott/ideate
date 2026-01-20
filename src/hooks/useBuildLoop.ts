@@ -246,7 +246,22 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
         updateStory(projectId, story.id, { passes: true })
         await savePrd(projectId, projectPath)
         
-        // Discard snapshot on success
+        // Commit changes after successful story (if git is available)
+        try {
+          const isGitRepo = await invoke<boolean>('check_git_initialized', { projectPath })
+          if (isGitRepo) {
+            const commitHash = await invoke<string>('git_commit_story', {
+              projectPath,
+              storyId: story.id,
+              storyTitle: story.title,
+            })
+            appendLog(projectId, 'system', `✓ Committed changes: ${commitHash.substring(0, 7)}`)
+          }
+        } catch (commitError) {
+          appendLog(projectId, 'system', `Warning: Could not commit changes: ${commitError}`)
+        }
+        
+        // Discard snapshot on success (legacy cleanup)
         if (snapshot) {
           try {
             await invoke('discard_story_snapshot', {
@@ -270,7 +285,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           ? 'agent error detected in output' 
           : `exit code: ${waitResult.exitCode}`
         appendLog(projectId, 'system', `✗ Story ${story.id} failed (${failReason})`)
-        appendLog(projectId, 'system', `  Rollback available - use the Rollback button to revert changes`)
+        appendLog(projectId, 'system', `  Rollback available - use the Rollback button to discard uncommitted changes`)
         setStoryStatus(projectId, story.id, 'failed')
         const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
         if (prefs?.buildNotifications !== false) {
@@ -391,6 +406,22 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
           setStoryStatus(projectId, story.id, 'complete')
           updateStory(projectId, story.id, { passes: true })
           await savePrd(projectId, projectPath)
+          
+          // Commit changes after successful parallel story merge
+          try {
+            const isGitRepo = await invoke<boolean>('check_git_initialized', { projectPath })
+            if (isGitRepo) {
+              const commitHash = await invoke<string>('git_commit_story', {
+                projectPath,
+                storyId: story.id,
+                storyTitle: story.title,
+              })
+              appendLog(projectId, 'system', `✓ [Parallel] Committed changes: ${commitHash.substring(0, 7)}`)
+            }
+          } catch (commitError) {
+            appendLog(projectId, 'system', `Warning: Could not commit changes: ${commitError}`)
+          }
+          
           const prefs = await invoke<GlobalPreferences | null>('load_preferences').catch(() => null)
           if (prefs?.buildNotifications !== false) {
             notify.success('Story Complete', story.title)

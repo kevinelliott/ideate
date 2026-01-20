@@ -220,8 +220,11 @@ export function usePrdGeneration() {
           
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(activeProjectId, stories, metadata, setPrd, appendLog);
+          
+          // Always set status to ready - the PRD was generated successfully even if project switched
+          setStatus(activeProjectId, "ready");
+          
           if (applied) {
-            setStatus(activeProjectId, "ready");
             appendLog(
               activeProjectId,
               "system",
@@ -397,8 +400,11 @@ export function usePrdGeneration() {
           
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
+          
+          // Always set status to ready - the PRD was generated successfully even if project switched
+          setStatus(projectId, "ready");
+          
           if (applied) {
-            setStatus(projectId, "ready");
             appendLog(
               projectId,
               "system",
@@ -588,8 +594,11 @@ export function usePrdGeneration() {
           
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
+          
+          // Always set status to ready - the PRD was generated successfully even if project switched
+          setStatus(projectId, "ready");
+          
           if (applied) {
-            setStatus(projectId, "ready");
             appendLog(
               projectId,
               "system",
@@ -782,9 +791,11 @@ export function usePrdGeneration() {
 
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
-          if (applied) {
-            setStatus(projectId, "ready");
+          
+          // Always set status to ready - the PRD was generated successfully even if project switched
+          setStatus(projectId, "ready");
 
+          if (applied) {
             const delta = stories.length - initialCount;
             if (delta > 0) {
               appendLog(
@@ -990,48 +1001,50 @@ export function usePrdGeneration() {
           
           // Guard: only apply PRD if this project is still active
           const applied = safeSetPrd(projectId, stories, metadata, setPrd, appendLog);
-          if (applied) {
+          
+          appendLog(
+            projectId,
+            "system",
+            `PRD generated with ${stories.length} user stories from idea`,
+          );
+
+          if (shouldBreakdown) {
+            appendLog(projectId, "system", "");
             appendLog(
               projectId,
               "system",
-              `PRD generated with ${stories.length} user stories from idea`,
+              "--- Starting Story Breakdown Pass ---",
             );
-
-            if (shouldBreakdown) {
-              appendLog(projectId, "system", "");
+            const breakdownSuccess = await breakdownStories(
+              projectId,
+              projectName,
+              projectPath,
+              agentId,
+            );
+            if (!breakdownSuccess) {
               appendLog(
                 projectId,
                 "system",
-                "--- Starting Story Breakdown Pass ---",
+                "Story breakdown failed, but initial PRD is available",
               );
-              const breakdownSuccess = await breakdownStories(
-                projectId,
-                projectName,
-                projectPath,
-                agentId,
-              );
-              if (!breakdownSuccess) {
-                appendLog(
-                  projectId,
-                  "system",
-                  "Story breakdown failed, but initial PRD is available",
-                );
-              }
-            } else {
+              // Set status to ready since initial PRD is valid
               setStatus(projectId, "ready");
             }
-            
-            // Start the build if requested
-            if (shouldStartBuild) {
-              appendLog(projectId, "system", "");
-              appendLog(projectId, "system", "Starting build as requested...");
-              // Dispatch event to trigger build loop
-              window.dispatchEvent(
-                new CustomEvent("sidebar-start-build", {
-                  detail: { projectId },
-                })
-              );
-            }
+            // breakdownStories sets status to ready on success
+          } else {
+            setStatus(projectId, "ready");
+          }
+          
+          // Start the build if requested (only if PRD was applied to current view)
+          if (applied && shouldStartBuild) {
+            appendLog(projectId, "system", "");
+            appendLog(projectId, "system", "Starting build as requested...");
+            // Dispatch event to trigger build loop
+            window.dispatchEvent(
+              new CustomEvent("sidebar-start-build", {
+                detail: { projectId },
+              })
+            );
           }
 
           return true;

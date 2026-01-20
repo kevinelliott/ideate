@@ -6,6 +6,8 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
+use crate::macos;
+
 /// Panel state for a single project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -185,6 +187,9 @@ pub fn open_process_viewer(app: AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| format!("Failed to create process viewer window: {}", e))?;
     
+    // Disable native fullscreen for new window to prevent macOS crash
+    macos::disable_native_fullscreen_for_new_window();
+    
     Ok(())
 }
 
@@ -222,6 +227,9 @@ pub fn open_story_manager_command(app: AppHandle, project_id: String, project_na
         .build()
         .map_err(|e| format!("Failed to create story manager window: {}", e))?;
     
+    // Disable native fullscreen for new window to prevent macOS crash
+    macos::disable_native_fullscreen_for_new_window();
+    
     Ok(())
 }
 
@@ -248,6 +256,9 @@ pub fn open_project_window(app: AppHandle, project_id: String, project_name: Str
         .resizable(true)
         .build()
         .map_err(|e| format!("Failed to create project window: {}", e))?;
+    
+    // Disable native fullscreen for new window to prevent macOS crash
+    macos::disable_native_fullscreen_for_new_window();
     
     Ok(())
 }

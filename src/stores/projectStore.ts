@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 
 export type ProjectStatus = 'idle' | 'generating' | 'ready' | 'error'
-export type ProjectPage = 'overview' | 'requirements' | 'build-status' | 'process-history'
+export type ProjectPage = 'overview' | 'requirements' | 'specifications' | 'design' | 'build-status' | 'process-history'
 
 export interface Project {
   id: string
@@ -11,6 +11,7 @@ export interface Project {
   path: string
   status: ProjectStatus
   createdAt: string
+  stackId?: string
 }
 
 interface ProjectState {
@@ -36,6 +37,8 @@ interface ProjectState {
   showProjectOverview: (projectId: string) => void
   hideProjectOverview: () => void
   showRequirements: (projectId: string) => void
+  showSpecifications: (projectId: string) => void
+  showDesign: (projectId: string) => void
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -183,6 +186,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       buildStatusProjectId: null,
       processHistoryProjectId: null,
       projectPages: { ...state.projectPages, [projectId]: 'requirements' },
+    }))
+  },
+
+  showSpecifications: (projectId) => {
+    set((state) => ({
+      activeProjectId: projectId,
+      projectOverviewProjectId: null,
+      buildStatusProjectId: null,
+      processHistoryProjectId: null,
+      projectPages: { ...state.projectPages, [projectId]: 'specifications' },
+    }))
+  },
+
+  showDesign: (projectId) => {
+    set((state) => ({
+      activeProjectId: projectId,
+      projectOverviewProjectId: null,
+      buildStatusProjectId: null,
+      processHistoryProjectId: null,
+      projectPages: { ...state.projectPages, [projectId]: 'design' },
     }))
   },
 }))

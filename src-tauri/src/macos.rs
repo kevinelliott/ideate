@@ -132,3 +132,85 @@ pub fn apply_icon_from_preferences(app: &AppHandle) {
         set_app_icon(&prefs.app_icon);
     }
 }
+
+/// Disables native fullscreen for all windows on macOS to prevent crashes.
+/// 
+/// On macOS 26 (Tahoe), the native fullscreen transition causes a crash when the system
+/// tries to capture a window snapshot. This is due to a null pointer being passed to
+/// CFStringCreateWithCString during the window capture process.
+/// 
+/// This function disables the fullscreen collection behavior on the window, which removes
+/// the green fullscreen button's native behavior. Users can still use View > Enter Full Screen
+/// from the menu, which uses simple fullscreen instead.
+#[cfg(target_os = "macos")]
+pub fn disable_native_fullscreen(app: &AppHandle) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSWindowCollectionBehavior};
+
+    // Use a slight delay to ensure windows are fully initialized
+    // The dispatch queue async already defers execution, and we add an additional
+    // delayed dispatch to catch windows that are created during app setup
+    for delay_ms in [0, 100, 500] {
+        dispatch::Queue::main().exec_after(
+            std::time::Duration::from_millis(delay_ms),
+            move || {
+                let Some(mtm) = MainThreadMarker::new() else {
+                    return;
+                };
+
+                let ns_app = NSApplication::sharedApplication(mtm);
+                
+                // Iterate through all windows and disable fullscreen collection behavior
+                for window in ns_app.windows().iter() {
+                    // Get current behavior and remove fullscreen capability
+                    let behavior = window.collectionBehavior();
+                    let new_behavior = behavior.difference(NSWindowCollectionBehavior::FullScreenPrimary);
+                    let new_behavior = new_behavior.difference(NSWindowCollectionBehavior::FullScreenAuxiliary);
+                    window.setCollectionBehavior(new_behavior);
+                }
+            }
+        );
+    }
+    
+    // Suppress unused warning
+    let _ = app;
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn disable_native_fullscreen(_app: &AppHandle) {
+    // No-op on non-macOS platforms
+}
+
+/// Call this after creating a new window to disable its native fullscreen button.
+/// This is needed because windows created after app startup won't be affected by
+/// the initial disable_native_fullscreen call.
+#[cfg(target_os = "macos")]
+pub fn disable_native_fullscreen_for_new_window() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSWindowCollectionBehavior};
+
+    // Use a slight delay to ensure the window is fully initialized
+    dispatch::Queue::main().exec_after(
+        std::time::Duration::from_millis(50),
+        move || {
+            let Some(mtm) = MainThreadMarker::new() else {
+                return;
+            };
+
+            let ns_app = NSApplication::sharedApplication(mtm);
+            
+            // Apply to all windows (simpler than tracking which is new)
+            for window in ns_app.windows().iter() {
+                let behavior = window.collectionBehavior();
+                let new_behavior = behavior.difference(NSWindowCollectionBehavior::FullScreenPrimary);
+                let new_behavior = new_behavior.difference(NSWindowCollectionBehavior::FullScreenAuxiliary);
+                window.setCollectionBehavior(new_behavior);
+            }
+        }
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn disable_native_fullscreen_for_new_window() {
+    // No-op on non-macOS platforms
+}

@@ -12,6 +12,7 @@ import { useIdeasStore } from "./stores/ideasStore";
 import { usePanelStore } from "./stores/panelStore";
 import { useProcessStore } from "./stores/processStore";
 import { useIntegrationsStore } from "./stores/integrationsStore";
+import { useStacksStore } from "./stores/stacksStore";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 import { useWindowState } from "./hooks/useWindowState";
 import { usePrdGeneration } from "./hooks/usePrdGeneration";
@@ -120,6 +121,7 @@ function App() {
 
   const loadIdeas = useIdeasStore((state) => state.loadIdeas);
   const loadIntegrationsConfig = useIntegrationsStore((state) => state.loadConfig);
+  const loadStacks = useStacksStore((state) => state.loadStacks);
 
   useEffect(() => {
     loadProjects();
@@ -128,6 +130,7 @@ function App() {
     loadIdeas();
     loadPanelStates();
     loadIntegrationsConfig();
+    loadStacks();
     
     // Load preferences to set default agent and check first-run
     invoke<Preferences | null>("load_preferences")
@@ -150,7 +153,7 @@ function App() {
         setShowDisclaimer(true);
         setPreferencesLoaded(true);
       });
-  }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas, loadPanelStates, loadIntegrationsConfig]);
+  }, [loadProjects, loadTheme, setDefaultAgentId, loadPromptOverrides, loadIdeas, loadPanelStates, loadIntegrationsConfig, loadStacks]);
 
   // If this window was opened for a specific project, set it as active once projects are loaded
   useEffect(() => {

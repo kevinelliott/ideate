@@ -5,6 +5,7 @@ import { getTheme } from "../themes";
 import { useModalKeyboard } from "../hooks/useModalKeyboard";
 import { DEFAULT_PROMPTS, PROMPT_CATEGORIES, getPromptsByCategory, type PromptCategory } from "../utils/prompts";
 import { useIntegrationsStore, type OutRayConfig } from "../stores/integrationsStore";
+import { StacksSettingsTab } from "./StacksSettingsTab";
 
 interface Preferences {
   defaultAgent: string | null;
@@ -58,7 +59,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = "general" | "agents" | "prompts" | "integrations";
+type SettingsTab = "general" | "agents" | "prompts" | "integrations" | "stacks";
 type AppIconVariant = "transparent" | "light" | "dark";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
@@ -408,6 +409,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               }`}
             >
               Integrations
+            </button>
+            <button
+              onClick={() => setActiveTab("stacks")}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                activeTab === "stacks"
+                  ? "bg-accent/10 text-accent"
+                  : "text-secondary hover:text-foreground"
+              }`}
+            >
+              Stacks
             </button>
           </div>
         </div>
@@ -1332,6 +1343,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
               </div>
             </section>
+          )}
+
+          {activeTab === "stacks" && (
+            <StacksSettingsTab />
           )}
         </div>
 

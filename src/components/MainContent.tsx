@@ -16,6 +16,8 @@ const RequirementsView = lazy(() => import("./RequirementsView").then(m => ({ de
 const OverviewContent = lazy(() => import("./OverviewContent").then(m => ({ default: m.OverviewContent })));
 const BuildStatusContent = lazy(() => import("./BuildStatusContent").then(m => ({ default: m.BuildStatusContent })));
 const ProcessHistoryContent = lazy(() => import("./ProcessHistoryContent").then(m => ({ default: m.ProcessHistoryContent })));
+const SpecificationsContent = lazy(() => import("./SpecificationsContent").then(m => ({ default: m.SpecificationsContent })));
+const DesignContent = lazy(() => import("./DesignContent").then(m => ({ default: m.DesignContent })));
 
 interface Prd {
   project?: string
@@ -62,9 +64,7 @@ export function MainContent() {
   const getProcess = useProcessStore((state) => state.getProcess);
   const selectedProcess = selectedProcessId ? getProcess(selectedProcessId) : null;
 
-  const processHistoryProjectId = useProjectStore((state) => state.processHistoryProjectId);
-  const buildStatusProjectId = useProjectStore((state) => state.buildStatusProjectId);
-  const projectOverviewProjectId = useProjectStore((state) => state.projectOverviewProjectId);
+  const projectPages = useProjectStore((state) => state.projectPages);
   
   // Subscribe directly to project states for reactivity
   const projectStates = useBuildStore((state) => state.projectStates);
@@ -149,34 +149,54 @@ export function MainContent() {
 
   // Show project with layout if a project is active
   if (activeProject) {
-    // Determine which content to show based on state
+    // Determine which content to show based on projectPages state
+    const currentPage = projectPages[activeProject.id] || 'requirements';
     let content: React.ReactNode;
     
-    if (projectOverviewProjectId === activeProject.id) {
-      content = (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
-          <OverviewContent project={activeProject} />
-        </Suspense>
-      );
-    } else if (buildStatusProjectId === activeProject.id) {
-      content = (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
-          <BuildStatusContent projectId={activeProject.id} />
-        </Suspense>
-      );
-    } else if (processHistoryProjectId === activeProject.id) {
-      content = (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
-          <ProcessHistoryContent projectId={activeProject.id} />
-        </Suspense>
-      );
-    } else {
-      // Default to requirements view
-      content = (
-        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
-          <RequirementsView project={activeProject} />
-        </Suspense>
-      );
+    switch (currentPage) {
+      case 'overview':
+        content = (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+            <OverviewContent project={activeProject} />
+          </Suspense>
+        );
+        break;
+      case 'build-status':
+        content = (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+            <BuildStatusContent projectId={activeProject.id} />
+          </Suspense>
+        );
+        break;
+      case 'process-history':
+        content = (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+            <ProcessHistoryContent projectId={activeProject.id} />
+          </Suspense>
+        );
+        break;
+      case 'specifications':
+        content = (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+            <SpecificationsContent projectId={activeProject.id} />
+          </Suspense>
+        );
+        break;
+      case 'design':
+        content = (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+            <DesignContent projectId={activeProject.id} />
+          </Suspense>
+        );
+        break;
+      case 'requirements':
+      default:
+        content = (
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center text-muted">Loading...</div>}>
+            <RequirementsView project={activeProject} />
+          </Suspense>
+        );
+        break;
     }
 
     return (

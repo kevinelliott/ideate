@@ -319,18 +319,31 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
 
   const handleRollback = async (storyId: string) => {
     if (!project?.path) return;
-    const snapshot = storySnapshots[storyId];
-    if (!snapshot) return;
 
     setRollingBack(storyId);
     try {
-      await invoke("rollback_story_changes", {
+      // Use git to discard uncommitted changes
+      // (Committed changes from previous stories are preserved)
+      await invoke("git_discard_changes", {
         projectPath: project.path,
-        snapshotRef: snapshot.snapshotRef,
-        snapshotType: snapshot.snapshotType,
       });
-      clearStorySnapshot(projectId, storyId);
-      appendLog(projectId, "system", `✓ Rolled back changes for story ${storyId}`);
+      
+      // Also clear legacy snapshot if present
+      const snapshot = storySnapshots[storyId];
+      if (snapshot) {
+        try {
+          await invoke("discard_story_snapshot", {
+            projectPath: project.path,
+            snapshotRef: snapshot.snapshotRef,
+            snapshotType: snapshot.snapshotType,
+          });
+        } catch {
+          // Ignore legacy cleanup errors
+        }
+        clearStorySnapshot(projectId, storyId);
+      }
+      
+      appendLog(projectId, "system", `✓ Discarded uncommitted changes for story ${storyId}`);
       setConfirmRollback(null);
     } catch (e) {
       console.error("Failed to rollback:", e);
@@ -542,18 +555,18 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                           </button>
                         )}
                         
-                        {/* Rollback button for failed stories with snapshots */}
-                        {story.buildStatus === "failed" && storySnapshots[story.id] && (
+                        {/* Rollback button for failed stories - discards uncommitted changes */}
+                        {story.buildStatus === "failed" && (
                           <div className="mt-1.5">
                             {confirmRollback === story.id ? (
                               <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                <span className="text-[10px] text-destructive mr-1">Revert all changes?</span>
+                                <span className="text-[10px] text-destructive mr-1">Discard uncommitted changes?</span>
                                 <button
                                   onClick={() => handleRollback(story.id)}
                                   disabled={rollingBack === story.id}
                                   className="text-[10px] px-1.5 py-0.5 rounded bg-destructive text-white font-medium hover:bg-destructive/80 transition-colors disabled:opacity-50"
                                 >
-                                  {rollingBack === story.id ? "Rolling back..." : "Confirm"}
+                                  {rollingBack === story.id ? "Discarding..." : "Confirm"}
                                 </button>
                                 <button
                                   onClick={() => setConfirmRollback(null)}
@@ -569,12 +582,12 @@ export function BuildStatusContent({ projectId }: BuildStatusContentProps) {
                                   setConfirmRollback(story.id);
                                 }}
                                 className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
-                                title="Rollback to pre-story state"
+                                title="Discard uncommitted changes from this story"
                               >
                                 <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                 </svg>
-                                Rollback
+                                Discard Changes
                               </button>
                             )}
                           </div>

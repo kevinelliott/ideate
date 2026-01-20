@@ -857,6 +857,173 @@ pub async fn discard_story_snapshot(
     Ok(())
 }
 
+// ============================================================================
+// Simple Git Commit/Rollback for Stories
+// ============================================================================
+
+/// Check if git is initialized in the project directory.
+#[tauri::command]
+pub async fn check_git_initialized(
+    _app: AppHandle,
+    project_path: String,
+) -> Result<bool, String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-dir"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to check git: {}", e))?;
+
+    Ok(output.status.success())
+}
+
+/// Initialize git repository if not already initialized.
+#[tauri::command]
+pub async fn init_git_repo(
+    _app: AppHandle,
+    project_path: String,
+) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["init"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to init git: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to init git: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Commit all changes after a successful story completion.
+#[tauri::command]
+pub async fn git_commit_story(
+    _app: AppHandle,
+    project_path: String,
+    story_id: String,
+    story_title: String,
+) -> Result<String, String> {
+    // Stage all changes
+    let add_output = Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to stage changes: {}", e))?;
+
+    if !add_output.status.success() {
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(format!("Failed to stage changes: {}", stderr));
+    }
+
+    // Check if there are changes to commit
+    let status_output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to check status: {}", e))?;
+
+    let has_changes = !String::from_utf8_lossy(&status_output.stdout).trim().is_empty();
+    
+    if !has_changes {
+        // No changes to commit, return current HEAD
+        let head_output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+        
+        return Ok(String::from_utf8_lossy(&head_output.stdout).trim().to_string());
+    }
+
+    // Commit with story info in message
+    let commit_message = format!("[Story {}] {}", story_id, story_title);
+    let commit_output = Command::new("git")
+        .args(["commit", "-m", &commit_message])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to commit: {}", e))?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        // Check if it's just "nothing to commit"
+        if stderr.contains("nothing to commit") {
+            let head_output = Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&project_path)
+                .output()
+                .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+            return Ok(String::from_utf8_lossy(&head_output.stdout).trim().to_string());
+        }
+        return Err(format!("Failed to commit: {}", stderr));
+    }
+
+    // Return the new commit hash
+    let head_output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to get HEAD: {}", e))?;
+
+    Ok(String::from_utf8_lossy(&head_output.stdout).trim().to_string())
+}
+
+/// Rollback the last commit (used when a story fails after a previous story committed).
+#[tauri::command]
+pub async fn git_rollback_last_commit(
+    _app: AppHandle,
+    project_path: String,
+) -> Result<(), String> {
+    // Reset to the previous commit, discarding all changes
+    let output = Command::new("git")
+        .args(["reset", "--hard", "HEAD~1"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to rollback: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to rollback: {}", stderr));
+    }
+
+    // Clean untracked files
+    Command::new("git")
+        .args(["clean", "-fd"])
+        .current_dir(&project_path)
+        .output()
+        .ok();
+
+    Ok(())
+}
+
+/// Rollback all uncommitted changes (discard working directory changes).
+#[tauri::command]
+pub async fn git_discard_changes(
+    _app: AppHandle,
+    project_path: String,
+) -> Result<(), String> {
+    // Reset working directory to HEAD
+    let output = Command::new("git")
+        .args(["reset", "--hard", "HEAD"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to discard changes: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to discard changes: {}", stderr));
+    }
+
+    // Clean untracked files
+    Command::new("git")
+        .args(["clean", "-fd"])
+        .current_dir(&project_path)
+        .output()
+        .ok();
+
+    Ok(())
+}
+
 /// Clean up all story worktrees for a project.
 #[tauri::command]
 pub async fn cleanup_all_story_worktrees(

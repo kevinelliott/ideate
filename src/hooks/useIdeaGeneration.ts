@@ -36,6 +36,7 @@ interface StreamJsonMessage {
   subtype?: string
   result?: string
   message?: {
+    role?: string
     content?: Array<{
       type: string
       text?: string
@@ -43,10 +44,21 @@ interface StreamJsonMessage {
   }
   // Claude Code format
   content?: string
+  // Other common fields
+  session_id?: string
+  tools?: string[]
+  cwd?: string
+  is_error?: boolean
+  duration_ms?: number
+}
+
+function isJsonLine(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.startsWith('{') && trimmed.endsWith('}')
 }
 
 function extractTextFromStreamJson(lines: string[]): string {
-  // Look for the result message with subtype 'success' - this contains the final output
+  // First pass: Look for the result message with subtype 'success' - this contains the final output
   for (const line of lines) {
     const trimmed = line.trim()
     if (!trimmed.startsWith('{')) continue
@@ -63,7 +75,7 @@ function extractTextFromStreamJson(lines: string[]): string {
     }
   }
   
-  // Fallback: collect text from assistant messages if no result found
+  // Second pass: collect text from assistant messages if no result found
   const textParts: string[] = []
   
   for (const line of lines) {
@@ -91,7 +103,24 @@ function extractTextFromStreamJson(lines: string[]): string {
     }
   }
   
-  return textParts.join('')
+  if (textParts.length > 0) {
+    return textParts.join('')
+  }
+  
+  // Third pass: If no structured text found, filter out JSON lines and return plain text
+  const plainTextLines: string[] = []
+  
+  for (const line of lines) {
+    // Skip lines that look like JSON objects
+    if (isJsonLine(line)) continue
+    
+    // Skip empty lines at the start
+    if (plainTextLines.length === 0 && !line.trim()) continue
+    
+    plainTextLines.push(line)
+  }
+  
+  return plainTextLines.join('\n')
 }
 
 function cleanAgentOutput(raw: string, lines: string[]): string {
@@ -101,7 +130,15 @@ function cleanAgentOutput(raw: string, lines: string[]): string {
     return cleanText(streamJsonText)
   }
   
-  // Fallback to cleaning raw output
+  // Fallback: filter out JSON lines from raw output before cleaning
+  const filteredLines = lines.filter(line => !isJsonLine(line))
+  const filteredRaw = filteredLines.join('\n')
+  
+  if (filteredRaw.trim()) {
+    return cleanText(filteredRaw)
+  }
+  
+  // Last resort: return cleaned raw (even if it contains some JSON)
   return cleanText(raw)
 }
 
