@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { useAgentStore } from '../stores/agentStore'
+import { useAgentStore, type AgentSession } from '../stores/agentStore'
 import { useProcessStore } from '../stores/processStore'
 import { defaultPlugins } from '../types'
 
@@ -33,7 +33,18 @@ export function useAgentSession(
   onOutput: (content: string, streamType: 'stdout' | 'stderr') => void,
   onExit: (success: boolean, exitCode: number | null) => void
 ) {
-  const getSession = useAgentStore((state) => state.getSession)
+  // Subscribe directly to the session state for this projectId to ensure reactivity
+  // We need to subscribe to the sessions object and extract the session for this projectId
+  const defaultAgentId = useAgentStore((state) => state.defaultAgentId)
+  const storedSession = useAgentStore((state) => state.sessions[projectId])
+  
+  // Create a stable session object with defaults
+  const session: AgentSession = storedSession ?? {
+    processId: null,
+    isRunning: false,
+    messages: [],
+    agentId: defaultAgentId,
+  }
   const setProcessId = useAgentStore((state) => state.setProcessId)
   const setIsRunning = useAgentStore((state) => state.setIsRunning)
   const setAgentId = useAgentStore((state) => state.setAgentId)
@@ -42,11 +53,22 @@ export function useAgentSession(
 
   const registerProcess = useProcessStore((state) => state.registerProcess)
   const unregisterProcess = useProcessStore((state) => state.unregisterProcess)
-
-  const session = getSession(projectId)
   const currentProcessIdRef = useRef<string | null>(null)
   const unlistenOutputRef = useRef<UnlistenFn | null>(null)
   const unlistenExitRef = useRef<UnlistenFn | null>(null)
+  
+  // Use refs for callbacks to avoid re-subscribing to events when callbacks change
+  const onOutputRef = useRef(onOutput)
+  const onExitRef = useRef(onExit)
+  
+  // Keep refs updated with latest callbacks
+  useEffect(() => {
+    onOutputRef.current = onOutput
+  }, [onOutput])
+  
+  useEffect(() => {
+    onExitRef.current = onExit
+  }, [onExit])
 
   useEffect(() => {
     let mounted = true
@@ -56,7 +78,7 @@ export function useAgentSession(
         if (!mounted) return
         if (event.payload.processId === currentProcessIdRef.current) {
           appendToLastMessage(projectId, event.payload.content + '\n')
-          onOutput(event.payload.content, event.payload.streamType)
+          onOutputRef.current(event.payload.content, event.payload.streamType)
         }
       })
 
@@ -67,7 +89,7 @@ export function useAgentSession(
           currentProcessIdRef.current = null
           setProcessId(projectId, null)
           setIsRunning(projectId, false)
-          onExit(event.payload.success, event.payload.exitCode)
+          onExitRef.current(event.payload.success, event.payload.exitCode)
         }
       })
     }
@@ -79,7 +101,7 @@ export function useAgentSession(
       unlistenOutputRef.current?.()
       unlistenExitRef.current?.()
     }
-  }, [projectId, onOutput, onExit, setProcessId, setIsRunning, appendToLastMessage, unregisterProcess])
+  }, [projectId, setProcessId, setIsRunning, appendToLastMessage, unregisterProcess])
 
   const sendMessage = useCallback(async (message: string) => {
     const currentSession = useAgentStore.getState().getSession(projectId)
@@ -87,13 +109,52 @@ export function useAgentSession(
     const agentId = currentSession.agentId || defaultAgentId
     const plugin = defaultPlugins.find((p) => p.id === agentId) || defaultPlugins[0]
 
-    const conversationContext = currentSession.messages
+    // Build conversation context with limits to avoid "prompt too long" errors
+    // Only include recent user messages and brief summaries of agent responses
+    const MAX_CONTEXT_MESSAGES = 6 // Last 3 exchanges (user + agent pairs)
+    const MAX_USER_MESSAGE_LENGTH = 500
+    const MAX_AGENT_SUMMARY_LENGTH = 200
+    
+    const relevantMessages = currentSession.messages
+      .filter((m) => m.role === 'user' || m.role === 'agent')
       .filter((m) => m.content.trim() !== '')
+      .slice(-MAX_CONTEXT_MESSAGES)
+    
+    const conversationContext = relevantMessages
       .map((m) => {
-        if (m.role === 'user') return `User: ${m.content}`
-        if (m.role === 'agent') return `Agent: ${m.content}`
-        return m.content
+        if (m.role === 'user') {
+          const content = m.content.length > MAX_USER_MESSAGE_LENGTH 
+            ? m.content.substring(0, MAX_USER_MESSAGE_LENGTH) + '...'
+            : m.content
+          return `User: ${content}`
+        }
+        if (m.role === 'agent') {
+          // Extract just text content from agent messages, skip JSON metadata
+          // Try to find actual text responses, not raw JSON
+          let summary = ''
+          const lines = m.content.split('\n')
+          for (const line of lines) {
+            const trimmed = line.trim()
+            // Skip JSON lines
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) continue
+            // Skip empty lines
+            if (!trimmed) continue
+            // Accumulate non-JSON content
+            if (summary.length < MAX_AGENT_SUMMARY_LENGTH) {
+              summary += (summary ? ' ' : '') + trimmed
+            }
+          }
+          // If no text content found, just indicate agent responded
+          if (!summary) {
+            summary = '[Agent responded with tool operations]'
+          } else if (summary.length > MAX_AGENT_SUMMARY_LENGTH) {
+            summary = summary.substring(0, MAX_AGENT_SUMMARY_LENGTH) + '...'
+          }
+          return `Agent: ${summary}`
+        }
+        return ''
       })
+      .filter(Boolean)
       .join('\n\n')
 
     const fullPrompt = conversationContext
@@ -134,10 +195,24 @@ export function useAgentSession(
 
       invoke<WaitAgentResult>('wait_agent', {
         processId: result.processId,
+      }).then((waitResult) => {
+        // Ensure state is reset when wait_agent completes
+        // This is a fallback in case the agent-exit event was missed
+        if (currentProcessIdRef.current === result.processId) {
+          unregisterProcess(result.processId, waitResult.exitCode, waitResult.success)
+          currentProcessIdRef.current = null
+          setProcessId(projectId, null)
+          setIsRunning(projectId, false)
+          onExitRef.current(waitResult.success, waitResult.exitCode)
+        }
       }).catch((error) => {
         console.error('Error waiting for agent:', error)
-        unregisterProcess(result.processId, null, false)
-        setIsRunning(projectId, false)
+        if (currentProcessIdRef.current === result.processId) {
+          unregisterProcess(result.processId, null, false)
+          currentProcessIdRef.current = null
+          setProcessId(projectId, null)
+          setIsRunning(projectId, false)
+        }
       })
 
     } catch (error) {

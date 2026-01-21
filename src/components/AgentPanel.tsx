@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
 import { defaultPlugins, type AgentPlugin } from "../types";
 import { useAgentSession } from "../hooks/useAgentSession";
 import { useAgentStore } from "../stores/agentStore";
 import { usePanelStore } from "../stores/panelStore";
-import { useTheme } from "../hooks/useTheme";
-import { getTerminalTheme } from "../utils/terminalThemes";
-import { formatAgentOutput, wordWrap } from "../utils/markdownToAnsi";
-import "@xterm/xterm/css/xterm.css";
+import { StreamLogEntry } from "./StreamLogEntry";
 
 interface AgentPanelProps {
   projectId: string;
   projectPath: string;
+}
+
+interface LogEntry {
+  content: string;
+  timestamp: Date;
+  type: "stdout" | "stderr" | "system";
 }
 
 const MIN_HEIGHT = 100;
@@ -23,11 +24,8 @@ const GREETING_MESSAGE = "Hello, I'm a sidekick agent separate from your main bu
 
 export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const terminalWrapperRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
   
   const panelState = usePanelStore((state) => state.getPanelState(projectId));
   const setAgentPanelCollapsed = usePanelStore((state) => state.setAgentPanelCollapsed);
@@ -47,115 +45,54 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
   const [isResizing, setIsResizing] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [hasReceivedOutput, setHasReceivedOutput] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [autoScroll, setAutoScroll] = useState(true);
   const startYRef = useRef(0);
   const startHeightRef = useRef(0);
   const lastProjectIdRef = useRef<string | null>(null);
   const hasAutoStartedRef = useRef<Set<string>>(new Set());
-  const thinkingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const thinkingLineRef = useRef<number | null>(null);
-  const lastTerminalColsRef = useRef<number>(80);
-
-  const { resolvedTheme } = useTheme();
 
   const getSession = useAgentStore((state) => state.getSession);
   const addMessage = useAgentStore((state) => state.addMessage);
   const clearMessages = useAgentStore((state) => state.clearMessages);
   const session = getSession(projectId);
 
-  // Helper to get terminal width
-  const getTerminalCols = useCallback(() => {
-    return xtermRef.current?.cols ?? 80;
-  }, []);
-
-  // Helper to write text with word wrapping
-  const writeWrapped = useCallback((terminal: Terminal, text: string, style?: string) => {
-    const cols = terminal.cols;
-    const lines = wordWrap(text, cols);
-    for (const line of lines) {
-      if (style) {
-        terminal.writeln(`${style}${line}\x1b[0m`);
-      } else {
-        terminal.writeln(line);
-      }
+  // Auto-scroll when new logs arrive
+  useEffect(() => {
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+  }, [logs, autoScroll]);
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAutoScroll(isAtBottom);
   }, []);
 
-  // Clear thinking indicator
-  const clearThinkingIndicator = useCallback(() => {
-    if (thinkingIntervalRef.current) {
-      clearInterval(thinkingIntervalRef.current);
-      thinkingIntervalRef.current = null;
-    }
-    // Clear the thinking line if we wrote one
-    if (xtermRef.current && thinkingLineRef.current !== null) {
-      // Move up one line, clear it, then move back
-      xtermRef.current.write('\x1b[1A\x1b[2K');
-      thinkingLineRef.current = null;
-    }
-    setIsThinking(false);
-  }, []);
-
-  // Start thinking indicator
-  const startThinkingIndicator = useCallback(() => {
-    setIsThinking(true);
-    setHasReceivedOutput(false);
-    
-    if (!xtermRef.current) return;
-    
-    const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    let frameIndex = 0;
-    
-    // Write initial thinking line
-    xtermRef.current.writeln(`\x1b[90m${frames[0]} Thinking...\x1b[0m`);
-    thinkingLineRef.current = 1;
-    
-    thinkingIntervalRef.current = setInterval(() => {
-      if (xtermRef.current && thinkingLineRef.current !== null) {
-        frameIndex = (frameIndex + 1) % frames.length;
-        // Move up, clear line, write new frame, move down
-        xtermRef.current.write(`\x1b[1A\x1b[2K\x1b[90m${frames[frameIndex]} Thinking...\x1b[0m\n`);
-      }
-    }, 80);
-  }, []);
-
-  // Live output handler - writes to terminal as agent runs with markdown formatting
+  // Live output handler - adds to logs
   const handleOutput = useCallback((content: string, streamType: 'stdout' | 'stderr') => {
-    // Clear thinking indicator on first output
-    if (!hasReceivedOutput) {
-      clearThinkingIndicator();
-      setHasReceivedOutput(true);
-    }
-    
-    if (xtermRef.current) {
-      const cols = getTerminalCols();
-      if (streamType === 'stderr') {
-        // Word wrap stderr
-        const lines = wordWrap(content, cols);
-        for (const line of lines) {
-          xtermRef.current.writeln(`\x1b[31m${line}\x1b[0m`);
-        }
-      } else {
-        // Apply markdown formatting and word wrap to stdout
-        const formatted = formatAgentOutput(content, cols);
-        // formatAgentOutput now returns newline-joined string when given width
-        xtermRef.current.writeln(formatted);
-      }
-    }
-  }, [hasReceivedOutput, clearThinkingIndicator, getTerminalCols]);
+    setIsThinking(false);
+    setLogs(prev => [...prev, {
+      content,
+      timestamp: new Date(),
+      type: streamType
+    }]);
+  }, []);
 
-  // Exit handler - only show message on error
+  // Exit handler
   const handleExit = useCallback((success: boolean, exitCode: number | null) => {
-    clearThinkingIndicator();
-    
-    if (xtermRef.current) {
-      if (!success) {
-        xtermRef.current.writeln(`\x1b[31m✗ Agent failed (exit code: ${exitCode ?? 'unknown'})\x1b[0m`);
-      }
-      xtermRef.current.writeln('');
+    setIsThinking(false);
+    if (!success) {
+      setLogs(prev => [...prev, {
+        content: `Agent failed (exit code: ${exitCode ?? 'unknown'})`,
+        timestamp: new Date(),
+        type: 'stderr'
+      }]);
     }
     inputRef.current?.focus();
-  }, [clearThinkingIndicator]);
+  }, []);
 
   const { session: agentSession, sendMessage, cancelSession, changeAgent } = useAgentSession(
     projectId,
@@ -192,40 +129,7 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing]);
-
-  // Helper to restore messages to terminal with markdown formatting and word wrap
-  const restoreMessagesToTerminal = useCallback((terminal: Terminal, messages: typeof session.messages) => {
-    const cols = terminal.cols;
-    
-    for (const msg of messages) {
-      if (msg.role === 'user') {
-        // User messages: wrap the content after the prompt
-        const userLines = wordWrap(msg.content, cols - 2); // Account for "❯ " prefix
-        userLines.forEach((line, i) => {
-          if (i === 0) {
-            terminal.writeln(`\x1b[32m❯\x1b[0m ${line}`);
-          } else {
-            terminal.writeln(`  ${line}`);
-          }
-        });
-      } else if (msg.role === 'agent' && msg.content.trim()) {
-        // Agent content may have multiple lines, format each line with word wrap
-        const contentLines = msg.content.split('\n');
-        for (const line of contentLines) {
-          if (line) {
-            const formatted = formatAgentOutput(line, cols);
-            terminal.writeln(formatted);
-          }
-        }
-      } else if (msg.role === 'system') {
-        writeWrapped(terminal, msg.content, '\x1b[90m');
-      }
-    }
-    
-    // Scroll to bottom after restoring
-    terminal.scrollToBottom();
-  }, [writeWrapped]);
+  }, [isResizing, setHeight]);
 
   // Auto-start agent with greeting when project is selected and no messages exist
   useEffect(() => {
@@ -239,129 +143,52 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
       hasAutoStartedRef.current.add(projectId);
       
       addMessage(projectId, { role: 'system', content: GREETING_MESSAGE });
-      
-      if (xtermRef.current) {
-        writeWrapped(xtermRef.current, GREETING_MESSAGE, '\x1b[90m');
-      }
+      setLogs([{
+        content: GREETING_MESSAGE,
+        timestamp: new Date(),
+        type: 'system'
+      }]);
     }
-  }, [projectId, addMessage, writeWrapped]);
+  }, [projectId, addMessage]);
 
-  // Update terminal theme when resolved theme changes
+  // Handle project change - restore logs from messages
   useEffect(() => {
-    if (xtermRef.current) {
-      const theme = getTerminalTheme(resolvedTheme);
-      xtermRef.current.options.theme = theme;
-      // Force a full refresh of all visible rows to apply new colors
-      const rows = xtermRef.current.rows;
-      xtermRef.current.refresh(0, rows - 1);
-      if (fitAddonRef.current) {
-        fitAddonRef.current.fit();
-      }
-    }
-  }, [resolvedTheme]);
-
-  // Initialize terminal - recreate when theme changes to ensure proper theming
-  useEffect(() => {
-    if (isCollapsed || !terminalRef.current) return;
-
-    const terminal = new Terminal({
-      theme: getTerminalTheme(resolvedTheme),
-      fontSize: 12,
-      fontFamily: '"SF Mono", "JetBrains Mono", "Monaco", "Menlo", monospace',
-      cursorBlink: false,
-      disableStdin: true,
-      convertEol: true,
-      scrollback: 5000,
-      lineHeight: 1.4,
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-
-    terminal.open(terminalRef.current);
-    
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-      lastTerminalColsRef.current = terminal.cols;
-    });
-
-    xtermRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    const currentSession = useAgentStore.getState().getSession(projectId);
-    restoreMessagesToTerminal(terminal, currentSession.messages);
-    lastProjectIdRef.current = projectId;
-
-    // Debounce timer for re-rendering on resize
-    let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        if (!fitAddonRef.current || !xtermRef.current) return;
-        
-        fitAddonRef.current.fit();
-        
-        const newCols = xtermRef.current.cols;
-        const oldCols = lastTerminalColsRef.current;
-        
-        // Only re-render if column count changed significantly
-        if (newCols !== oldCols) {
-          lastTerminalColsRef.current = newCols;
-          
-          // Debounce the re-render to avoid excessive updates during resize
-          if (resizeDebounceTimer) {
-            clearTimeout(resizeDebounceTimer);
-          }
-          
-          resizeDebounceTimer = setTimeout(() => {
-            if (xtermRef.current && !agentSession.isRunning) {
-              xtermRef.current.clear();
-              const session = useAgentStore.getState().getSession(projectId);
-              restoreMessagesToTerminal(xtermRef.current, session.messages);
-            }
-          }, 150);
-        }
-      });
-    });
-    
-    // Observe the wrapper div that has the padding applied
-    if (terminalWrapperRef.current) {
-      resizeObserver.observe(terminalWrapperRef.current);
-    }
-
-    return () => {
-      if (resizeDebounceTimer) {
-        clearTimeout(resizeDebounceTimer);
-      }
-      resizeObserver.disconnect();
-      terminal.dispose();
-      xtermRef.current = null;
-      fitAddonRef.current = null;
-      if (thinkingIntervalRef.current) {
-        clearInterval(thinkingIntervalRef.current);
-      }
-    };
-  }, [isCollapsed, projectId, restoreMessagesToTerminal, agentSession.isRunning, resolvedTheme]);
-
-  // Handle project change
-  useEffect(() => {
-    if (lastProjectIdRef.current !== projectId && xtermRef.current) {
-      clearThinkingIndicator();
-      xtermRef.current.clear();
+    if (lastProjectIdRef.current !== projectId) {
       const currentSession = useAgentStore.getState().getSession(projectId);
-      restoreMessagesToTerminal(xtermRef.current, currentSession.messages);
+      
+      // Convert messages to log entries
+      const restoredLogs: LogEntry[] = [];
+      for (const msg of currentSession.messages) {
+        if (msg.role === 'user') {
+          restoredLogs.push({
+            content: `❯ ${msg.content}`,
+            timestamp: msg.timestamp,
+            type: 'system'
+          });
+        } else if (msg.role === 'agent' && msg.content.trim()) {
+          // Agent messages may contain multiple lines (JSON entries)
+          const lines = msg.content.split('\n').filter(line => line.trim());
+          for (const line of lines) {
+            restoredLogs.push({
+              content: line,
+              timestamp: msg.timestamp,
+              type: 'stdout'
+            });
+          }
+        } else if (msg.role === 'system') {
+          restoredLogs.push({
+            content: msg.content,
+            timestamp: msg.timestamp,
+            type: 'system'
+          });
+        }
+      }
+      
+      setLogs(restoredLogs);
       setInputValue("");
       lastProjectIdRef.current = projectId;
     }
-  }, [projectId, restoreMessagesToTerminal, clearThinkingIndicator]);
-
-  useEffect(() => {
-    if (!isCollapsed && fitAddonRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
-    }
-  }, [height, isCollapsed]);
+  }, [projectId]);
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
@@ -371,11 +198,11 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
     if (agentSession.isRunning) return;
     
     clearMessages(projectId);
-    
-    if (xtermRef.current) {
-      xtermRef.current.clear();
-      writeWrapped(xtermRef.current, GREETING_MESSAGE, '\x1b[90m');
-    }
+    setLogs([{
+      content: GREETING_MESSAGE,
+      timestamp: new Date(),
+      type: 'system'
+    }]);
     
     addMessage(projectId, { role: 'system', content: GREETING_MESSAGE });
   };
@@ -387,32 +214,27 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
     const message = inputValue.trim();
     setInputValue("");
 
-    if (xtermRef.current) {
-      // Word wrap user input
-      const cols = getTerminalCols();
-      const userLines = wordWrap(message, cols - 2);
-      userLines.forEach((line, i) => {
-        if (i === 0) {
-          xtermRef.current!.writeln(`\x1b[32m❯\x1b[0m ${line}`);
-        } else {
-          xtermRef.current!.writeln(`  ${line}`);
-        }
-      });
-    }
+    // Add user message to logs
+    setLogs(prev => [...prev, {
+      content: `❯ ${message}`,
+      timestamp: new Date(),
+      type: 'system'
+    }]);
 
-    // Start thinking indicator before sending
-    startThinkingIndicator();
+    // Start thinking indicator
+    setIsThinking(true);
 
     await sendMessage(message);
   };
 
   const handleCancel = async () => {
-    clearThinkingIndicator();
+    setIsThinking(false);
     await cancelSession();
-    if (xtermRef.current) {
-      xtermRef.current.writeln('\x1b[33m⚠ Agent cancelled\x1b[0m');
-      xtermRef.current.writeln('');
-    }
+    setLogs(prev => [...prev, {
+      content: '⚠ Agent cancelled',
+      timestamp: new Date(),
+      type: 'stderr'
+    }]);
   };
 
   const panelHeight = isCollapsed ? COLLAPSED_HEIGHT : height + COLLAPSED_HEIGHT;
@@ -495,17 +317,34 @@ export function AgentPanel({ projectId, projectPath }: AgentPanelProps) {
       {/* Agent content */}
       {!isCollapsed && (
         <>
-          <div className="relative flex-1 overflow-hidden">
-            {/* Wrapper with padding - xterm will fit inside this */}
-            <div 
-              ref={terminalWrapperRef}
-              className="absolute inset-0 py-2 px-3"
-            >
-              <div
-                ref={terminalRef}
-                className="h-full w-full overflow-hidden"
+          <div 
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="relative flex-1 overflow-y-auto px-3 py-2 font-mono text-xs space-y-1"
+          >
+            {logs.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center text-muted z-10 pointer-events-none text-sm">
+                Waiting for input...
+              </div>
+            )}
+            {logs.map((log, index) => (
+              <StreamLogEntry
+                key={index}
+                content={log.content}
+                timestamp={log.timestamp}
+                type={log.type}
               />
-            </div>
+            ))}
+            {isThinking && (
+              <div className="flex items-center gap-2 py-2 text-muted">
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-xs">Thinking...</span>
+              </div>
+            )}
           </div>
           
           {/* Input area */}
