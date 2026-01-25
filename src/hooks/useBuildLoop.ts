@@ -65,6 +65,45 @@ function formatRetryContext(retryInfo: StoryRetryInfo): string {
   return relevantLogs.map((log: LogEntry) => log.content).join('\n')
 }
 
+/**
+ * Detect agent-side errors in log output that may occur even with exit code 0.
+ * Uses careful pattern matching to avoid false positives from:
+ * - JSON fields like "is_error": false
+ * - Agent discussions about fixing errors
+ * - Error messages the agent successfully handled
+ */
+function detectAgentError(recentLogs: string): boolean {
+  // Check for JSON result messages with is_error: true
+  const resultErrorRegex = /"type"\s*:\s*"result"[^}]*"is_error"\s*:\s*true/
+  if (resultErrorRegex.test(recentLogs)) {
+    return true
+  }
+  
+  // Check for specific error patterns that indicate actual agent failures
+  // These patterns should be at the start of a line or have specific prefixes
+  const agentErrorPatterns = [
+    /^❌\s*Failed/m,                              // Emoji failure indicator at line start
+    /^Failed:\s*Unknown error/mi,                 // Generic failure at line start
+    /stream ended without producing any output/i, // Stream error
+    /^amp error:/mi,                              // Amp-specific error prefix
+    /^claude error:/mi,                           // Claude-specific error prefix
+    /^Error:\s*stream ended/mi,                   // Stream termination error
+    /\bconnection refused\b/i,                    // Network error (word boundary)
+    /\bauthentication failed\b/i,                 // Auth error (word boundary)
+    /\brate limit exceeded\b/i,                   // Rate limiting (word boundary)
+    /\bapi key invalid\b/i,                       // Invalid API key (word boundary)
+    /\b(SIGTERM|SIGKILL)\b/,                      // Process killed signals
+  ]
+  
+  // Remove JSON content to avoid matching on JSON field values
+  // This strips out {...} blocks to focus on plain text log messages
+  const nonJsonContent = recentLogs
+    .split(/^\s*\{[\s\S]*?\}\s*$/gm)  // Remove JSON object lines
+    .join('\n')
+  
+  return agentErrorPatterns.some((pattern) => pattern.test(nonJsonContent))
+}
+
 export function useBuildLoop(projectId: string | undefined, projectPath: string | undefined) {
   const getProjectState = useBuildStore((state) => state.getProjectState)
   const tryStartBuild = useBuildStore((state) => state.tryStartBuild)
@@ -224,21 +263,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
       // Check for agent-side errors that still return exit code 0
-      const agentErrorPatterns = [
-        '❌ Failed',
-        'Failed: Unknown error',
-        'stream ended without producing any output',
-        'amp error:',
-        'claude error:',
-        'Error: stream ended',
-        'connection refused',
-        'authentication failed',
-        'rate limit exceeded',
-        'api key invalid',
-      ]
-      const hasAgentError = agentErrorPatterns.some((pattern) =>
-        recentLogs.toLowerCase().includes(pattern.toLowerCase())
-      )
+      const hasAgentError = detectAgentError(recentLogs)
 
       if (waitResult.success && !hasAgentError) {
         appendLog(projectId, 'system', `✓ Story ${story.id} completed successfully (exit code: ${waitResult.exitCode})`)
@@ -373,21 +398,7 @@ export function useBuildLoop(projectId: string | undefined, projectPath: string 
       parseAndAddFromOutput(projectId, projectPath, agentId, `Story: ${story.title}`, recentLogs, durationMs)
 
       // Check for agent-side errors that still return exit code 0
-      const agentErrorPatterns = [
-        '❌ Failed',
-        'Failed: Unknown error',
-        'stream ended without producing any output',
-        'amp error:',
-        'claude error:',
-        'Error: stream ended',
-        'connection refused',
-        'authentication failed',
-        'rate limit exceeded',
-        'api key invalid',
-      ]
-      const hasAgentError = agentErrorPatterns.some((pattern) =>
-        recentLogs.toLowerCase().includes(pattern.toLowerCase())
-      )
+      const hasAgentError = detectAgentError(recentLogs)
       const storySuccess = waitResult.success && !hasAgentError
 
       // Finalize worktree (merge if successful, cleanup)
