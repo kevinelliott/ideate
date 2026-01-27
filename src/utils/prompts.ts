@@ -228,9 +228,17 @@ USER REQUEST:
 
 Read the existing .ideate/prd.json file and ADD new user stories to it based on the user's request. Keep all existing stories intact.
 
+CRITICAL - Determine the appropriate number of stories:
+- First, analyze the COMPLEXITY and SCOPE of the user's request
+- Simple request (e.g., "add a dark mode toggle"): 1-2 stories
+- Moderate request (e.g., "add user authentication"): 3-6 stories  
+- Complex request (e.g., "add full e-commerce with cart, checkout, payments"): 7-15+ stories
+- Match the number of stories to what's actually needed - no more, no less
+- A request for "one thing" should often result in just 1 story unless it clearly requires multiple steps
+
 Requirements for new stories:
-1. Analyze the request and break it down into appropriate user stories
-2. Each story should be small enough to implement in a single iteration
+1. Create ONLY as many stories as the request actually requires
+2. Each story should be small enough to implement in a single iteration (1-3 days of work)
 3. Start new story IDs after the existing ones (use format US-XXX where XXX continues from existing)
 4. Set priorities starting from {{nextPriority}} (higher number = lower priority)
 5. Each story should have 3-5 clear acceptance criteria
@@ -243,7 +251,8 @@ Update the .ideate/prd.json file by appending the new stories to the existing us
 IMPORTANT: 
 - Do NOT remove or modify existing stories
 - Only ADD new stories to the userStories array
-- Do NOT implement any features, only update the prd.json`,
+- Do NOT implement any features, only update the prd.json
+- Create the MINIMUM number of stories needed to fully address the request`,
   },
 
   storyBreakdown: {

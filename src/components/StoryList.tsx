@@ -45,7 +45,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const projects = useProjectStore((state) => state.projects);
   const project = projects.find(p => p.id === projectId);
   
-  const { generateAdditionalStories, generatePrdFromCodebase } = usePrdGeneration();
+  const { generateAdditionalStories, generatePrdFromCodebase, breakdownStories } = usePrdGeneration();
   
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -58,6 +58,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const [draggedStoryId, setDraggedStoryId] = useState<string | null>(null);
   const [dragOverStoryId, setDragOverStoryId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [generationResult, setGenerationResult] = useState<{ success: boolean; storiesAdded: number } | null>(null);
 
   const handleStoryClick = (storyId: string) => {
     selectStory(projectId, storyId === selectedStoryId ? null : storyId);
@@ -184,11 +185,13 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
   const isDragEnabled = sortField === "priority" && sortDirection === "asc";
 
   const handleOpenGenerateModal = () => {
+    setGenerationResult(null);
     setIsGenerateModalOpen(true);
   };
 
   const handleCloseGenerateModal = () => {
     if (prdStatus !== 'generating') {
+      setGenerationResult(null);
       setIsGenerateModalOpen(false);
     }
   };
@@ -197,15 +200,39 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
     setIsGenerateModalOpen(false);
   };
 
-  const handleGenerateStories = (request: string) => {
+  const handleGenerateStories = async (request: string, agentId: string) => {
     if (!project) return;
     
-    generateAdditionalStories(
+    setGenerationResult(null);
+    const previousCount = stories.length;
+    
+    // First pass: Generate stories based on request complexity
+    const success = await generateAdditionalStories(
       projectId,
       project.name,
       projectPath,
-      request
+      request,
+      agentId
     );
+    
+    if (success) {
+      // Second pass: Automatically break down any complex stories
+      // This runs the storyBreakdown prompt which evaluates each story
+      // and splits any that are too complex into smaller iterations
+      await breakdownStories(
+        projectId,
+        project.name,
+        projectPath,
+        agentId
+      );
+    }
+    
+    // Get updated story count after both passes
+    const updatedStories = usePrdStore.getState().getProjectPrd(projectId).stories;
+    const newCount = updatedStories?.length ?? previousCount;
+    const storiesAdded = newCount - previousCount;
+    
+    setGenerationResult({ success, storiesAdded });
   };
 
   const handleOpenRegenerateModal = () => {
@@ -522,6 +549,7 @@ export function StoryList({ projectId, projectPath }: StoryListProps) {
         onClose={handleCloseGenerateModal}
         onGenerate={handleGenerateStories}
         onDismiss={handleDismissGenerateModal}
+        generationResult={generationResult}
       />
       <RegeneratePrdModal
         isOpen={isRegenerateModalOpen}

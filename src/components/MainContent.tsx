@@ -4,7 +4,6 @@ import { useProjectStore } from "../stores/projectStore";
 import { usePrdStore, type Story, type PrdMetadata } from "../stores/prdStore";
 import { useIdeasStore } from "../stores/ideasStore";
 import { useProcessStore } from "../stores/processStore";
-import { useBuildStore } from "../stores/buildStore";
 
 // Lazy load view components
 const IdeaDetailView = lazy(() => import("./IdeaDetailView").then(m => ({ default: m.IdeaDetailView })));
@@ -54,7 +53,6 @@ export function MainContent() {
 
   const setPrd = usePrdStore((state) => state.setPrd);
   const setStatus = usePrdStore((state) => state.setStatus);
-  const getProjectPrd = usePrdStore((state) => state.getProjectPrd);
 
   const selectedIdeaId = useIdeasStore((state) => state.selectedIdeaId);
   const ideas = useIdeasStore((state) => state.ideas);
@@ -65,11 +63,16 @@ export function MainContent() {
   const selectedProcess = selectedProcessId ? getProcess(selectedProcessId) : null;
 
   const projectPages = useProjectStore((state) => state.projectPages);
-  
-  // Subscribe directly to project states for reactivity
-  const projectStates = useBuildStore((state) => state.projectStates);
 
   const loadingProjectIdRef = useRef<string | null>(null);
+
+  // Subscribe to the specific project's PRD status for reactivity
+  const activeProjectPrdStatus = usePrdStore(
+    (state) => state.projectPrds[activeProjectId ?? ""]?.status ?? "idle"
+  );
+  const activeProjectStoryCount = usePrdStore(
+    (state) => state.projectPrds[activeProjectId ?? ""]?.stories?.length ?? 0
+  );
 
   // Load PRD when switching projects - use activeProjectId as key dependency
   useEffect(() => {
@@ -80,9 +83,13 @@ export function MainContent() {
         return;
       }
 
-      // If we're already loading or have loaded this project's PRD, skip
-      const projectPrd = getProjectPrd(activeProjectId);
-      if (projectPrd.status === "ready" || projectPrd.status === "generating") {
+      // Skip if already loading or generating
+      if (activeProjectPrdStatus === "generating") {
+        return;
+      }
+      
+      // Skip if ready AND has stories (avoid re-loading when already loaded)
+      if (activeProjectPrdStatus === "ready" && activeProjectStoryCount > 0) {
         return;
       }
 
@@ -100,7 +107,7 @@ export function MainContent() {
           return;
         }
 
-        if (prd && prd.userStories && prd.userStories.length > 0) {
+        if (prd && prd.userStories) {
           const stories: Story[] = prd.userStories.map(story => ({
             id: story.id,
             title: story.title,
@@ -115,19 +122,23 @@ export function MainContent() {
             description: prd.description,
             branchName: prd.branchName,
           };
+          // Always set PRD even if empty - this marks it as "ready"
           setPrd(activeProjectId, stories, metadata);
+        } else {
+          // No PRD file exists - mark as ready with empty stories
+          setStatus(activeProjectId, "ready");
         }
       } catch (error) {
+        console.error("Failed to load PRD:", error);
         // Only set error if we're still on the same project
         if (loadingProjectIdRef.current === activeProjectId) {
-          console.error("Failed to load PRD:", error);
           setStatus(activeProjectId, "error");
         }
       }
     }
 
     loadPrd();
-  }, [activeProjectId, activeProject?.path, setPrd, setStatus, getProjectPrd, projectStates]);
+  }, [activeProjectId, activeProject?.path, setPrd, setStatus, activeProjectPrdStatus, activeProjectStoryCount]);
 
   // Show agent run view if a process is selected (takes priority)
   if (selectedProcess) {

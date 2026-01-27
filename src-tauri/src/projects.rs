@@ -232,13 +232,19 @@ pub fn load_prd(project_path: String) -> Result<Option<Prd>, String> {
     let content = fs::read_to_string(&prd_path)
         .map_err(|e| format!("Failed to read prd.json: {}", e))?;
     
-    // Sanitize the JSON before parsing (handles trailing commas, comments, etc.)
-    let sanitized = sanitize_json(&content);
-    
-    let prd: Prd = serde_json::from_str(&sanitized)
-        .map_err(|e| format!("Failed to parse prd.json: {}", e))?;
-    
-    Ok(Some(prd))
+    // First try parsing the JSON directly (most common case)
+    // Only fall back to sanitization if direct parsing fails
+    // This avoids issues where sanitization can break valid JSON (e.g., removing // in URLs)
+    match serde_json::from_str::<Prd>(&content) {
+        Ok(prd) => Ok(Some(prd)),
+        Err(first_error) => {
+            // Try sanitizing and parsing again
+            let sanitized = sanitize_json(&content);
+            serde_json::from_str(&sanitized)
+                .map(Some)
+                .map_err(|_| format!("Failed to parse prd.json: {}", first_error))
+        }
+    }
 }
 
 /// Saves the PRD for a project.
@@ -321,13 +327,19 @@ pub fn load_design(project_path: String) -> Result<Option<Design>, String> {
     let content = fs::read_to_string(&design_path)
         .map_err(|e| format!("Failed to read design.json: {}", e))?;
     
-    // Sanitize the JSON before parsing (handles trailing commas, comments, etc.)
-    let sanitized = sanitize_json(&content);
-    
-    let design: Design = serde_json::from_str(&sanitized)
-        .map_err(|e| format!("Failed to parse design.json: {}", e))?;
-    
-    Ok(Some(design))
+    // First try parsing the JSON directly (most common case)
+    // Only fall back to sanitization if direct parsing fails
+    // This avoids issues where sanitization can break valid JSON (e.g., removing // in URLs)
+    match serde_json::from_str::<Design>(&content) {
+        Ok(design) => Ok(Some(design)),
+        Err(first_error) => {
+            // Try sanitizing and parsing again
+            let sanitized = sanitize_json(&content);
+            serde_json::from_str(&sanitized)
+                .map(Some)
+                .map_err(|_| format!("Failed to parse design.json: {}", first_error))
+        }
+    }
 }
 
 /// Saves the Design document for a project.
